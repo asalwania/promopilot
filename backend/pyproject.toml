@@ -1,0 +1,69 @@
+[project]
+name = "promopilot"
+version = "0.1.0"
+description = "PromoPilot backend: agentic retail promotion planner"
+authors = [{ name = "Ajay Kumar", email = "ajjugotit@gmail.com" }]
+license = "MIT"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "asyncpg>=0.31.0",
+    "fastapi>=0.141.1",
+    "pydantic>=2.13.5",
+    "pydantic-settings>=2.15.0",
+    "sqlalchemy[asyncio]>=2.1.1",
+    "structlog>=26.1.0",
+    "uvicorn[standard]>=0.54.0",
+]
+
+[build-system]
+requires = ["uv_build>=0.12.18,<0.13.0"]
+build-backend = "uv_build"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "B", "UP", "SIM", "RUF", "ASYNC", "PT", "N"]
+
+[tool.mypy]
+strict = true
+python_version = "3.12"
+mypy_path = "src"
+packages = ["promopilot", "tests"]
+plugins = ["pydantic.mypy"]
+
+[[tool.mypy.overrides]]
+module = ["testcontainers.*"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+addopts = "-ra --strict-markers -m 'not live and not integration'"
+markers = [
+    "live: calls a real LLM or network service (excluded by default)",
+    "integration: needs Docker (testcontainers Postgres)",
+    "model: slower model-quality tests",
+]
+
+[tool.coverage.run]
+source = ["promopilot"]
+branch = true
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = false
+
+[dependency-groups]
+dev = [
+    "httpx>=0.28.1",
+    "mypy>=2.3.1",
+    "pytest>=9.1.1",
+    "pytest-asyncio>=1.4.0",
+    "pytest-cov>=7.1.0",
+    "ruff>=0.16.9",
+    "testcontainers[postgres]>=4.15.0",
+]
