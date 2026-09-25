@@ -1,0 +1,35 @@
+# secrets
+.env
+.env.*
+!.env.example
+
+# python
+__pycache__/
+*.py[cod]
+.venv/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# node / next (see also frontend/.gitignore)
+node_modules/
+.next/
+coverage/
+playwright-report/
+test-results/
+
+# data produced by `make data` (ground truth must never be committed)
+data/generated/
+data/ground_truth/
+
+# evals
+backend/evals/reports/
+
+# editors / OS
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
