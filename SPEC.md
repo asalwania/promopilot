@@ -164,6 +164,8 @@ Real POS integrations, multimodal ingestion, authentication/multi-tenant, price-
 
 ## 4. Domain glossary (seed for CONTEXT.md)
 
+> **E1 update:** the canonical glossary is now [CONTEXT.md](CONTEXT.md); where it differs from this seed table, CONTEXT.md wins. Domain decisions from the E1 grilling are in ADRs 0004–0008 (`docs/adr/`).
+
 | Term | Meaning |
 |---|---|
 | SKU | A sellable product variant (e.g. "Crunchy Namkeen 400g") |
@@ -217,7 +219,7 @@ Each feature has an ID used in tickets, tests and the 9-blocker evidence matrix 
 
 ### F-03 Optimise the discount and customise other strategies
 
-- Decision dimensions: discount depth (discrete levels 5–50%), duration (1–4 weeks), target segment, timing within the requested window.
+- Decision dimensions: discount depth (discrete levels 5–50%), duration (1–4 weeks), target segment (one segment as a segment-exclusive offer, or All customers; ADR 0006), timing within the requested window (a plan line starts and ends inside the promo window; ADR 0005).
 - **AC1** Discount depth maximises the objective subject to constraints; changing budget or min-margin changes depths in the expected direction (property test).
 - **AC2** Target segment is chosen from segment-level response estimates; the plan shows expected uplift by segment.
 
@@ -260,7 +262,7 @@ Each feature has an ID used in tickets, tests and the 9-blocker evidence matrix 
 ### Agentic capabilities (evaluation criterion 5)
 
 - **AG-01 Parameter extraction/inference:** Context agent produces a valid `PlanningRequest` from free text; every inferred field has `source` (`brief` | `data` | `default`) and `confidence` (0–1).
-- **AG-02 Clarification:** if a critical field (budget, categories or regions) is missing and cannot be inferred with confidence ≥ 0.7, the graph interrupts and asks the user a specific question.
+- **AG-02 Clarification:** if a critical field (budget, categories or regions, promo window) is missing and cannot be inferred with confidence ≥ 0.7, the graph interrupts and asks the user a specific question.
 - **AG-03 Tool use:** planner decides which tools to call and in what order; all tool calls are logged.
 - **AG-04 Self-correction:** critic findings loop back to the planner with specific feedback; loop capped at 3; after the cap, return the best feasible plan with open issues listed.
 - **AG-05 Dynamic re-planning:** user can amend the request at any point; the agent re-plans from the current state and produces a diff ("what changed and why").
@@ -426,7 +428,7 @@ The organisers give no data. We generate a realistic retail dataset where **the 
 | SKUs | 200 (≈25 per category), 2–4 brands per category, pack sizes |
 | Regions / stores | 4 regions × 5 stores |
 | Segments | Value Seekers, Families, Premium, Young Urban; mix varies by store |
-| History | 104 weekly periods |
+| History | 104 weekly periods, plus a future horizon (calendar, competitor prices, true demand) so any as-of week can be planned and scored (ADR 0008) |
 | Holidays | Indian calendar: Diwali, Holi, Eid, Christmas, New Year, Independence Day (national); Pongal/Onam (South), Durga Puja (East), Lohri/Baisakhi (North), Ganesh Chaturthi (West) |
 | Promo history | ~15% of SKU-region-weeks on promo, random mechanism/depth/duration/segment |
 | Baskets | 200,000 sampled transactions for co-occurrence |
@@ -498,7 +500,7 @@ Validation: time-based split (last 12 weeks held out). Report WAPE for baseline 
 
 ### 9.3 Candidate generation
 
-For each (SKU, region) in scope, enumerate options: mechanism ∈ {PCT_OFF, BOGO, BUNDLE (only with a complement), FIXED_PRICE} × depth ∈ {5,10,15,20,25,30,40,50}% (mechanism-appropriate) × duration ∈ {1,2,3,4} weeks × segment ∈ segments. Prune options that break per-item min margin or exceed stock at P90. Predict outcomes for the rest.
+For each (SKU, region) in scope, enumerate options: mechanism ∈ {PCT_OFF, BOGO, BUNDLE (only with a complement), FIXED_PRICE} × depth ∈ {5,10,15,20,25,30,40,50}% (mechanism-appropriate) × duration ∈ {1,2,3,4} weeks × segment ∈ segments. Prune options priced below unit cost (unless the SKU is overstocked), deeper than the company-policy maximum discount, or whose P90 units exceed available stock. Minimum margin is a plan-level constraint, not a per-option filter (ADR 0007). Predict outcomes for the rest.
 
 ### 9.4 Optimiser (`optimizer`, OR-Tools CP-SAT)
 
@@ -510,11 +512,13 @@ For each (SKU, region) in scope, enumerate options: mechanism ∈ {PCT_OFF, BOGO
 − Σ_(i,j) y_ij · cannibalised_profit_ij
 ```
 
+Incremental profit is net of pull-forward; halo and cannibalisation count for every SKU in the region, in scope or not; promo cost and clearance value are defined in ADR 0005. Company policy defaults and the tighten-only rule are in ADR 0007; relaxations only touch brief constraints.
+
 **Constraints:**
 - At most one option per (SKU, region).
 - Σ promo_cost ≤ budget (total and optional per-region caps).
 - Plan-level expected margin ≥ min_margin (linearised: Σ (revenue·min_margin − gross_profit) ≤ 0).
-- P90 units ≤ on_hand − safety_stock for each selected option.
+- P90 units ≤ available stock (Σ over the region's stores of on_hand − safety_stock) for each selected option (ADR 0004).
 - For each overstocked SKU in scope: expected sell-through ≥ clearance_target (hard), or soft with a large penalty if infeasible, reported as a violation.
 - Optional: max promoted SKUs per category/region; KVI price within competitor tolerance.
 - `y_ij ≥ x_i + x_j − 1` linking.
