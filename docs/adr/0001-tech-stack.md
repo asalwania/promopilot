@@ -19,3 +19,8 @@ We build PromoPilot as a single public monorepo (`backend/`, `frontend/`, `docs/
 - **`/health` is a liveness endpoint**: always HTTP 200 while the process runs; `status` is `ok` or `degraded` with per-check detail (`database`, `model_registry`). `model_registry` reports `not_initialised` until E4.
 - **The web app calls the API server-side** (Next.js server components using `API_URL`), so there is no CORS surface and the same code works inside compose (`http://api:8000`).
 - **Makefile recipes are POSIX sh.** On Windows, run `make` from Git Bash; the Makefile refuses to run under cmd.exe/PowerShell.
+
+## Spec-time decisions (E1, confirmed with the owner)
+
+- **LLM providers**: OpenAI is the primary provider and Anthropic (`claude-sonnet-5`) the fallback, selected by `LLM_PROVIDER`; model IDs come from env (`OPENAI_MODEL`, `ANTHROPIC_MODEL`) so they can change without code changes. `replay` is used for CI and `make demo`.
+- **Planning sessions run in the background**: `POST /api/sessions` returns the session id at once and `GET /api/sessions/{id}` reports its status, from the walking skeleton (E3) onwards, so the interrupts and SSE stream of E8 do not change the API's shape.
