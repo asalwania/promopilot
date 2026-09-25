@@ -1,0 +1,80 @@
+{
+  "components": {
+    "schemas": {
+      "HealthChecks": {
+        "properties": {
+          "database": {
+            "enum": [
+              "ok",
+              "error"
+            ],
+            "title": "Database",
+            "type": "string"
+          },
+          "model_registry": {
+            "const": "not_initialised",
+            "title": "Model Registry",
+            "type": "string"
+          }
+        },
+        "required": [
+          "database",
+          "model_registry"
+        ],
+        "title": "HealthChecks",
+        "type": "object"
+      },
+      "HealthResponse": {
+        "properties": {
+          "checks": {
+            "$ref": "#/components/schemas/HealthChecks"
+          },
+          "status": {
+            "enum": [
+              "ok",
+              "degraded"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "version",
+          "checks"
+        ],
+        "title": "HealthResponse",
+        "type": "object"
+      }
+    }
+  },
+  "info": {
+    "title": "PromoPilot API",
+    "version": "0.1.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/health": {
+      "get": {
+        "operationId": "health_health_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Health"
+      }
+    }
+  }
+}
