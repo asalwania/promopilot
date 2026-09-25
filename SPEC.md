@@ -336,6 +336,7 @@ flowchart LR
 | Module | Public interface (sketch) | Depends on |
 |---|---|---|
 | `domain` | Logic-free pydantic value types shared across modules: Region, Segment, Mechanism, PlanLine, PromoPlan, PlanningRequest, CompanyPolicy (ADR 0009) | pydantic |
+| `economics` | Pure promo-economics definitions (ADR 0005): effective price per mechanism, promo cost, clearance value, margin, incremental profit; shared by optimiser, simulator and oracle (ADR 0011) | domain |
 | `datagen` | `generate(config, seed) -> DatasetPaths` | numpy, pandas |
 | `data` | repositories: `products()`, `inventory(region, window)`, `competitor_prices(...)`, `holidays(region, window)`, `sales_history(...)`, `baskets(...)` | Postgres (SQLAlchemy async) |
 | `models.demand` | `fit(history) -> DemandModel`; `DemandModel.predict(option, context) -> Prediction(mean, std)` | LightGBM, statsmodels/sklearn |
@@ -741,7 +742,7 @@ Build in this order. Each epic becomes one spec (`/to-spec`) and a set of tracer
 ### E2 — Synthetic data generator and oracle
 
 - Config, entity generation, true demand function, sales/promo/inventory/competitor/basket generation, ground truth export, Parquet + Postgres loader (`make data`).
-- Oracle: `evaluate(plan) -> true outcomes` using ground truth.
+- Oracle: `evaluate(plan) -> true outcomes` using ground truth: expected values (no sampling), units capped at available stock (ADR 0011).
 
 **Exit:** §8.4 tests pass; `make data` under 2 minutes; oracle unit-tested on hand-computed cases.
 

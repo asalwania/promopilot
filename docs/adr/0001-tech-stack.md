@@ -24,3 +24,5 @@ We build PromoPilot as a single public monorepo (`backend/`, `frontend/`, `docs/
 
 - **LLM providers**: OpenAI is the primary provider and Anthropic (`claude-sonnet-5`) the fallback, selected by `LLM_PROVIDER`; model IDs come from env (`OPENAI_MODEL`, `ANTHROPIC_MODEL`) so they can change without code changes. `replay` is used for CI and `make demo`.
 - **Planning sessions run in the background**: `POST /api/sessions` returns the session id at once and `GET /api/sessions/{id}` reports its status, from the walking skeleton (E3) onwards, so the interrupts and SSE stream of E8 do not change the API's shape.
+- **The browser reaches the API through Next.js route handlers**: client components call same-origin `/api/...` routes that forward to `API_URL` (including the SSE trace stream), so there is still no CORS surface and one public URL.
+- **`make demo` trains models at first start**: the demo container generates data and trains the models (seeded, deterministic) into a Docker volume on first run, instead of committing model binaries; the whole first start should take about 5 minutes or less.
