@@ -335,6 +335,8 @@ flowchart LR
 
 | Module | Public interface (sketch) | Depends on |
 |---|---|---|
+| `domain` | Logic-free pydantic value types shared across modules: Region, Segment, Mechanism, PlanLine, PromoPlan, PlanningRequest, CompanyPolicy (ADR 0009) | pydantic |
+| `economics` | Pure promo-economics definitions (ADR 0005): effective price per mechanism, promo cost, clearance value, margin, incremental profit; shared by optimiser, simulator and oracle (ADR 0011) | domain |
 | `datagen` | `generate(config, seed) -> DatasetPaths` | numpy, pandas |
 | `data` | repositories: `products()`, `inventory(region, window)`, `competitor_prices(...)`, `holidays(region, window)`, `sales_history(...)`, `baskets(...)` | Postgres (SQLAlchemy async) |
 | `models.demand` | `fit(history) -> DemandModel`; `DemandModel.predict(option, context) -> Prediction(mean, std)` | LightGBM, statsmodels/sklearn |
@@ -401,7 +403,7 @@ promopilot/
 |---|---|
 | Backend | Python 3.12, FastAPI, Pydantic v2, SQLAlchemy 2 (async) + Alembic, uv |
 | Agents | LangGraph (with Postgres checkpointer for interrupts/resume) |
-| LLM | OpenAI or Anthropic via `LLM_PROVIDER` env; the other as fallback; `replay` for demo/CI |
+| LLM | OpenAI (primary) or Anthropic via `LLM_PROVIDER` env; the other as fallback; `replay` for demo/CI (ADR 0001) |
 | ML | LightGBM, scikit-learn, statsmodels, pandas, numpy |
 | Optimisation | OR-Tools CP-SAT |
 | DB | PostgreSQL 16 |
@@ -677,7 +679,7 @@ Each scenario: brief text, optional amendments, expected properties (not exact p
 
 ### 13.3 Test data
 
-- `tests/fixtures/` holds a tiny seeded dataset (5 SKUs, 2 regions, 20 weeks) for fast tests.
+- Tests generate a tiny seeded dataset (e.g. 5 SKUs, 2 regions, 20 weeks) on the fly through `datagen` in a session fixture; nothing is committed. Model-quality tests may compare against the ground truth `datagen` returns in memory, never the files in `data/ground_truth/` (ADR 0010).
 - Cassettes for replay are recorded with `make record-cassettes` (live keys required) and committed.
 
 ### 13.4 Architectural tests
@@ -740,7 +742,7 @@ Build in this order. Each epic becomes one spec (`/to-spec`) and a set of tracer
 ### E2 — Synthetic data generator and oracle
 
 - Config, entity generation, true demand function, sales/promo/inventory/competitor/basket generation, ground truth export, Parquet + Postgres loader (`make data`).
-- Oracle: `evaluate(plan) -> true outcomes` using ground truth.
+- Oracle: `evaluate(plan) -> true outcomes` using ground truth: expected values (no sampling), units capped at available stock (ADR 0011).
 
 **Exit:** §8.4 tests pass; `make data` under 2 minutes; oracle unit-tested on hand-computed cases.
 

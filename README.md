@@ -65,6 +65,9 @@ docs/agents/ Agent workflow config (issue tracker, triage labels, domain docs)
 - [ADR 0006: Segment-exclusive offers, plus an "All customers" open promotion](docs/adr/0006-segment-exclusive-offers.md)
 - [ADR 0007: Company policy is tighten-only; plan-level minimum margin](docs/adr/0007-company-policy-is-tighten-only.md)
 - [ADR 0008: Planning happens at a configurable as-of week](docs/adr/0008-as-of-week-clock.md)
+- [ADR 0009: Shared domain value types live in `promopilot.domain`](docs/adr/0009-shared-domain-value-types.md)
+- [ADR 0010: Test data is generated on the fly; tests may compare against its ground truth](docs/adr/0010-test-data-from-datagen-with-ground-truth.md)
+- [ADR 0011: Promo economics are shared definitions; the oracle scores expected outcomes, capped at stock](docs/adr/0011-shared-promo-economics-and-oracle-scoring.md)
 
 The domain glossary is [CONTEXT.md](CONTEXT.md).
 

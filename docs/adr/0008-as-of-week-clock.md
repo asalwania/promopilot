@@ -4,6 +4,6 @@ Every planning session and eval scenario has an **as-of week** that it treats as
 
 ## Consequences
 
-- The generator produces the calendar (with holidays), competitor prices and true demand beyond the history end so windows after any as-of week can be planned and scored by the oracle.
+- The generator produces the calendar (with holidays), competitor prices and true demand for a future horizon (52 weeks by default, configurable) beyond the history end, so windows after any as-of week can be planned and scored by the oracle. Future competitor prices are hidden from planning like future sales.
 - Every data-access call, model fit and inventory snapshot takes the as-of week explicitly; reading data at or after it outside `promopilot.evals` is a leakage bug.
 - The **promo window** must lie entirely after the as-of week.
