@@ -58,6 +58,18 @@ The organisers give no data, so `make data` generates a synthetic multi-region I
 
 For a different world, run `cd backend && uv run python -m promopilot.datagen --config my.yaml --seed 7 --out ../data --load`. The YAML only needs the keys it overrides. The same seed and config always give byte-identical files. Loading is idempotent: the first Alembic migration creates the tables, and every load replaces their rows in one transaction. The app reads them through `promopilot.data.RetailData`, whose time-dependent queries take an explicit as-of week and never return sales, promotions, baskets or competitor prices at or after it (ADR 0008). Only `promopilot.datagen` and `promopilot.evals` may read `data/ground_truth/`.
 
+## LLM providers
+
+Agents reach an LLM only through `promopilot.llm` (ADR 0001, ADR 0019). `LLM_PROVIDER` picks the provider:
+
+| Setting | Default | Meaning |
+|---|---|---|
+| `LLM_PROVIDER` (`.env`) | `replay` | `replay` answers from recorded cassettes and needs no key. `openai` calls OpenAI live |
+| `LLM_CASSETTE_DIR` (`.env`) | `cassettes` | One JSON file per request hash, relative to `backend/` |
+| `OPENAI_API_KEY`, `OPENAI_MODEL` (`.env`) | empty | Needed only for `openai`. Keep the key in `.env`, never commit it |
+
+In replay mode, a request with no recorded cassette fails with `CassetteMissError` naming its hash. This usually means a prompt or schema changed and the cassettes need re-recording. Cassettes store only the request content and the parsed response, never headers or keys. Tests use `FakeProvider` or `ReplayProvider` and never call a real LLM.
+
 ## API
 
 | Method | Path | Response |
@@ -94,6 +106,8 @@ docs/agents/ Agent workflow config (issue tracker, triage labels, domain docs)
 - [ADR 0015: Promo accounting details: charm prices, fixed cost in profit, money as float rupees](docs/adr/0015-promo-accounting-details.md)
 - [ADR 0016: Synthetic world details: real calendar dates, overstock per SKU, hidden future competitor prices](docs/adr/0016-synthetic-world-details.md)
 - [ADR 0017: The oracle totals a plan jointly, attributes effects one line at a time, and caps only promoted SKUs](docs/adr/0017-oracle-attribution-and-stock-cap.md)
+- [ADR 0018: The web proxy forwards `/api/*` paths unchanged, and health is also served at `/api/health`](docs/adr/0018-same-origin-api-proxy-paths.md)
+- [ADR 0019: The LLM layer is async, and cassettes are one JSON file per provider-independent request hash](docs/adr/0019-llm-layer-and-cassettes.md)
 
 The domain glossary is [CONTEXT.md](CONTEXT.md).
 
