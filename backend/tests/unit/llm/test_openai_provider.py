@@ -12,7 +12,18 @@ import pytest
 from openai import AsyncOpenAI
 from pydantic import BaseModel
 
-from promopilot.llm import LLMError, Message, OpenAIProvider, RecordingProvider
+from promopilot.llm import (
+    LLMError,
+    Message,
+    OpenAIProvider,
+    RecordingProvider,
+    ToolCall,
+    ToolSpec,
+    ToolTurn,
+    TransientLLMError,
+    Usage,
+    track_usage,
+)
 
 SECRET_KEY = "sk-test-do-not-leak-0123456789"
 
@@ -117,3 +128,132 @@ async def test_recorded_cassettes_contain_no_secrets_or_headers(tmp_path: Path) 
     assert SECRET_KEY not in text
     assert "authorization" not in text.lower()
     assert "headers" not in json.loads(text)["request"]
+
+
+@pytest.mark.parametrize("status", [408, 409, 429, 500, 503])
+async def test_retryable_statuses_surface_as_transient_errors(status: int) -> None:
+    api = FakeOpenAI(status, {"error": {"message": "try later", "type": "server_error"}})
+
+    with pytest.raises(TransientLLMError):
+        await api.provider().complete_structured(Weather, ASK)
+
+
+@pytest.mark.parametrize("status", [400, 401, 404])
+async def test_client_errors_are_permanent(status: int) -> None:
+    api = FakeOpenAI(status, {"error": {"message": "no", "type": "invalid_request_error"}})
+
+    with pytest.raises(LLMError) as raised:
+        await api.provider().complete_structured(Weather, ASK)
+
+    assert not isinstance(raised.value, TransientLLMError)
+
+
+async def test_a_dropped_connection_is_transient() -> None:
+    def refuse(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("connection refused", request=request)
+
+    client = AsyncOpenAI(
+        api_key=SECRET_KEY,
+        max_retries=0,
+        http_client=httpx.AsyncClient(transport=httpx.MockTransport(refuse)),
+    )
+
+    with pytest.raises(TransientLLMError):
+        await OpenAIProvider(client, model="gpt-test").complete_structured(Weather, ASK)
+
+
+async def test_each_answer_reports_its_usage_under_the_configured_model() -> None:
+    api = FakeOpenAI(200, completion('{"city": "Pune", "celsius": 31}'))
+
+    with track_usage() as meter:
+        await api.provider(model="gpt-4.1-mini").complete_structured(Weather, ASK)
+
+    assert meter.usages == (Usage(model="gpt-4.1-mini", input_tokens=12, output_tokens=8),)
+
+
+async def test_a_refusal_is_still_billed() -> None:
+    api = FakeOpenAI(200, completion(None, refusal="I cannot help with that."))
+
+    with track_usage() as meter, pytest.raises(LLMError):
+        await api.provider().complete_structured(Weather, ASK)
+
+    assert [u.output_tokens for u in meter.usages] == [8]
+
+
+FORECAST = ToolSpec(
+    name="get_forecast",
+    description="Forecast for a city.",
+    input_schema={"type": "object", "properties": {"city": {"type": "string"}}},
+)
+
+
+def tool_completion(content: str | None, calls: list[tuple[str, str, str]]) -> dict[str, Any]:
+    body = completion(content)
+    message = body["choices"][0]["message"]
+    message["tool_calls"] = [
+        {"id": id_, "type": "function", "function": {"name": name, "arguments": arguments}}
+        for id_, name, arguments in calls
+    ]
+    body["choices"][0]["finish_reason"] = "tool_calls" if calls else "stop"
+    return body
+
+
+async def test_tool_calls_come_back_as_a_tool_turn_with_parsed_arguments() -> None:
+    api = FakeOpenAI(200, tool_completion(None, [("call_1", "get_forecast", '{"city":"Pune"}')]))
+
+    turn = await api.provider().complete_with_tools([FORECAST], ASK)
+
+    assert turn == ToolTurn(
+        tool_calls=(ToolCall(id="call_1", name="get_forecast", arguments={"city": "Pune"}),)
+    )
+
+
+async def test_a_tool_request_sends_functions_and_the_tool_round_at_temperature_zero() -> None:
+    api = FakeOpenAI(200, tool_completion("It is 31 C.", []))
+    call = ToolCall(id="call_1", name="get_forecast", arguments={"city": "Pune"})
+    round_ = [
+        Message(role="system", content="Use tools."),
+        Message(role="user", content="Weather in Pune?"),
+        Message(role="assistant", content="", tool_calls=(call,)),
+        Message(role="tool", content='{"celsius": 31}', tool_call_id="call_1"),
+    ]
+
+    turn = await api.provider(model="gpt-from-env").complete_with_tools([FORECAST], round_)
+
+    assert turn == ToolTurn(text="It is 31 C.")
+    sent = json.loads(api.requests[0].content)
+    assert sent["model"] == "gpt-from-env"
+    assert sent["temperature"] == 0
+    assert sent["tools"] == [
+        {
+            "type": "function",
+            "function": {
+                "name": "get_forecast",
+                "description": "Forecast for a city.",
+                "parameters": FORECAST.input_schema,
+            },
+        }
+    ]
+    assert sent["messages"][2] == {
+        "role": "assistant",
+        "content": None,
+        "tool_calls": [
+            {
+                "id": "call_1",
+                "type": "function",
+                "function": {"name": "get_forecast", "arguments": '{"city": "Pune"}'},
+            }
+        ],
+    }
+    assert sent["messages"][3] == {
+        "role": "tool",
+        "tool_call_id": "call_1",
+        "content": '{"celsius": 31}',
+    }
+
+
+async def test_tool_arguments_that_are_not_json_are_an_llm_error() -> None:
+    api = FakeOpenAI(200, tool_completion(None, [("call_1", "get_forecast", "{city: Pune")]))
+
+    with pytest.raises(LLMError, match="get_forecast"):
+        await api.provider().complete_with_tools([FORECAST], ASK)

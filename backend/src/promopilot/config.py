@@ -3,8 +3,24 @@
 from pathlib import Path
 from typing import Literal
 
-from pydantic import SecretStr
+from pydantic import BaseModel, ConfigDict, Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class ModelPrice(BaseModel):
+    """What one LLM model costs, in US dollars per million tokens (ADR 0027)."""
+
+    model_config = ConfigDict(frozen=True)
+
+    input_usd_per_mtok: float = Field(ge=0)
+    output_usd_per_mtok: float = Field(ge=0)
+
+
+# Standard-tier list prices checked on 2026-09-26 (sources in ADR 0027).
+DEFAULT_LLM_PRICES = {
+    "gpt-4.1-mini": ModelPrice(input_usd_per_mtok=0.40, output_usd_per_mtok=1.60),
+    "claude-sonnet-5": ModelPrice(input_usd_per_mtok=2.00, output_usd_per_mtok=10.00),
+}
 
 
 class Settings(BaseSettings):
@@ -16,8 +32,14 @@ class Settings(BaseSettings):
     # Relative paths are from backend/.
     model_dir: Path = Path("../models")
 
-    # LLM layer (ADR 0001, ADR 0019). `replay` needs no key; relative paths are from backend/.
+    # LLM layer (ADR 0001, ADR 0019, ADR 0027). `replay` needs no key; relative paths are from
+    # backend/. The live provider not chosen by LLM_PROVIDER is the fallback, when configured.
     llm_provider: Literal["openai", "anthropic", "replay", "fake"] = "replay"
     llm_cassette_dir: Path = Path("cassettes")
     openai_api_key: SecretStr | None = None
     openai_model: str | None = None
+    anthropic_api_key: SecretStr | None = None
+    anthropic_model: str | None = None
+    # Per-model prices (LLM_PRICES, JSON) and the rupee rate for per-session cost (ADR 0027).
+    llm_prices: dict[str, ModelPrice] = Field(default_factory=lambda: dict(DEFAULT_LLM_PRICES))
+    usd_inr_rate: float = Field(default=96.0, gt=0)
