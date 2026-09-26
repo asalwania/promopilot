@@ -90,10 +90,16 @@ async def test_retrain_registers_a_new_version_that_becomes_the_latest_and_live(
     assert "baseline_wape_region_sku" in created["metrics"]
     assert "artifact_path" not in created
     models = listed.json()["models"]
-    assert [model["version"] for model in models] == [2, 1]
-    assert [model["live"] for model in models] == [True, False]
-    assert models[0] == created
-    assert models[1]["model_id"] == first.json()["model_id"]
+    demand = [model for model in models if model["kind"] == "demand"]
+    assert [model["version"] for model in demand] == [2, 1]
+    assert [model["live"] for model in demand] == [True, False]
+    assert demand[0] == created
+    assert demand[1]["model_id"] == first.json()["model_id"]
+    # Retrain fits relations too; the API does not serve them yet (#31).
+    relations = [model for model in models if model["kind"] == "relations"]
+    assert [model["version"] for model in relations] == [2, 1]
+    assert [model["metrics"]["demand_version"] for model in relations] == [2, 1]
+    assert not any(model["live"] for model in relations)
     assert health["checks"]["model_registry"] == "ok"
 
 

@@ -124,6 +124,17 @@ OPTION_COLUMNS = [
 ]
 
 
+FITTED_COLUMNS = [
+    "week_id",
+    "region",
+    "sku_id",
+    "segment",
+    "units",
+    "fitted_units",
+    "log_price_ratio",
+]
+
+
 @dataclass(frozen=True)
 class Prediction:
     """Predicted outcomes of promo options, each as if it ran alone, summed over the region.
@@ -166,6 +177,15 @@ class DemandModel:
         calendar.
         """
         return self._response.predict(list(options), context, self._baseline)
+
+    def fitted_history(self, history: DemandHistory) -> pd.DataFrame:
+        """The model's in-sample fit: FITTED_COLUMNS per region x SKU x segment x week.
+
+        Covers the history before the model's as-of week. fitted_units is the fitted mean
+        (the baseline times the promo response), and log_price_ratio is log(p / p_ref) for
+        the price that row paid. The relations model regresses cross effects on these.
+        """
+        return self._response.fitted(history.before(self.as_of_week), self._baseline)
 
     def baseline(
         self,
@@ -363,19 +383,7 @@ class _Response:
                 "competitor_price": by_series["competitor_price"].last(),
             }
         )
-        sales = _segment_sales(history)
-        sales = _with_reference(sales, competitors[["reference_index"]])
-        sales["baseline"] = baseline.predict(
-            sales[KEYS], competitor_index=sales["reference_index"].to_numpy()
-        )
-        sales["baseline_sq"] = sales["baseline"] ** 2
-        rows = sales.groupby(["week_id", *SERIES, "reference_index"], as_index=False)[
-            ["units", "baseline", "baseline_sq"]
-        ].sum()
-        exposure = _exposure(history.promotions_history, products)
-        rows = _priced(rows, exposure, SERIES, products)
-        rows = _with_ratios(rows.merge(prices, on=["week_id", "region", "sku_id"]))
-        rows["offset"] = np.log(rows["baseline"])
+        rows = _history_rows(history, baseline, competitors, products)
         return cls(
             model=PromoResponse.fit(
                 rows, {str(sku): str(sub) for sku, sub in products["subcategory"].items()}
@@ -386,6 +394,11 @@ class _Response:
             stores=history.stores[["store_id", "region"]],
             competitors=competitors,
         )
+
+    def fitted(self, history: DemandHistory, baseline: _Baseline) -> pd.DataFrame:
+        rows = _history_rows(history, baseline, self.competitors, self.products)
+        rows["fitted_units"] = np.exp(rows["offset"] + self.model.log_effect(rows))
+        return rows[FITTED_COLUMNS].sort_values(FITTED_COLUMNS[:4], ignore_index=True)
 
     def predict(
         self, options: list[PlanLine], context: PredictionContext, baseline: _Baseline
@@ -496,6 +509,30 @@ class _Response:
         for (region, sku_id), price in context.competitor_prices.items():
             competitors.loc[(region.value, sku_id), "competitor_price"] = price
         return competitors
+
+
+def _history_rows(
+    history: DemandHistory,
+    baseline: _Baseline,
+    competitors: pd.DataFrame,
+    products: pd.DataFrame,
+) -> pd.DataFrame:
+    """Region x SKU x segment x week unit totals with their baseline offset and price terms."""
+    prices = history.competitor_prices[["week_id", "region", "sku_id", "competitor_price"]]
+    sales = _segment_sales(history)
+    sales = _with_reference(sales, competitors[["reference_index"]])
+    sales["baseline"] = baseline.predict(
+        sales[KEYS], competitor_index=sales["reference_index"].to_numpy()
+    )
+    sales["baseline_sq"] = sales["baseline"] ** 2
+    rows = sales.groupby(["week_id", *SERIES, "reference_index"], as_index=False)[
+        ["units", "baseline", "baseline_sq"]
+    ].sum()
+    exposure = _exposure(history.promotions_history, products)
+    rows = _priced(rows, exposure, SERIES, products)
+    rows = _with_ratios(rows.merge(prices, on=["week_id", "region", "sku_id"]))
+    rows["offset"] = np.log(rows["baseline"])
+    return rows
 
 
 def _as_promotions(options: list[PlanLine]) -> pd.DataFrame:

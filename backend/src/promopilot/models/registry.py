@@ -26,6 +26,7 @@ log = structlog.get_logger(__name__)
 
 class ModelKind(StrEnum):
     DEMAND = "demand"
+    RELATIONS = "relations"
 
 
 @dataclass(frozen=True)

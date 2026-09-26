@@ -30,7 +30,7 @@ To run the full stack in containers with only Docker installed:
 ```bash
 docker compose up -d --build --wait   # or: make up
 docker compose exec api python -m promopilot.datagen --out /tmp/data --load   # the seed-42 world, about a minute and a half
-docker compose exec api python -m promopilot.models   # train and register the demand model, about a minute and a half
+docker compose exec api python -m promopilot.models   # train and register the demand and relations models, about two minutes
 ```
 
 The Docker stack needs no API key. Compose runs the api with `LLM_PROVIDER=replay` and the cassettes baked into its image, whatever `.env` says (ADR 0022). CI runs exactly these steps, then Playwright types the brief from `backend/cassettes/briefs.json`, clicks **Plan it** and waits for the plan table.
@@ -50,7 +50,7 @@ The Docker stack needs no API key. Compose runs the api with `LLM_PROVIDER=repla
 | `make api-types` | Export OpenAPI to `docs/openapi.json` and regenerate frontend types |
 | `make data` | Generate the seeded synthetic dataset into `data/generated/` (Parquet) and its hidden ground truth into `data/ground_truth/`, then load the tables into Postgres (starts it if needed) |
 | `make record-cassettes` | Re-record the LLM cassettes with a live OpenAI key (see [LLM providers](#llm-providers)) |
-| `make train` | Fit the demand model on the loaded data (`make data` first) and register it (see [Demand model](#demand-model)) |
+| `make train` | Fit the demand model, then the relations model, on the loaded data (`make data` first) and register both (see [Demand model](#demand-model) and [Relations](#relations)) |
 | `make eval`, `make demo` | Arrive in epics E9, E11 |
 
 ## Synthetic data
@@ -85,6 +85,15 @@ Empirical Bayes shrinks each estimate toward its subcategory. `DemandModel.predi
 The API loads the latest demand model at startup and reports it in `/health`. `POST /api/models/retrain` retrains and swaps in the new version without a restart (see [API](#api)). For the Docker stack, train inside the api container (see the quick start) so the artifact lands on its volume.
 
 Agents reach the model only through the tool registry (`promopilot.agents.tools`, ADR 0025). Each tool has a name, a JSON-schema input and output, and an async handler over injected dependencies. `registry.specs()` lists the tools with their schemas. `await registry.call(name, arguments)` returns `ToolOk` or a typed `ToolError` (`unknown_tool`, `invalid_input` or `model_unavailable`) and never raises for a bad call. The first tool is `estimate_demand`. It takes 1 to 200 plan lines and optional competitor price overrides. For each line it returns `predict`'s numbers, unrounded, plus a per-segment table and the id and version of the model that produced them. The API builds the registry at startup (`app.state.tools`) and resolves the latest model on every call, so a newly registered model is used without a restart.
+
+## Relations
+
+`make train` and retrain fit the relations model after the demand model, on the same history, and register it as its own kind (SPEC §9.2, ADR 0029). `promopilot.models.relations.fit(history, baskets, demand_model, as_of_week, seed)` returns `substitutes(sku)`, `complements(sku)` with lift and support, and `cross_effect(i, j)` with a standard error.
+
+- **Substitutes**: for each within-subcategory pair, one pooled Poisson GLM on top of the demand model's fit estimates a symmetric cross-price effect θ. A pair is kept if its Benjamini–Hochberg q across all tested pairs is below 0.05 and θ ≥ 0.1 (ADR 0013).
+- **Complements**: basket lift above 1.5, where at least 0.1% of baskets hold both SKUs. Where θ is estimable, the pair must also have θ < 0 with q < 0.05.
+
+The thresholds live in `RelationsConfig`. The registry records them with the counts and the demand version used. On the seed-42 world, substitute precision/recall is 0.89/1.00 and complement precision/recall is 1.00/1.00. The API does not serve relations until #31.
 
 ## LLM providers
 
@@ -121,7 +130,7 @@ make up                 # rebuild the api image with the new cassettes
 | POST | `/api/sessions` | Start a planning session from `{"brief": "..."}` (1–2000 characters, not blank; otherwise `422`). Returns `202 {"session_id"}` at once; planning runs in the background |
 | GET | `/api/sessions/{id}` | `{session_id, status, brief, planning_request, plan_revision, error}`; `404` if unknown. `status` is `planning`, then `awaiting_approval` with plan revision 1, or `failed` with an `error` saying why |
 | GET | `/api/models` | `{"models": [{model_id, kind, version, trained_at, as_of_week, metrics, live}]}`, newest first. `live` marks the model this API process is serving (ADR 0026) |
-| POST | `/api/models/retrain` | Retrain the demand model as `make train` does by default (the as-of week after the history, seed 42). The request stays open while it fits (40 to 90 seconds on the default world), then returns `201` with the new entry, which is now the latest and live. `409` if a retrain is already running or no data is loaded |
+| POST | `/api/models/retrain` | Retrain the demand and relations models as `make train` does by default (the as-of week after the history, seed 42). The request stays open while it fits (60 to 110 seconds on the default world), then returns `201` with the new demand entry, which is now the latest and live. The relations version is listed but not yet served. `409` if a retrain is already running or no data is loaded |
 | GET | `/health`, `/api/health` | Always `200` while the process runs. `/health` is for the container healthcheck; the web app uses `/api/health` through its proxy. `{"status": "ok" \| "degraded", "version", "checks": {"database": "ok" \| "error", "model_registry": "ok" \| "missing"}}`. `status` is `degraded` if the database is unreachable or no demand model is loaded |
 
 In E3 a planning session is a walking skeleton (ADR 0020). A minimal Context agent reads the brief into a planning request: scope, a promo window chosen from the weeks after the as-of week, and a marketing budget in rupees. If any of these is missing, the session fails and the error names it. A naive greedy planner then offers 20% off to All customers on in-scope SKUs, ranked by base margin, within the budget. It has no uplift model yet, so each line's expected incremental profit is minus its promo cost. E4–E8 replace it. The as-of week is the first week after the loaded sales history.
@@ -174,6 +183,7 @@ docs/agents/ Agent workflow config (issue tracker, triage labels, domain docs)
 - [ADR 0026: Retrain holds the request until the new model is live, one at a time, on the default as-of week and seed](docs/adr/0026-models-api-synchronous-retrain.md)
 - [ADR 0027: LLM calls take one tool step at a time, retry transient errors, fall back to the other live provider, and are costed per session in a context scope](docs/adr/0027-resilient-llm-layer.md)
 - [ADR 0028: Guardrails validate plan facts and ground numbers at the precision the text shows](docs/adr/0028-guardrails-plan-facts-and-grounding-rules.md)
+- [ADR 0029: Relations use one pooled cross effect per pair on the demand model's fit, and basket lift confirmed by it](docs/adr/0029-relations-pooled-cross-effects-and-basket-lift.md)
 - [ADR 0030: The models page groups versions by kind, times the retrain, and reports its outcome inline](docs/adr/0030-models-page-display-and-retrain-feedback.md)
 
 The domain glossary is [CONTEXT.md](CONTEXT.md).

@@ -49,6 +49,18 @@ MEDIUM_OVERRIDES = {
 """Enough promotions per SKU to measure elasticity recovery (marker `model`, ADR 0010)."""
 
 
+RELATIONS_OVERRIDES = {
+    "catalogue": {"categories_limit": 4, "skus_per_category": 24},
+    "regions": ["North", "South", "East", "West"],
+    "stores_per_region": 3,
+    "history_weeks": 104,
+    "horizon_weeks": 12,
+    "baskets": 20_000,
+    "complement_pairs": 20,
+}
+"""Enough within-subcategory pairs and baskets to measure relation detection (ADR 0029)."""
+
+
 @pytest.fixture(scope="session")
 def medium_dataset() -> GeneratedDataset:
     return generate(load_config(overrides=MEDIUM_OVERRIDES), seed=5)

@@ -250,3 +250,28 @@ def test_the_registry_metrics_report_the_response_fit(model: DemandModel, skus: 
 
     assert 0 < metrics["response_skus_fitted"] <= len(skus)
     assert metrics["elasticity_median_std_error"] > 0
+
+
+def test_fitted_history_gives_the_models_mean_for_every_past_region_series_week(
+    small_history: DemandHistory, model: DemandModel, skus: list[str]
+) -> None:
+    fitted = model.fitted_history(small_history)
+
+    assert list(fitted.columns) == [
+        "week_id",
+        "region",
+        "sku_id",
+        "segment",
+        "units",
+        "fitted_units",
+        "log_price_ratio",
+    ]
+    assert fitted["week_id"].max() == AS_OF - 1
+    assert set(fitted["sku_id"]) == set(skus)
+    assert (fitted["fitted_units"] > 0).all()
+    assert not fitted.duplicated(["week_id", "region", "sku_id", "segment"]).any()
+    # Promoted rows paid less than the base price; the model's means track the units.
+    assert (fitted["log_price_ratio"] < 0).any()
+    assert (fitted["log_price_ratio"] <= 0).all()
+    ratio = fitted["fitted_units"].sum() / fitted["units"].sum()
+    assert ratio == pytest.approx(1.0, abs=0.05)

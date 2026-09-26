@@ -1,4 +1,4 @@
-"""The model registry over HTTP: list the versions, retrain the demand model (SF-02, ADR 0026).
+"""The model registry over HTTP: list the versions, retrain demand and relations (SF-02, ADR 0026).
 
 `POST /api/models/retrain` holds the request open while the model fits in a worker thread,
 so the API keeps serving, and answers with the new version once it is registered and live.
@@ -12,7 +12,7 @@ from promopilot.api.schemas import ModelEntry, ModelList
 from promopilot.data import RetailData
 from promopilot.models.demand import DemandModel
 from promopilot.models.registry import LatestModel, ModelRegistry
-from promopilot.models.training import DEFAULT_SEED, train_demand_model
+from promopilot.models.training import DEFAULT_SEED, train_models
 
 
 class RetrainInProgressError(Exception):
@@ -51,7 +51,8 @@ class ModelService:
         )
 
     async def retrain(self) -> ModelEntry:
-        """Fit on the default as-of week with the default seed, register, and go live."""
+        """Fit demand and relations on the default as-of week and seed, register both, and put
+        the demand model live; relations are not served until #31 (ADR 0029)."""
         # No await between the check and the acquire, so two requests cannot both pass.
         if self._retraining.locked():
             raise RetrainInProgressError("a retrain is already running; try again when it finishes")
@@ -60,11 +61,11 @@ class ModelService:
                 as_of_week = await self._data.default_as_of_week()
             except LookupError as error:
                 raise NoTrainingDataError(str(error)) from error
-            entry, model = await train_demand_model(
+            trained = await train_models(
                 self._data, self._registry, as_of_week=as_of_week, seed=self._seed
             )
-            self._live.set((entry, model))
-        return ModelEntry.of(entry, live=True)
+            self._live.set((trained.demand, trained.demand_model))
+        return ModelEntry.of(trained.demand, live=True)
 
 
 def models_router(models: ModelService) -> APIRouter:

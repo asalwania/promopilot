@@ -183,7 +183,7 @@ export interface components {
          * ModelKind
          * @enum {string}
          */
-        ModelKind: "demand";
+        ModelKind: "demand" | "relations";
         /**
          * ModelList
          * @description Registered models, newest first.
