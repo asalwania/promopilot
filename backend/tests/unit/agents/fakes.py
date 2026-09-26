@@ -12,6 +12,16 @@ class InMemoryRetailData:
 
     def __init__(self, dataset: GeneratedDataset) -> None:
         self._dataset = dataset
+        self.inventory_as_of_weeks: list[int] = []
+        """Every as-of week the inventory was read at, so tests can check the clock."""
+
+    async def inventory(self, as_of_week: int) -> pd.DataFrame:
+        self.inventory_as_of_weeks.append(as_of_week)
+        stock = self._dataset.inventory
+        snapshot = stock[stock["snapshot_week"] == as_of_week - 1]
+        if snapshot.empty:
+            raise LookupError(f"no inventory snapshot for the end of week {as_of_week - 1}")
+        return snapshot.sort_values(["store_id", "sku_id"]).reset_index(drop=True)
 
     async def products(self) -> pd.DataFrame:
         return self._dataset.products.sort_values("sku_id").reset_index(drop=True)
