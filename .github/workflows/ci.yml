@@ -105,6 +105,10 @@ jobs:
       - uses: docker/setup-buildx-action@v4
       - run: docker compose build
       - run: docker compose up -d --wait
+      # The e2e brief plans against the seed-42 world; ground truth stays inside the container.
+      - name: Load the synthetic dataset (generate + COPY, about a minute)
+        timeout-minutes: 5
+        run: docker compose exec -T api python -m promopilot.datagen --out /tmp/data --load
       - uses: pnpm/action-setup@v6
         with:
           package_json_file: frontend/package.json

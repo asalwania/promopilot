@@ -108,12 +108,14 @@ api-types: ## Export OpenAPI and regenerate frontend API types
 data: db ## Generate the seeded synthetic dataset + ground truth into DATA_DIR and load Postgres
 	$(BACKEND) uv run python -m promopilot.datagen --out $(DATA_DIR) --load
 
-.PHONY: train eval demo record-cassettes
+.PHONY: record-cassettes
+record-cassettes: db ## Re-record the LLM cassettes live (OPENAI_API_KEY, OPENAI_MODEL; run make data first)
+	$(BACKEND) LLM_PROVIDER=openai uv run python -m promopilot.cassettes --briefs cassettes/briefs.json
+
+.PHONY: train eval demo
 train: ## (E4) Train demand + relations models
 	@echo "make train arrives in epic E4 (SPEC.md §15)" >&2; exit 1
 eval: ## (E9) Run the eval suite
 	@echo "make eval arrives in epic E9 (SPEC.md §15)" >&2; exit 1
 demo: ## (E11) One-command demo, no API key
 	@echo "make demo arrives in epic E11 (SPEC.md §15)" >&2; exit 1
-record-cassettes: ## (E3) Record LLM cassettes (live keys)
-	@echo "make record-cassettes arrives in epic E3 (SPEC.md §15)" >&2; exit 1

@@ -21,6 +21,9 @@ services:
     build: ./backend
     environment:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-promopilot}:${POSTGRES_PASSWORD:-promopilot}@postgres:5432/${POSTGRES_DB:-promopilot}
+      # Always the cassettes baked into the image: the stack never needs or reads an API key.
+      LLM_PROVIDER: replay
+      LLM_CASSETTE_DIR: cassettes
     ports:
       - "${API_PORT:-8000}:8000"
     depends_on:

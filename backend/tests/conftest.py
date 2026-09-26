@@ -2,6 +2,15 @@ import pytest
 
 from promopilot.datagen import GeneratedDataset, GeneratorConfig, generate, load_config
 
+LLM_ENV = ("LLM_PROVIDER", "LLM_CASSETTE_DIR", "OPENAI_API_KEY", "OPENAI_MODEL")
+
+
+@pytest.fixture(autouse=True)
+def no_llm_config_from_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    """`make test` exports .env: a real key or model must never reach a test (SPEC §6)."""
+    for name in LLM_ENV:
+        monkeypatch.delenv(name, raising=False)
+
 
 @pytest.fixture(scope="session")
 def small_config() -> GeneratorConfig:
