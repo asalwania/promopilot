@@ -17,6 +17,16 @@ export function formatWeek(weekId: number): string {
   return `W${weekId}`;
 }
 
+const dateTimeFormat = new Intl.DateTimeFormat("en-IN", {
+  dateStyle: "medium",
+  timeStyle: "short",
+});
+
+// In the browser's time zone, e.g. "26 Sept 2026, 12:00 pm".
+export function formatDateTime(iso: string): string {
+  return dateTimeFormat.format(new Date(iso));
+}
+
 const MECHANISM_LABELS: Record<Mechanism, string> = {
   PCT_OFF: "% off",
   BOGO: "Buy one get one",
