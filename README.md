@@ -2,7 +2,7 @@
 
 Agentic retail promotion planner for the ET AI Hackathon (Problem 3, Retail: Autonomous Promotion Planner). A planning brief in plain English becomes a promotion plan that respects inventory, margin and budget constraints, with every number coming from deterministic tools and a human approving the result.
 
-> **Status:** epic E3 (walking skeleton). `make data` generates the synthetic world. A brief typed on the home page becomes a naive plan on the session page (ADR 0020), and the Docker stack does this with no API key (ADR 0022). Real forecasting, optimisation and the full agent arrive in later epics; see [SPEC.md](SPEC.md) §15 for the delivery plan.
+> **Status:** epic E3 (walking skeleton). `make data` generates the synthetic world. A brief typed on the home page becomes an optimised plan on the session page (ADR 0020, ADR 0038), and the Docker stack does this with no API key (ADR 0022). Real forecasting, optimisation and the full agent arrive in later epics; see [SPEC.md](SPEC.md) §15 for the delivery plan.
 
 ## Quickstart
 
@@ -124,15 +124,20 @@ The `generate_candidates` tool takes a planning request plus optional mechanisms
 - a blended margin at or above the minimum margin, never below the policy margin floor (ADR 0007);
 - at most 10 promoted SKUs per category per region, a partner counting in its own category.
 
-Only options worth at least a paisa alone, which keep every per-line rule (stock, window, maximum discount, below cost), are eligible. The result carries the status (`OPTIMAL`, `FEASIBLE` when the time limit ran out first, `INFEASIBLE`), the objective, the plan, and the selected rows of the candidate table.
+Only options worth at least a paisa alone, which keep every per-line rule (stock, window, maximum discount, below cost), are eligible. The result carries the status (`OPTIMAL`, `FEASIBLE` when the time limit ran out first, `INFEASIBLE`), the objective, the plan, and the selected rows of the candidate table. It also explains the plan (ADR 0038):
 
-The `run_optimizer` tool takes the `candidate_set_id` from `generate_candidates`. It returns the status, the objective, each selected line with its numbers, and the plan's totals. The solver is deterministic: one worker and a fixed seed by default, and interleaved search with more workers. It is configured by:
+- **Binding constraints**: the budget, the margin (`minimum_margin` from the brief, or the policy `margin_floor`) and each promoted-SKU cap per category and region, where dropping it gives a strictly better objective. Each is re-solved without it, for a plan at least a paisa better, within a shared time limit. Its evidence is `exact`, `lower_bound` (timed out after finding a better plan) or `unproven` (time ran out first).
+- **Why chosen**, per plan line: the positive parts of its value (`incremental_profit`, `clearance_value`, `halo`) in rupees, its value, and whether it is the best eligible option for its SKU and region.
+- **Not selected**: the best option of up to 5 SKUs and regions with no plan line, best value first, with every rule it breaks alone or added to the plan: `low_uplift`, `out_of_stock`, `breaks_policy`, `over_budget`, `breaks_margin`, `max_promoted_skus`, `cannibalises` (naming the plan lines' SKUs).
+
+The `run_optimizer` tool takes the `candidate_set_id` from `generate_candidates`. It returns the status, the objective, each selected line with its numbers and why it was chosen, the plan's totals, the binding constraints and the not-selected list. The solver is deterministic: one worker and a fixed seed by default, and interleaved search with more workers. It is configured by:
 
 | Setting | Default | Meaning |
 |---|---|---|
 | `OPTIMIZER_TIME_LIMIT_SECONDS` | `10` | Wall-clock limit per solve |
 | `OPTIMIZER_WORKERS` | `1` | CP-SAT workers |
 | `OPTIMIZER_SEED` | `0` | CP-SAT random seed |
+| `OPTIMIZER_BINDING_TIME_LIMIT_SECONDS` | `3` | Wall-clock seconds shared by the re-solves that find binding constraints, on top of the solve (outside its 10 s budget); a constraint left unsettled is `unproven` |
 
 On the seed-42 demo brief, 1,935 options are eligible with 3,796 pairwise terms. The optimal plan has 35 lines, 21 of them without clearance, worth ₹172,384 for ₹199,909 of the ₹2 lakh budget. The oracle scores it at +₹66,607 incremental profit and ₹86,654 clearance value (ADR 0037). Solving takes about 6–7 s, within SPEC's 10 s optimiser budget: about 4.5 s is CP-SAT and about 2 s is pricing the 415,524 candidate pairs, which is vectorised (ADR 0039). Generating the candidates first takes another 7–9 s, which is timed separately and tracked in #113. A `model`-marker test asserts that `solve` stays under 10 s on the fitted seed-42 world.
 
@@ -162,14 +167,14 @@ make record-cassettes   # needs OPENAI_API_KEY and OPENAI_MODEL in .env; makes o
 make up                 # rebuild the api image with the new cassettes
 ```
 
-`make record-cassettes` plans each brief through OpenAI and records every LLM request. It replaces the cassettes only if every brief reaches a plan. If one fails, it names the brief, exits non-zero and changes nothing. A full run removes stale cassettes, so commit the whole directory (ADR 0022).
+`make record-cassettes` reads each brief into a planning request through OpenAI and records every LLM request. Planning after that calls no LLM, so recording needs no trained model (ADR 0038). It replaces the cassettes only if every brief becomes a planning request. If one fails, it names the brief, exits non-zero and changes nothing. A full run removes stale cassettes, so commit the whole directory (ADR 0022).
 
 ## API
 
 | Method | Path | Response |
 |---|---|---|
 | POST | `/api/sessions` | Start a planning session from `{"brief": "..."}` (1–2000 characters, not blank; otherwise `422`). Returns `202 {"session_id"}` at once; planning runs in the background |
-| GET | `/api/sessions/{id}` | `{session_id, status, brief, planning_request, plan_revision, error}`; `404` if unknown. `status` is `planning`, then `awaiting_approval` with plan revision 1, or `failed` with an `error` saying why |
+| GET | `/api/sessions/{id}` | `{session_id, status, brief, planning_request, plan_revision, error}`; `404` if unknown. `status` is `planning`, then `awaiting_approval` with plan revision 1, or `failed` with an `error` saying why. The revision has `solver_status`, `objective`, `binding_constraints`, `not_selected`, and `why_chosen` on each line (ADR 0038) |
 | GET | `/api/models` | `{"models": [{model_id, kind, version, trained_at, as_of_week, metrics, live}]}`, newest first. `live` marks the model this API process is serving (ADR 0026) |
 | POST | `/api/models/retrain` | Retrain the demand and relations models as `make train` does by default (the as-of week after the history, seed 42). The request stays open while it fits (60 to 110 seconds on the default world), then returns `201` with the new demand entry, which is now the latest and live, as is the new relations version. `409` if a retrain is already running or no data is loaded |
 | GET | `/api/catalog/products` | `{"products": [{sku_id, name, brand, category, subcategory, pack_size, base_price, unit_cost, is_kvi}]}` in SKU order (ADR 0034). Optional filters `category` and `kvi_only`. `422` for an unknown category |
@@ -179,7 +184,7 @@ make up                 # rebuild the api image with the new cassettes
 | GET | `/api/relations/{sku_id}` | `{model: {model_id, version, as_of_week}, sku_id, substitutes: [{sku_id, theta, std_error, q_value}], complements: [{sku_id, lift, support, theta, std_error}]}`; θ is null where not estimable. `404` for an unknown SKU, `503` when no relations model fitted on the live demand model is registered (ADR 0033) |
 | GET | `/health`, `/api/health` | Always `200` while the process runs. `/health` is for the container healthcheck; the web app uses `/api/health` through its proxy. `{"status": "ok" \| "degraded", "version", "checks": {"database": "ok" \| "error", "model_registry": "ok" \| "missing"}}`. `status` is `degraded` if the database is unreachable or no demand model is loaded |
 
-In E3 a planning session is a walking skeleton (ADR 0020). A minimal Context agent reads the brief into a planning request: scope, a promo window chosen from the weeks after the as-of week, and a marketing budget in rupees. If any of these is missing, the session fails and the error names it. A naive greedy planner then offers 20% off to All customers on in-scope SKUs, ranked by base margin, within the budget. It has no uplift model yet, so each line's expected incremental profit is minus its promo cost. E4–E8 replace it. The as-of week is the first week after the loaded sales history.
+A minimal Context agent reads the brief into a planning request (ADR 0020): scope, a promo window chosen from the weeks after the as-of week, and a marketing budget in rupees. If any of these is missing, the session fails and the error names it. The optimising planner then generates every promo option on the latest demand model and the live relations model, and the optimiser selects plan revision 1 with its status, binding constraints, not-selected list and a "why chosen" per line (ADR 0038). With no trained model the session fails and says to run `make train`. On the seed-42 demo brief planning takes about 30 s, most of it pricing pairwise terms (#112). E8's agent graph replaces this fixed pipeline. The as-of week is the first week after the loaded sales history.
 
 `promopilot.guardrails` holds the E8 checks that need no LLM (ADR 0028):
 
@@ -238,6 +243,7 @@ docs/agents/ Agent workflow config (issue tracker, triage labels, domain docs)
 - [ADR 0035: Promo options are enumerated in full, pruned before and after one batch prediction, and handed to the optimiser through an in-process store](docs/adr/0035-promo-option-generation.md)
 - [ADR 0036: The CP-SAT optimiser selects from positive-value options, charges exact pairwise terms, and runs single-threaded with a fixed seed](docs/adr/0036-cp-sat-optimiser.md)
 - [ADR 0037: Promotions can pay in the synthetic world: stronger mechanism effects, a smaller pull-forward dip floored at 0 when fitted, ₹500 fixed cost per line-week](docs/adr/0037-demo-world-promo-economics.md)
+- [ADR 0038: Planning sessions use the optimiser, with proven binding constraints and structured reasons for each plan line and each rejected option](docs/adr/0038-sessions-use-the-optimiser.md)
 
 The domain glossary is [CONTEXT.md](CONTEXT.md).
 

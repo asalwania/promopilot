@@ -141,6 +141,10 @@ A specific question the agent asks the user, pausing the planning session until 
 **Relaxation**:
 The smallest change to the brief's constraints (budget, minimum margin down to the policy floor, clearance target, scope) that would make an infeasible planning request feasible. Company policy is never relaxed.
 
+**Binding constraint**:
+A plan-level constraint (marketing budget, minimum margin or margin floor, promoted-SKU cap per category and region) whose removal would give the optimiser a strictly better objective. It is unproven when the solver ran out of time before settling it (ADR 0038).
+_Avoid_: active constraint, bottleneck
+
 **Company policy**:
 Standing rules set by the parent company, outside any brief (e.g. margin floor, maximum discount, undercut threshold, KVI price tolerance, overstock threshold, write-off rate, fixed marketing costs). A brief may tighten company policy but never loosen it.
 _Avoid_: global constraints, defaults
