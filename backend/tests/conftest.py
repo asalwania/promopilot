@@ -15,25 +15,43 @@ def no_llm_config_from_env(monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv(name, raising=False)
 
 
+SMALL_OVERRIDES = {
+    "catalogue": {"categories_limit": 3, "skus_per_category": 8},
+    "regions": ["North", "South"],
+    "stores_per_region": 3,
+    "history_weeks": 52,
+    "horizon_weeks": 12,
+    "baskets": 5_000,
+    "complement_pairs": 6,
+}
+
+
 @pytest.fixture(scope="session")
 def small_config() -> GeneratorConfig:
     """A few SKUs, two regions, one year: generates in about a second (ADR 0010)."""
-    return load_config(
-        overrides={
-            "catalogue": {"categories_limit": 3, "skus_per_category": 8},
-            "regions": ["North", "South"],
-            "stores_per_region": 3,
-            "history_weeks": 52,
-            "horizon_weeks": 12,
-            "baskets": 5_000,
-            "complement_pairs": 6,
-        }
-    )
+    return load_config(overrides=SMALL_OVERRIDES)
 
 
 @pytest.fixture(scope="session")
 def small_dataset(small_config: GeneratorConfig) -> GeneratedDataset:
     return generate(small_config, seed=11)
+
+
+MEDIUM_OVERRIDES = {
+    "catalogue": {"categories_limit": 4, "skus_per_category": 8},
+    "regions": ["North", "South", "East", "West"],
+    "stores_per_region": 3,
+    "history_weeks": 104,
+    "horizon_weeks": 12,
+    "baskets": 5_000,
+    "complement_pairs": 8,
+}
+"""Enough promotions per SKU to measure elasticity recovery (marker `model`, ADR 0010)."""
+
+
+@pytest.fixture(scope="session")
+def medium_dataset() -> GeneratedDataset:
+    return generate(load_config(overrides=MEDIUM_OVERRIDES), seed=5)
 
 
 @pytest.fixture(scope="session")

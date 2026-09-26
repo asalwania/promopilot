@@ -18,6 +18,7 @@ dependencies = [
     "pydantic-settings>=2.15.0",
     "pyyaml>=6.0.3",
     "sqlalchemy[asyncio]>=2.1.1",
+    "statsmodels>=0.15.0",
     "structlog>=26.1.0",
     "uvicorn[standard]>=0.54.0",
 ]
@@ -45,7 +46,7 @@ packages = ["promopilot", "tests", "tools"]
 plugins = ["pydantic.mypy"]
 
 [[tool.mypy.overrides]]
-module = ["testcontainers.*", "pyarrow.*"]
+module = ["testcontainers.*", "pyarrow.*", "statsmodels.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]
