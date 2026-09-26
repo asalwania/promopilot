@@ -82,17 +82,13 @@ def get_inventory_status_tool(
             categories=arguments.categories,
             sku_ids=arguments.sku_ids,
         )
-        pooled = _pool_by_region(await data.inventory(week), stores)
+        pooled = pooled_stock(await data.inventory(week), stores, policy)
         wanted = pooled[
             pooled["sku_id"].isin(products["sku_id"])
             & pooled["region"].isin([region.value for region in regions])
         ]
         rank = {region.value: n for n, region in enumerate(Region)}
         wanted = wanted.assign(rank=wanted["region"].map(rank)).sort_values(["sku_id", "rank"])
-        wanted = wanted.assign(
-            available_stock=wanted["on_hand"] - wanted["safety_stock"],
-            is_overstock=wanted["days_of_cover"] > threshold_days,
-        )
         if arguments.overstocked_only:
             wanted = wanted[wanted["is_overstock"]]
         statuses = [InventoryStatus.model_validate(row) for row in wanted.to_dict("records")]
@@ -109,6 +105,21 @@ def get_inventory_status_tool(
         input_type=GetInventoryStatusInput,
         output_type=GetInventoryStatusOutput,
         handler=get_inventory_status,
+    )
+
+
+def pooled_stock(
+    snapshot: pd.DataFrame, stores: pd.DataFrame, policy: CompanyPolicy
+) -> pd.DataFrame:
+    """A store inventory snapshot pooled per SKU and region, as this module's docstring says.
+
+    Columns: sku_id, region, on_hand, safety_stock, on_order, daily_demand, days_of_cover,
+    available_stock and is_overstock. Promo option generation reads the same figures.
+    """
+    pooled = _pool_by_region(snapshot, stores)
+    return pooled.assign(
+        available_stock=pooled["on_hand"] - pooled["safety_stock"],
+        is_overstock=pooled["days_of_cover"] > policy.overstock_threshold_weeks * 7,
     )
 
 

@@ -313,3 +313,47 @@ def test_line_paths_break_each_prediction_down_by_week_sku_and_segment(
     targeted = (first["segment"] == Segment.FAMILIES.value) & (first["week_id"] < START + 2)
     assert (discounted == targeted).all()
     assert set(paths.loc[paths["option"] == 1, "sku_id"]) == {anchor, partner}
+
+
+def test_a_bundle_reports_its_partners_units_and_splits_discount_funding_by_base_price(
+    small_dataset: GeneratedDataset,
+    model: DemandModel,
+    skus: list[str],
+    base_prices: dict[str, float],
+) -> None:
+    anchor, partner = small_dataset.ground_truth.complement_pairs[0]
+    bundle = option(
+        anchor,
+        mechanism=Mechanism.BUNDLE,
+        depth_pct=15,
+        bundle_partner_sku_id=partner,
+        target_segment=TargetSegment.FAMILIES,
+    )
+    single = option(skus[0])
+    policy = CompanyPolicy()
+
+    prediction = model.predict([bundle, single], PredictionContext(policy=policy)).options
+    paths = model.line_paths([bundle], CONTEXT)
+
+    promo = paths[(paths["week_id"] < START + 2) & (paths["sku_id"] == partner)]
+    first = prediction.iloc[0]
+    assert first["partner_units"] == pytest.approx(promo["units"].sum())
+    assert first["partner_baseline_units"] == pytest.approx(promo["baseline_units"].sum())
+    assert first["partner_units_std"] > 0
+    # Each SKU is funded at depth % off its own base price: the pair's discount split
+    # pro-rata by base price (ADR 0005, ADR 0014).
+    families = promo[promo["segment"] == Segment.FAMILIES.value]
+    partner_price = effective_unit_price(Mechanism.BUNDLE, base_prices[partner], 15)
+    assert partner_price == pytest.approx(0.85 * base_prices[partner], abs=0.01)
+    assert first["partner_discount_funding"] == pytest.approx(
+        (base_prices[partner] - partner_price) * families["units"].sum()
+    )
+    assert first["anchor_discount_funding"] + first[
+        "partner_discount_funding"
+    ] + fixed_marketing_cost(Mechanism.BUNDLE, 2, policy) == pytest.approx(first["promo_cost"])
+    # A line with no partner has none.
+    second = prediction.iloc[1]
+    assert second[["partner_units", "partner_units_std", "partner_discount_funding"]].eq(0).all()
+    assert second["anchor_discount_funding"] + fixed_marketing_cost(
+        Mechanism.PCT_OFF, 2, policy
+    ) == pytest.approx(second["promo_cost"])

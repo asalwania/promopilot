@@ -121,6 +121,11 @@ OPTION_COLUMNS = [
     "margin",
     "promo_cost",
     "incremental_profit",
+    "anchor_discount_funding",
+    "partner_units",
+    "partner_units_std",
+    "partner_baseline_units",
+    "partner_discount_funding",
 ]
 
 
@@ -145,6 +150,12 @@ class Prediction:
     margin and promo cost cover the promo weeks and include a BUNDLE's partner;
     incremental_profit also covers the pull-forward weeks and is net of the fixed marketing
     cost. Cross effects on other SKUs are left to the relations model (E5).
+
+    The partner_* columns are a BUNDLE partner's own units (mean, std and baseline over the
+    promo weeks) and discount funding; 0 for other mechanisms. Discount funding is split per
+    SKU, each at the depth off its own base price: the pair's discount pro-rata by base price
+    (ADR 0005, ADR 0014). anchor_discount_funding + partner_discount_funding + the fixed
+    marketing cost is promo_cost.
     """
 
     options: pd.DataFrame
@@ -290,11 +301,23 @@ class _Baseline:
     def predict(
         self, keys: pd.DataFrame, *, competitor_index: np.ndarray | None = None
     ) -> np.ndarray:
-        """Units for each key, optionally at a given competitor price index per key."""
-        features = self.features.build(keys)
+        """Units for each key, optionally at a given competitor price index per key.
+
+        Each distinct key (and index) is forecast once: a batch of promo options repeats the
+        same store x SKU x segment weeks many times over (ADR 0035).
+        """
+        distinct = keys.reset_index(drop=True)
         if competitor_index is not None:
-            features["competitor_index"] = competitor_index
-        return np.asarray(self.booster.predict(features), dtype=float)
+            distinct = distinct.assign(competitor_index=competitor_index)
+        group = (
+            distinct.groupby(list(distinct.columns), sort=False, dropna=False).ngroup().to_numpy()
+        )
+        first = np.unique(group, return_index=True)[1]
+        unique = distinct.iloc[first].reset_index(drop=True)
+        features = self.features.build(unique[keys.columns])
+        if competitor_index is not None:
+            features["competitor_index"] = unique["competitor_index"].to_numpy()
+        return np.asarray(self.booster.predict(features), dtype=float)[group]
 
 
 @dataclass(frozen=True)
@@ -442,25 +465,30 @@ class _Response:
         units = total(promoted, counted)
         revenue = total(promoted * price, in_promo)
         profit = total(gross_profit(promoted, price, unit_cost), in_promo)
-        funding = total((base_price - price) * promoted, in_promo)
         fixed: Any = np.array(
             [
                 fixed_marketing_cost(line.mechanism, line.duration_weeks, context.policy)
                 for line in options
             ]
         )
-        variance = self.model.variance(rows[counted], promoted[counted], option[counted])
+        partner = ~anchor & in_promo
+
+        def std(where: np.ndarray) -> np.ndarray:
+            variance = self.model.variance(rows[where], promoted[where], option[where])
+            return np.sqrt(np.pad(variance, (0, len(options) - len(variance))))
+
+        discount = (base_price - price) * promoted
         table = pd.DataFrame(
             {
                 "units": units,
-                "units_std": np.sqrt(np.pad(variance, (0, len(options) - len(variance)))),
+                "units_std": std(counted),
                 "baseline_units": total(unpromoted, counted),
                 "pull_forward_units": total(unpromoted - promoted, anchor & ~in_promo),
                 "incremental_units": total(promoted - unpromoted, anchor),
                 "revenue": revenue,
                 "gross_profit": profit,
                 "margin": np.divide(profit, revenue, out=np.zeros_like(profit), where=revenue > 0),
-                "promo_cost": funding + fixed,
+                "promo_cost": total(discount, in_promo) + fixed,
                 "incremental_profit": incremental_profit(
                     total(gross_profit(promoted, price, unit_cost), np.full(len(rows), True)),
                     total(
@@ -468,6 +496,11 @@ class _Response:
                     ),
                     fixed,
                 ),
+                "anchor_discount_funding": total(discount, counted),
+                "partner_units": total(promoted, partner),
+                "partner_units_std": std(partner),
+                "partner_baseline_units": total(unpromoted, partner),
+                "partner_discount_funding": total(discount, partner),
             },
             columns=OPTION_COLUMNS,
         )

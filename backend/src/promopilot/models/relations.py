@@ -39,7 +39,7 @@ import pandas as pd
 import statsmodels.api as sm
 from statsmodels.stats.multitest import multipletests
 
-from promopilot.domain import PlanLine, Segment, TargetSegment
+from promopilot.domain import Mechanism, PlanLine, Segment, TargetSegment
 from promopilot.economics import effective_unit_price
 from promopilot.models.demand import DemandHistory, DemandModel, PredictionContext
 
@@ -413,6 +413,112 @@ def line_effects(
     effects = effects.assign(size=effects["profit_change"].abs())
     effects = effects.sort_values(["line", "size", "sku_id"], ascending=[True, False, True])
     return effects[EFFECT_COLUMNS].reset_index(drop=True)
+
+
+def line_effect_totals(
+    lines: Sequence[PlanLine],
+    relations: RelationLookup,
+    demand_model: BaselineForecast,
+    products: pd.DataFrame,
+) -> pd.DataFrame:
+    """Each line's `line_effects` summed: cannibalised_profit and halo_profit, in input order.
+
+    The same numbers as totalling `line_effects` per line, computed for a whole batch at once
+    (promo option generation prices tens of thousands of lines, ADR 0035): the baseline is
+    forecast once per region, and lines that cut the same SKUs to the same prices share
+    their price shifts. A line that moves nothing has zeros.
+    """
+    economics = _Economics.of(products)
+    lookup = _MemoLookup(relations)
+    shifts_of: dict[tuple[tuple[str, ...], Mechanism, int], dict[str, tuple[str, float]]] = {}
+    moved: dict[str, list[object]] = {key: [] for key in ("line", "sku", "change")}
+    spans: list[tuple[str, int, int, int]] = []
+    for n, line in enumerate(lines):
+        key = (line.skus, line.mechanism, line.depth_pct)
+        if key not in shifts_of:
+            shifts_of[key] = _price_shifts(line, lookup, economics)
+        for sku_id, (_, change) in shifts_of[key].items():
+            moved["line"].append(n)
+            moved["sku"].append(sku_id)
+            moved["change"].append(change)
+        spans.append((line.region.value, line.start_week, line.duration_weeks, _segment(line)))
+
+    cannibalised = np.zeros(len(lines))
+    halo = np.zeros(len(lines))
+    if moved["line"]:
+        rows = pd.DataFrame(moved)
+        span = pd.DataFrame(spans, columns=["region", "start", "duration", "segment"])
+        rows = rows.join(span, on="line")
+        affected = sorted(set(rows["sku"]))
+        column = {sku_id: k for k, sku_id in enumerate(affected)}
+        sku = rows["sku"].map(column).to_numpy()
+        units = np.zeros(len(rows))
+        starts = rows["start"].to_numpy(dtype=int)
+        ends = starts + rows["duration"].to_numpy(dtype=int)
+        segments = rows["segment"].to_numpy(dtype=int)
+        for region, at in rows.groupby("region").indices.items():
+            first = int(starts[at].min())
+            cumulative = _cumulative_baseline(
+                demand_model, str(region), range(first, int(ends[at].max())), affected
+            )
+            window = cumulative[ends[at] - first, sku[at]] - cumulative[starts[at] - first, sku[at]]
+            everyone = segments[at] == len(SEGMENT_NAMES)
+            one = np.minimum(segments[at], len(SEGMENT_NAMES) - 1)
+            units[at] = np.where(everyone, window.sum(axis=1), window[np.arange(len(at)), one])
+        units_change = units * np.expm1(rows["change"].to_numpy(dtype=float))
+        profit = units_change * economics.margins(affected)[sku]
+        line_of = rows["line"].to_numpy(dtype=int)
+        cannibalised = np.bincount(line_of, np.maximum(-profit, 0.0), minlength=len(lines))
+        halo = np.bincount(line_of, np.maximum(profit, 0.0), minlength=len(lines))
+    return pd.DataFrame({"cannibalised_profit": cannibalised, "halo_profit": halo})
+
+
+SEGMENT_NAMES = [segment.value for segment in Segment]
+
+
+class _MemoLookup:
+    """A relation lookup that asks for each SKU's partners once."""
+
+    def __init__(self, relations: RelationLookup) -> None:
+        self._relations = relations
+        self._substitutes: dict[str, pd.DataFrame] = {}
+        self._complements: dict[str, pd.DataFrame] = {}
+
+    def substitutes(self, sku_id: str) -> pd.DataFrame:
+        if sku_id not in self._substitutes:
+            self._substitutes[sku_id] = self._relations.substitutes(sku_id)
+        return self._substitutes[sku_id]
+
+    def complements(self, sku_id: str) -> pd.DataFrame:
+        if sku_id not in self._complements:
+            self._complements[sku_id] = self._relations.complements(sku_id)
+        return self._complements[sku_id]
+
+
+def _segment(line: PlanLine) -> int:
+    """The targeted segment's position in SEGMENT_NAMES, or its length for All customers."""
+    if line.target_segment is TargetSegment.ALL_CUSTOMERS:
+        return len(SEGMENT_NAMES)
+    return SEGMENT_NAMES.index(line.target_segment.value)
+
+
+def _cumulative_baseline(
+    demand_model: BaselineForecast, region: str, weeks: range, sku_ids: list[str]
+) -> np.ndarray:
+    """Baseline units summed over the region's stores, cumulated over the weeks.
+
+    Indexed [weeks elapsed, SKU, segment]: row k holds the first k weeks' total, so a span's
+    units are one subtraction.
+    """
+    baseline = demand_model.baseline(list(weeks), regions=[region], sku_ids=sku_ids)
+    grid = (
+        baseline.groupby(["week_id", "sku_id", "segment"])["units"]
+        .sum()
+        .reindex(pd.MultiIndex.from_product([list(weeks), sku_ids, SEGMENT_NAMES]), fill_value=0.0)
+        .to_numpy(dtype=float)
+        .reshape(len(weeks), len(sku_ids), len(SEGMENT_NAMES))
+    )
+    return np.concatenate([np.zeros((1, *grid.shape[1:])), np.cumsum(grid, axis=0)])
 
 
 def pairwise_cannibalisation(

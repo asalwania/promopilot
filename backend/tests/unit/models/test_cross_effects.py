@@ -17,6 +17,7 @@ from promopilot.models.demand import DemandHistory, DemandModel, PredictionConte
 from promopilot.models.relations import (
     EFFECT_COLUMNS,
     Relations,
+    line_effect_totals,
     line_effects,
     pairwise_cannibalisation,
 )
@@ -203,6 +204,30 @@ def test_effects_come_one_row_per_line_and_affected_sku() -> None:
     assert effects_of().empty
 
 
+def summed(effects: pd.DataFrame, count: int) -> pd.DataFrame:
+    """`line_effects` totalled per line, with zeros for a line that moves nothing."""
+    totals = effects.groupby("line")[["cannibalised_profit", "halo_profit"]].sum()
+    return totals.reindex(range(count), fill_value=0.0).reset_index(drop=True)
+
+
+def test_effect_totals_sum_each_lines_effects_for_a_whole_batch_at_once() -> None:
+    lines = [
+        line("A"),
+        line("B", region=Region.SOUTH, start_week=61, duration_weeks=1),
+        line("A", target_segment=TargetSegment.FAMILIES, depth_pct=40),
+        line("B", mechanism=Mechanism.BUNDLE, bundle_partner_sku_id="E"),
+        line("C", mechanism=Mechanism.BOGO, depth_pct=50),
+        line("D", region=Region.SOUTH),
+    ]
+
+    totals = line_effect_totals(lines, FakeRelations(), FakeDemand(), PRODUCTS)
+
+    assert list(totals.columns) == ["cannibalised_profit", "halo_profit"]
+    expected = summed(effects_of(*lines), len(lines))
+    pd.testing.assert_frame_equal(totals, expected, check_exact=False, rtol=1e-12)
+    assert line_effect_totals([], FakeRelations(), FakeDemand(), PRODUCTS).empty
+
+
 # --- pairwise cannibalisation ----------------------------------------------------------
 
 
@@ -279,3 +304,23 @@ def test_the_fitted_models_plug_into_the_calculators(
     )
     assert math.isfinite(together)
     assert together != 0
+
+
+def test_fitted_effect_totals_match_the_per_line_calculator(
+    small_models: tuple[DemandModel, Relations], small_history: DemandHistory
+) -> None:
+    model, found = small_models
+    products = small_history.products
+    skus = sorted(products["sku_id"])[:6]
+    lines = [
+        line(sku_id, start_week=SMALL_AS_OF + 1 + n % 3, region=region, depth_pct=depth)
+        for n, sku_id in enumerate(skus)
+        for region in (Region.NORTH, Region.SOUTH)
+        for depth in (10, 30)
+    ]
+
+    totals = line_effect_totals(lines, found, model, products)
+
+    expected = summed(line_effects(lines, found, model, products), len(lines))
+    pd.testing.assert_frame_equal(totals, expected, check_exact=False, rtol=1e-9)
+    assert (totals.sum(axis=1) > 0).any()

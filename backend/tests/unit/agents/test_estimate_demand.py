@@ -10,6 +10,7 @@ from promopilot.agents.tools import ToolError, ToolOk, ToolRegistry
 from promopilot.agents.tools.estimate_demand import (
     EstimateDemandInput,
     EstimateDemandOutput,
+    OptionEstimate,
     estimate_demand_tool,
 )
 from promopilot.domain import CompanyPolicy, Mechanism, PlanLine, Region
@@ -104,7 +105,7 @@ async def test_schema_valid_input_gives_schema_valid_output_consistent_with_pred
     assert [estimate.option for estimate in output.estimates] == lines
     for n, estimate in enumerate(output.estimates):
         row = expected.options.iloc[n]
-        for column in expected.options.columns:
+        for column in expected.options.columns.intersection(list(OptionEstimate.model_fields)):
             assert getattr(estimate, column) == pytest.approx(row[column], rel=1e-12)
         segments = expected.segments[expected.segments["option"] == n]
         assert [s.segment.value for s in estimate.segments] == list(segments["segment"])
