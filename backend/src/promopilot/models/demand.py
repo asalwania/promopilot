@@ -159,7 +159,12 @@ class DemandModel:
         return self._response.model.coefficients.copy()
 
     def predict(self, options: Sequence[PlanLine], context: PredictionContext) -> Prediction:
-        """Mean and std of each promo option's units, and its economics (ADR 0005)."""
+        """Mean and std of each promo option's units, and its economics (ADR 0005).
+
+        Raises ValueError for an option the model cannot predict: an unknown SKU or bundle
+        partner, a region with no stores, a start before the as-of week, or weeks past the
+        calendar.
+        """
         return self._response.predict(list(options), context, self._baseline)
 
     def baseline(
@@ -385,8 +390,13 @@ class _Response:
     def predict(
         self, options: list[PlanLine], context: PredictionContext, baseline: _Baseline
     ) -> Prediction:
-        promotions = _as_promotions(options)
+        regions = set(self.stores["region"])
         for line in options:
+            for sku_id in line.skus:
+                if sku_id not in self.products.index:
+                    raise ValueError(f"unknown SKU {sku_id}")
+            if line.region not in regions:
+                raise ValueError(f"no stores in {line.region}")
             if line.start_week < self.as_of_week:
                 raise ValueError(
                     f"{line.sku_id} in {line.region} starts in week {line.start_week}, "
@@ -394,6 +404,7 @@ class _Response:
                 )
             if line.start_week + line.duration_weeks > self.last_week + 1:
                 raise ValueError(f"{line.sku_id} in {line.region} runs past the calendar")
+        promotions = _as_promotions(options)
         exposure = _exposure(promotions, self.products)
         # Every store x segment week of each option's SKUs, through the pull-forward weeks.
         rows = exposure[["promo", "region", "sku_id", "anchor"]].drop_duplicates()

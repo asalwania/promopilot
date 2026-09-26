@@ -9,12 +9,15 @@ from fastapi import FastAPI
 from sqlalchemy.ext.asyncio import create_async_engine
 
 from promopilot import __version__
+from promopilot.agents.tools import ToolRegistry
+from promopilot.agents.tools.estimate_demand import estimate_demand_tool
 from promopilot.api.models import ModelService, models_router
 from promopilot.api.schemas import HealthChecks, HealthResponse
 from promopilot.api.sessions import SessionService, sessions_router
 from promopilot.config import Settings
 from promopilot.data import RetailData, SessionStore, migrate
 from promopilot.data.database import PostgresDatabaseProbe
+from promopilot.domain import CompanyPolicy
 from promopilot.llm import build_provider
 from promopilot.models.demand import DemandModel
 from promopilot.models.registry import LatestModel, ModelKind, ModelRegistry
@@ -92,6 +95,8 @@ def build_app() -> FastAPI:
     app = create_app(
         database_probe=probe, model_status=demand_model, sessions=sessions, models=models
     )
+    # The agents' tools (ADR 0025): the model is resolved per call, so a retrain is picked up.
+    app.state.tools = ToolRegistry([estimate_demand_tool(demand_model, policy=CompanyPolicy())])
     serve = app.router.lifespan_context
 
     @asynccontextmanager

@@ -30,7 +30,7 @@ RECOVERY_BOUND = 0.12
 """Median |%error| of beta per SKU x segment; 7.1% measured on this fixture (ADR 0024)."""
 
 
-def option(sku_id: str, **changes: Any) -> PlanLine:
+def option(sku_id: str, /, **changes: Any) -> PlanLine:
     fields: dict[str, Any] = {
         "sku_id": sku_id,
         "region": Region.NORTH,
@@ -185,6 +185,24 @@ def test_prediction_is_vectorised_over_a_batch_of_options(
 def test_options_before_the_as_of_week_are_rejected(model: DemandModel, skus: list[str]) -> None:
     with pytest.raises(ValueError, match="before the as-of week"):
         model.predict([option(skus[0], start_week=AS_OF - 1)], CONTEXT)
+
+
+@pytest.mark.parametrize(
+    ("changes", "message"),
+    [
+        ({"sku_id": "SKU9999"}, "unknown SKU SKU9999"),
+        (
+            {"mechanism": Mechanism.BUNDLE, "bundle_partner_sku_id": "SKU9999"},
+            "unknown SKU SKU9999",
+        ),
+        ({"region": Region.EAST}, "no stores in East"),
+    ],
+)
+def test_options_the_model_has_no_history_for_are_rejected(
+    model: DemandModel, skus: list[str], changes: dict[str, Any], message: str
+) -> None:
+    with pytest.raises(ValueError, match=message):
+        model.predict([option(skus[0], **changes)], CONTEXT)
 
 
 @pytest.fixture(scope="module")
