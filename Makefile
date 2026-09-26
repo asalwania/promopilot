@@ -105,8 +105,8 @@ api-types: ## Export OpenAPI and regenerate frontend API types
 # ---------------------------------------------------------------- data + later epics
 
 .PHONY: data
-data: ## Generate the synthetic dataset + ground truth into DATA_DIR (seeded)
-	$(BACKEND) uv run python -m promopilot.datagen --out $(DATA_DIR)
+data: db ## Generate the seeded synthetic dataset + ground truth into DATA_DIR and load Postgres
+	$(BACKEND) uv run python -m promopilot.datagen --out $(DATA_DIR) --load
 
 .PHONY: train eval demo record-cassettes
 train: ## (E4) Train demand + relations models

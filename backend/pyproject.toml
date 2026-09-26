@@ -6,6 +6,7 @@ authors = [{ name = "Ajay Kumar", email = "ajjugotit@gmail.com" }]
 license = "MIT"
 requires-python = ">=3.12,<3.13"
 dependencies = [
+    "alembic>=1.20.0",
     "asyncpg>=0.31.0",
     "fastapi>=0.141.1",
     "numpy>=2.5.3",
@@ -39,7 +40,7 @@ packages = ["promopilot", "tests"]
 plugins = ["pydantic.mypy"]
 
 [[tool.mypy.overrides]]
-module = ["testcontainers.*"]
+module = ["testcontainers.*", "pyarrow.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]
