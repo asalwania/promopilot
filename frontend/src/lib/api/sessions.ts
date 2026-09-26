@@ -1,0 +1,153 @@
+import { z } from "zod";
+
+import type { components } from "@/lib/api/schema";
+
+type Schemas = components["schemas"];
+
+// Runtime validation for the session contract; `satisfies` makes tsc fail if the
+// OpenAPI-generated types (make api-types) drift from these schemas.
+export const sessionCreatedSchema = z.object({
+  session_id: z.string(),
+}) satisfies z.ZodType<Schemas["SessionCreated"]>;
+
+const regionSchema = z.enum([
+  "North",
+  "South",
+  "East",
+  "West",
+]) satisfies z.ZodType<Schemas["Region"]>;
+
+export const planLineSchema = z.object({
+  sku_id: z.string(),
+  region: regionSchema,
+  mechanism: z.enum(["PCT_OFF", "BOGO", "BUNDLE", "FIXED_PRICE"]),
+  depth_pct: z.number(),
+  start_week: z.number(),
+  duration_weeks: z.number(),
+  target_segment: z.enum([
+    "Value Seekers",
+    "Families",
+    "Premium",
+    "Young Urban",
+    "All customers",
+  ]),
+  bundle_partner_sku_id: z.string().nullable().optional(),
+}) satisfies z.ZodType<Schemas["PlanLine"]>;
+
+export const planRevisionLineSchema = z.object({
+  line: planLineSchema,
+  expected_units: z.number(),
+  promo_cost: z.number(),
+  expected_incremental_profit: z.number(),
+}) satisfies z.ZodType<Schemas["PlanRevisionLine"]>;
+
+export const planningRequestSchema = z.object({
+  as_of_week: z.number(),
+  scope: z.object({
+    regions: z.array(regionSchema),
+    categories: z.array(z.string()),
+    sku_ids: z.array(z.string()),
+  }),
+  promo_window: z.object({ start_week: z.number(), end_week: z.number() }),
+  marketing_budget: z.number(),
+  min_margin: z.number().nullable().optional(),
+}) satisfies z.ZodType<Schemas["PlanningRequest"]>;
+
+export const sessionSchema = z.object({
+  session_id: z.string(),
+  status: z.enum([
+    "planning",
+    "awaiting_clarification",
+    "awaiting_approval",
+    "approved",
+    "rejected",
+    "failed",
+  ]),
+  brief: z.string(),
+  planning_request: planningRequestSchema.nullable(),
+  plan_revision: z
+    .object({ number: z.number(), lines: z.array(planRevisionLineSchema) })
+    .nullable(),
+  error: z.string().nullable(),
+}) satisfies z.ZodType<Schemas["SessionResponse"]>;
+
+export type Session = z.infer<typeof sessionSchema>;
+export type SessionStatus = Session["status"];
+export type PlanRevisionLine = z.infer<typeof planRevisionLineSchema>;
+export type PlanningRequest = z.infer<typeof planningRequestSchema>;
+
+export type CreateSessionResult =
+  { ok: true; sessionId: string } | { ok: false; reason: string };
+
+// Browser-side: goes through the same-origin `/api/*` proxy (ADR 0018).
+export async function createSession(
+  brief: string,
+  fetchImpl: typeof fetch = fetch,
+): Promise<CreateSessionResult> {
+  try {
+    const response = await fetchImpl("/api/sessions", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ brief }),
+    });
+    if (response.status === 422) {
+      return { ok: false, reason: await validationMessage(response) };
+    }
+    if (!response.ok) {
+      return { ok: false, reason: `HTTP ${response.status}` };
+    }
+    const created = sessionCreatedSchema.safeParse(await response.json());
+    if (!created.success) {
+      return { ok: false, reason: "unexpected session response" };
+    }
+    return { ok: true, sessionId: created.data.session_id };
+  } catch (error) {
+    return { ok: false, reason: errorMessage(error) };
+  }
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+const validationErrorSchema = z.object({
+  detail: z.array(z.object({ msg: z.string() })).min(1),
+});
+
+async function validationMessage(response: Response): Promise<string> {
+  const parsed = validationErrorSchema.safeParse(await response.json());
+  return parsed.success ? parsed.data.detail[0].msg : "HTTP 422";
+}
+
+export class SessionLoadError extends Error {
+  constructor(
+    message: string,
+    readonly notFound = false,
+  ) {
+    super(message);
+    this.name = "SessionLoadError";
+  }
+}
+
+// Throws on any failure so TanStack Query can retry it and surface the error.
+// Network errors from fetch propagate as they are.
+export async function getSession(
+  sessionId: string,
+  fetchImpl: typeof fetch = fetch,
+): Promise<Session> {
+  const response = await fetchImpl(
+    `/api/sessions/${encodeURIComponent(sessionId)}`,
+    { cache: "no-store" },
+  );
+  if (response.status === 404) {
+    throw new SessionLoadError("Session not found", true);
+  }
+  if (!response.ok) {
+    throw new SessionLoadError(`HTTP ${response.status}`);
+  }
+  const parsed = sessionSchema.safeParse(await response.json());
+  if (!parsed.success) {
+    throw new SessionLoadError("unexpected session response");
+  }
+  return parsed.data;
+}

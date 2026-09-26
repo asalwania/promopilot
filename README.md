@@ -2,7 +2,7 @@
 
 Agentic retail promotion planner for the ET AI Hackathon (Problem 3, Retail: Autonomous Promotion Planner). A planning brief in plain English becomes a promotion plan that respects inventory, margin and budget constraints, with every number coming from deterministic tools and a human approving the result.
 
-> **Status:** epic E2 (synthetic data and oracle). `make data` generates the synthetic world; the API serves `/health` and the web app shows it. Planning features arrive in later epics; see [SPEC.md](SPEC.md) §15 for the delivery plan.
+> **Status:** epic E3 (walking skeleton). `make data` generates the synthetic world. A brief typed on the home page becomes a naive plan on the session page (ADR 0020). Real forecasting, optimisation and the full agent arrive in later epics; see [SPEC.md](SPEC.md) §15 for the delivery plan.
 
 ## Quickstart
 
@@ -15,7 +15,7 @@ make setup   # creates .env from .env.example, installs backend + frontend deps,
 make dev     # Postgres in Docker; API on :8000 and web on :3000 with hot reload
 ```
 
-Open http://localhost:3000. The home page fetches `/api/health` from its own origin and shows the database status.
+Open http://localhost:3000. Type a brief and click **Plan it**. The app starts a planning session and opens `/sessions/<id>`. That page polls the session every second while it is `planning`. It then shows the planning request the agent read and the plan table, or the reason the session failed (ADR 0021). The home page also fetches `/api/health` from its own origin and shows the database status.
 
 The browser never calls the API directly. Next.js route handlers forward every same-origin `/api/*` request to `API_URL` with the path, query, method, body and status unchanged, and stream the response (ADR 0001, ADR 0018). There is one public URL and no CORS.
 
@@ -113,6 +113,7 @@ docs/agents/ Agent workflow config (issue tracker, triage labels, domain docs)
 - [ADR 0018: The web proxy forwards `/api/*` paths unchanged, and health is also served at `/api/health`](docs/adr/0018-same-origin-api-proxy-paths.md)
 - [ADR 0019: The LLM layer is async, and cassettes are one JSON file per provider-independent request hash](docs/adr/0019-llm-layer-and-cassettes.md)
 - [ADR 0020: Walking-skeleton sessions: rupee budgets, a week table for the LLM, a naive planner with no uplift](docs/adr/0020-walking-skeleton-session-decisions.md)
+- [ADR 0021: The session page polls every second, stops on any settled status or failed read, and shows plan numbers in en-IN rupees](docs/adr/0021-session-page-polling-and-plan-display.md)
 
 The domain glossary is [CONTEXT.md](CONTEXT.md).
 
