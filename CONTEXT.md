@@ -184,6 +184,14 @@ The human decision that makes one specific plan revision final; it ends the plan
 **Rejection**:
 A human decision, with a reason, that a plan revision is not acceptable. The session stays open for amendments.
 
+**Violation**:
+One hard constraint a plan breaks on its own plan-time numbers (e.g. total promo cost over the marketing budget, a plan line below unit cost), found by plan validation and sent back to the planner.
+_Avoid_: error, failure, issue (which the critic's risk review raises)
+
+**Numeric grounding**:
+The check that every number in an explanation appears in tool outputs, allowing only the rounding the text shows ("₹6.2 lakh", "18%").
+_Avoid_: fact-checking, hallucination check
+
 ### Evaluation
 
 **Scenario**:

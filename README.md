@@ -118,6 +118,13 @@ make up                 # rebuild the api image with the new cassettes
 
 In E3 a planning session is a walking skeleton (ADR 0020). A minimal Context agent reads the brief into a planning request: scope, a promo window chosen from the weeks after the as-of week, and a marketing budget in rupees. If any of these is missing, the session fails and the error names it. A naive greedy planner then offers 20% off to All customers on in-scope SKUs, ranked by base margin, within the budget. It has no uplift model yet, so each line's expected incremental profit is minus its promo cost. E4–E8 replace it. The as-of week is the first week after the loaded sales history.
 
+`promopilot.guardrails` holds the E8 checks that need no LLM (ADR 0028):
+
+- `validate_plan(plan, request, policy)` returns a violation for every hard constraint a plan breaks on its own plan-time numbers (ADR 0012). The checks are budget, minimum margin, margin floor, stock, maximum discount, below cost, promo window, maximum promoted SKUs per category per region, and one plan line per SKU per region.
+- `check_numeric_grounding(text, tool_outputs)` lists every number in a text that no tool output supports, at the precision the text shows. It reads ₹, lakh, crore and percentages.
+
+The Critic and the Explainer will call them.
+
 Interactive docs are at http://localhost:8000/docs. The machine-readable contract is [docs/openapi.json](docs/openapi.json).
 
 ## Repository layout
@@ -156,6 +163,7 @@ docs/agents/ Agent workflow config (issue tracker, triage labels, domain docs)
 - [ADR 0023: The baseline trains on clean weeks with horizon-safe features, and the registry pickles artifacts to a volume the api loads from](docs/adr/0023-baseline-forecast-and-model-registry.md)
 - [ADR 0024: The promo response is a per-SKU Poisson GLM on a reference-index baseline, shrunk by empirical Bayes](docs/adr/0024-promo-response-glm-with-empirical-bayes.md)
 - [ADR 0026: Retrain holds the request until the new model is live, one at a time, on the default as-of week and seed](docs/adr/0026-models-api-synchronous-retrain.md)
+- [ADR 0028: Guardrails validate plan facts and ground numbers at the precision the text shows](docs/adr/0028-guardrails-plan-facts-and-grounding-rules.md)
 
 The domain glossary is [CONTEXT.md](CONTEXT.md).
 
