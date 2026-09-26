@@ -51,6 +51,9 @@ A SKU's regular shelf price and what it costs us. Margin = (price − cost) / pr
 For a SKU in a region, the sum over the region's stores of on-hand stock minus safety stock.
 _Avoid_: inventory (when the pooled regional quantity is meant)
 
+**Days of cover**:
+How many days a region's stock of a SKU lasts at current demand: the region's on-hand stock divided by its stores' combined daily demand (ADR 0032).
+
 **Overstocked SKU**:
 A SKU in a region whose days of cover exceed the company-policy threshold, or that the brief names for clearance.
 
@@ -118,6 +121,10 @@ _Avoid_: selection, filter
 
 **Assumption**:
 A planning-request field the agent inferred rather than read from the brief, with its source (brief, data or default) and a confidence.
+
+**Match score**:
+How closely a brief phrase matches a catalogue entity, from 0 to 1; 1.0 only when every word matches exactly. A phrase is ambiguous when its best match scores below 0.7 or a second reading scores within 0.1 of it (ADR 0032).
+_Avoid_: confidence (which belongs to an assumption)
 
 **Critical field**:
 A planning-request field the agent must never guess: marketing budget, scope (categories or regions) and promo window. If one is missing, or inferred with confidence below 0.7, the agent asks a clarification.

@@ -84,7 +84,11 @@ Empirical Bayes shrinks each estimate toward its subcategory. `DemandModel.predi
 
 The API loads the latest demand model at startup and reports it in `/health`. `POST /api/models/retrain` retrains and swaps in the new version without a restart (see [API](#api)). For the Docker stack, train inside the api container (see the quick start) so the artifact lands on its volume.
 
-Agents reach the model only through the tool registry (`promopilot.agents.tools`, ADR 0025). Each tool has a name, a JSON-schema input and output, and an async handler over injected dependencies. `registry.specs()` lists the tools with their schemas. `await registry.call(name, arguments)` returns `ToolOk` or a typed `ToolError` (`unknown_tool`, `invalid_input` or `model_unavailable`) and never raises for a bad call. The first tool is `estimate_demand`. It takes 1 to 200 plan lines and optional competitor price overrides. For each line it returns `predict`'s numbers, unrounded, plus a per-segment table and the id and version of the model that produced them. The API builds the registry at startup (`app.state.tools`) and resolves the latest model on every call, so a newly registered model is used without a restart.
+Agents reach the model only through the tool registry (`promopilot.agents.tools`, ADR 0025). Each tool has a name, a JSON-schema input and output, and an async handler over injected dependencies. `registry.specs()` lists the tools with their schemas. `await registry.call(name, arguments)` returns `ToolOk` or a typed `ToolError` (`unknown_tool`, `invalid_input`, `model_unavailable` or `data_unavailable`) and never raises for a bad call. The first tool is `estimate_demand`. It takes 1 to 200 plan lines and optional competitor price overrides. For each line it returns `predict`'s numbers, unrounded, plus a per-segment table and the id and version of the model that produced them. The API builds the registry at startup (`app.state.tools`) and resolves the latest model on every call, so a newly registered model is used without a restart.
+
+Three data tools show the planner the world as of a week (ADR 0032). `get_scope_data` lists regions with their stores, and the category → subcategory → SKU hierarchy with prices and KVI flags. `get_inventory_status` pools each SKU's stock per region from the snapshot before the as-of week: available stock (on hand minus safety stock), days of cover (Σ on hand ÷ Σ store daily demand) and an overstock flag (cover above the company-policy threshold). `get_holidays` lists national and regional holidays with their intensity per region and week, for a window after the as-of week. The tools never take the as-of week from the LLM: it is bound when they are built, and the API resolves the loaded data's default as-of week on every call.
+
+`promopilot.agents.resolution.BriefResolver` maps a brief's phrases to catalogue entities with no LLM: "Snacks and Beverages" to categories, "North and West" to regions, "400g namkeen packs" to exactly the Namkeen 400g SKUs, and "Diwali" to the weeks the calendar labels Diwali after the as-of week. Each candidate has a match score from 0 to 1 (1.0 only for an exact match). A resolution is ambiguous when its best score is below 0.7 or a runner-up is within 0.1 of it, so the Context agent can ask instead of guess.
 
 ## Relations
 
@@ -185,6 +189,7 @@ docs/agents/ Agent workflow config (issue tracker, triage labels, domain docs)
 - [ADR 0028: Guardrails validate plan facts and ground numbers at the precision the text shows](docs/adr/0028-guardrails-plan-facts-and-grounding-rules.md)
 - [ADR 0029: Relations use one pooled cross effect per pair on the demand model's fit, and basket lift confirmed by it](docs/adr/0029-relations-pooled-cross-effects-and-basket-lift.md)
 - [ADR 0030: The models page groups versions by kind, times the retrain, and reports its outcome inline](docs/adr/0030-models-page-display-and-retrain-feedback.md)
+- [ADR 0032: Data tools read at a bound as-of week, pool stock per region, and a deterministic resolver scores brief phrases](docs/adr/0032-data-tools-as-of-source-and-brief-resolution.md)
 
 The domain glossary is [CONTEXT.md](CONTEXT.md).
 

@@ -15,7 +15,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, SerializeAsAny, ValidationError
 
-ToolErrorCode = Literal["unknown_tool", "invalid_input", "model_unavailable"]
+ToolErrorCode = Literal["unknown_tool", "invalid_input", "model_unavailable", "data_unavailable"]
 
 
 @dataclass(frozen=True)

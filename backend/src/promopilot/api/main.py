@@ -11,6 +11,9 @@ from sqlalchemy.ext.asyncio import create_async_engine
 from promopilot import __version__
 from promopilot.agents.tools import ToolRegistry
 from promopilot.agents.tools.estimate_demand import estimate_demand_tool
+from promopilot.agents.tools.holidays import get_holidays_tool
+from promopilot.agents.tools.inventory_status import get_inventory_status_tool
+from promopilot.agents.tools.scope_data import get_scope_data_tool
 from promopilot.api.models import ModelService, models_router
 from promopilot.api.schemas import HealthChecks, HealthResponse
 from promopilot.api.sessions import SessionService, sessions_router
@@ -95,8 +98,17 @@ def build_app() -> FastAPI:
     app = create_app(
         database_probe=probe, model_status=demand_model, sessions=sessions, models=models
     )
-    # The agents' tools (ADR 0025): the model is resolved per call, so a retrain is picked up.
-    app.state.tools = ToolRegistry([estimate_demand_tool(demand_model, policy=CompanyPolicy())])
+    # The agents' tools (ADR 0025): the model is resolved per call, so a retrain is picked up,
+    # and so is the as-of week, so newly loaded data moves the data tools' clock (ADR 0032).
+    policy, data = CompanyPolicy(), RetailData(engine)
+    app.state.tools = ToolRegistry(
+        [
+            estimate_demand_tool(demand_model, policy=policy),
+            get_scope_data_tool(data),
+            get_inventory_status_tool(data, data.default_as_of_week, policy=policy),
+            get_holidays_tool(data, data.default_as_of_week),
+        ]
+    )
     serve = app.router.lifespan_context
 
     @asynccontextmanager
