@@ -496,7 +496,7 @@ Validation: time-based split (last 12 weeks held out). Report WAPE for baseline 
 
 ### 9.2 Relations (`models.relations`)
 
-- **Substitutes:** cross-price regression within subcategory; keep θ > 0 significant at p < 0.05 → cannibalisation matrix.
+- **Substitutes:** cross-price regression within subcategory; keep θ > 0 with Benjamini–Hochberg q < 0.05 and θ above a minimum effect size (ADR 0013) → cannibalisation matrix.
 - **Complements:** basket lift = P(i ∧ j) / (P(i)·P(j)); lift > 1.5 with minimum support, confirmed by θ < 0 where estimable.
 - Output: sparse matrices + lists, versioned in `model_registry`.
 
@@ -521,7 +521,7 @@ Incremental profit is net of pull-forward; halo and cannibalisation count for ev
 - Σ promo_cost ≤ budget (total and optional per-region caps).
 - Plan-level expected margin ≥ min_margin (linearised: Σ (revenue·min_margin − gross_profit) ≤ 0).
 - P90 units ≤ available stock (Σ over the region's stores of on_hand − safety_stock) for each selected option (ADR 0004).
-- For each overstocked SKU in scope: expected sell-through ≥ clearance_target (hard), or soft with a large penalty if infeasible, reported as a violation.
+- For each overstocked SKU the brief names for clearance: expected sell-through ≥ clearance_target (hard), or soft with a large penalty if infeasible, reported as a violation. SKUs flagged only by days of cover get no target, only clearance value (ADR 0014).
 - Optional: max promoted SKUs per category/region; KVI price within competitor tolerance.
 - `y_ij ≥ x_i + x_j − 1` linking.
 
@@ -637,7 +637,8 @@ Each scenario: brief text, optional amendments, expected properties (not exact p
 | Substitute detection | Precision / recall vs true substitute pairs | ≥ 0.8 / ≥ 0.7 |
 | Complement detection | Precision / recall vs true complement pairs | ≥ 0.8 / ≥ 0.7 |
 | Baseline forecast | WAPE on 12-week holdout | Report (aim ≤ 25%) |
-| Constraint satisfaction | % of final plans passing all hard constraints (checked by oracle) | 100% |
+| Constraint satisfaction | % of final plans passing all hard constraints on plan-time values, checked by `validate_plan` (ADR 0012) | 100% |
+| Oracle breach rate | % of plans whose true outcome (oracle) breaks a constraint (ADR 0012) | Report |
 | Plan quality | Oracle profit uplift vs rule-based baseline ("20% off top 10 sellers") | Beats baseline in ≥ 90% of scenarios |
 | Regret | Oracle regret vs optimiser run on true parameters | Median ≤ 10% |
 | Consistency | Same scenario × 5 runs → Jaccard overlap of selected SKUs | ≥ 0.9 |
@@ -813,7 +814,7 @@ Build in this order. Each epic becomes one spec (`/to-spec`) and a set of tracer
 
 ### Cut line (if time runs short, cut in this order)
 
-1. Optional deploy
+1. Optional deploy (cut on 2026-09-26: deadline under a week)
 2. `/data` explorer and `/models` page (keep retrain endpoint)
 3. Competitor-reaction scenario in simulator
 4. Per-region budget caps

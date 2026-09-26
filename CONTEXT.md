@@ -61,7 +61,7 @@ The write-off loss a plan avoids by selling overstocked units beyond baseline: t
 Units sold during the promo window divided by units available at its start.
 
 **Clearance target**:
-The minimum sell-through required for an overstocked SKU.
+The minimum sell-through required for an overstocked SKU that the brief names for clearance; SKUs flagged only by days of cover get none (ADR 0014).
 
 **Competitor price index (CPI)**:
 Competitor price divided by our price, for a SKU in a region.
