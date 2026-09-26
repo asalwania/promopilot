@@ -148,3 +148,7 @@ class LatestModel[T]:
 
     async def is_loaded(self) -> bool:
         return await self.get() is not None
+
+    def set(self, loaded: tuple[RegisteredModel, T]) -> None:
+        """Make a model just registered the live one (a retrain; ADR 0026)."""
+        self._loaded = loaded

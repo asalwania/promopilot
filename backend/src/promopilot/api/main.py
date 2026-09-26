@@ -9,6 +9,7 @@ from fastapi import FastAPI
 from sqlalchemy.ext.asyncio import create_async_engine
 
 from promopilot import __version__
+from promopilot.api.models import ModelService, models_router
 from promopilot.api.schemas import HealthChecks, HealthResponse
 from promopilot.api.sessions import SessionService, sessions_router
 from promopilot.config import Settings
@@ -30,7 +31,11 @@ class ModelStatus(Protocol):
 
 
 def create_app(
-    *, database_probe: DatabaseProbe, model_status: ModelStatus, sessions: SessionService
+    *,
+    database_probe: DatabaseProbe,
+    model_status: ModelStatus,
+    sessions: SessionService,
+    models: ModelService | None = None,
 ) -> FastAPI:
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
@@ -46,6 +51,8 @@ def create_app(
 
     app = FastAPI(title="PromoPilot API", version=__version__, lifespan=lifespan)
     app.include_router(sessions_router(sessions))
+    if models is not None:
+        app.include_router(models_router(models))
 
     # `/health` serves the container healthcheck; `/api/health` is what the web proxy forwards.
     @app.get("/health")
@@ -79,10 +86,12 @@ def build_app() -> FastAPI:
     sessions = SessionService(
         store=SessionStore(engine), data=RetailData(engine), llm=build_provider(settings)
     )
-    demand_model = LatestModel(
-        ModelRegistry(engine, settings.model_dir), ModelKind.DEMAND, DemandModel
+    registry = ModelRegistry(engine, settings.model_dir)
+    demand_model = LatestModel(registry, ModelKind.DEMAND, DemandModel)
+    models = ModelService(registry=registry, data=RetailData(engine), live=demand_model)
+    app = create_app(
+        database_probe=probe, model_status=demand_model, sessions=sessions, models=models
     )
-    app = create_app(database_probe=probe, model_status=demand_model, sessions=sessions)
     serve = app.router.lifespan_context
 
     @asynccontextmanager

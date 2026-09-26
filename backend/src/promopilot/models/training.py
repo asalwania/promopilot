@@ -4,13 +4,17 @@ import asyncio
 
 from promopilot.data import RetailData
 from promopilot.models import demand
-from promopilot.models.demand import DemandHistory
+from promopilot.models.demand import DemandHistory, DemandModel
 from promopilot.models.registry import ModelKind, ModelRegistry, RegisteredModel
+
+DEFAULT_SEED = 42
+"""The seed `make train` and `POST /api/models/retrain` fit with (ADR 0026)."""
 
 
 async def train_demand_model(
     data: RetailData, registry: ModelRegistry, *, as_of_week: int, seed: int
-) -> RegisteredModel:
+) -> tuple[RegisteredModel, DemandModel]:
+    """Fit on the history before `as_of_week` and register it; returns the entry and model."""
     history = DemandHistory(
         products=await data.products(),
         stores=await data.stores(),
@@ -21,6 +25,7 @@ async def train_demand_model(
     )
     # Fitting is CPU-bound: keep the event loop free for the API (retrain, #29).
     model = await asyncio.to_thread(demand.fit, history, as_of_week, seed)
-    return await registry.register(
+    entry = await registry.register(
         ModelKind.DEMAND, model, as_of_week=as_of_week, metrics=model.metrics
     )
+    return entry, model
