@@ -21,6 +21,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/sessions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create Session */
+        post: operations["create_session_api_sessions_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sessions/{session_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Session */
+        get: operations["get_session_api_sessions__session_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/health": {
         parameters: {
             query?: never;
@@ -42,6 +76,19 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** CreateSessionRequest */
+        CreateSessionRequest: {
+            /**
+             * Brief
+             * @description The brief, in plain English.
+             */
+            brief: string;
+        };
+        /** HTTPValidationError */
+        HTTPValidationError: {
+            /** Detail */
+            detail?: components["schemas"]["ValidationError"][];
+        };
         /** HealthChecks */
         HealthChecks: {
             /**
@@ -65,6 +112,151 @@ export interface components {
             status: "ok" | "degraded";
             /** Version */
             version: string;
+        };
+        /**
+         * Mechanism
+         * @enum {string}
+         */
+        Mechanism: "PCT_OFF" | "BOGO" | "BUNDLE" | "FIXED_PRICE";
+        /**
+         * PlanLine
+         * @description A promo option selected into a promo plan: one (SKU, region) decision (ADR 0004).
+         */
+        PlanLine: {
+            /** Bundle Partner Sku Id */
+            bundle_partner_sku_id?: string | null;
+            /** Depth Pct */
+            depth_pct: number;
+            /** Duration Weeks */
+            duration_weeks: number;
+            mechanism: components["schemas"]["Mechanism"];
+            region: components["schemas"]["Region"];
+            /** Sku Id */
+            sku_id: string;
+            /** Start Week */
+            start_week: number;
+            target_segment: components["schemas"]["TargetSegment"];
+        };
+        /**
+         * PlanRevision
+         * @description One numbered version of the promo plan within a planning session.
+         */
+        PlanRevision: {
+            /**
+             * Lines
+             * @default []
+             */
+            lines: components["schemas"]["PlanRevisionLine"][];
+            /** Number */
+            number: number;
+        };
+        /**
+         * PlanRevisionLine
+         * @description A plan line with the expected numbers the planning tool computed for it (rupees).
+         */
+        PlanRevisionLine: {
+            /** Expected Incremental Profit */
+            expected_incremental_profit: number;
+            /** Expected Units */
+            expected_units: number;
+            line: components["schemas"]["PlanLine"];
+            /** Promo Cost */
+            promo_cost: number;
+        };
+        /**
+         * PlanningRequest
+         * @description Money is in rupees (ADR 0015).
+         */
+        PlanningRequest: {
+            /** As Of Week */
+            as_of_week: number;
+            /** Marketing Budget */
+            marketing_budget: number;
+            /** Min Margin */
+            min_margin?: number | null;
+            promo_window: components["schemas"]["PromoWindow"];
+            scope: components["schemas"]["Scope"];
+        };
+        /**
+         * PromoWindow
+         * @description The future weeks, inclusive, in which a plan's promotions must start and end.
+         */
+        PromoWindow: {
+            /** End Week */
+            end_week: number;
+            /** Start Week */
+            start_week: number;
+        };
+        /**
+         * Region
+         * @enum {string}
+         */
+        Region: "North" | "South" | "East" | "West";
+        /**
+         * Scope
+         * @description The regions and categories a planning request covers, optionally narrowed to SKUs.
+         */
+        Scope: {
+            /** Categories */
+            categories: string[];
+            /** Regions */
+            regions: components["schemas"]["Region"][];
+            /**
+             * Sku Ids
+             * @default []
+             */
+            sku_ids: string[];
+        };
+        /** SessionCreated */
+        SessionCreated: {
+            /**
+             * Session Id
+             * Format: uuid
+             */
+            session_id: string;
+        };
+        /**
+         * SessionResponse
+         * @description One planning session's read model: status, brief, planning request, latest revision.
+         */
+        SessionResponse: {
+            /** Brief */
+            brief: string;
+            /** Error */
+            error: string | null;
+            plan_revision: components["schemas"]["PlanRevision"] | null;
+            planning_request: components["schemas"]["PlanningRequest"] | null;
+            /**
+             * Session Id
+             * Format: uuid
+             */
+            session_id: string;
+            status: components["schemas"]["SessionStatus"];
+        };
+        /**
+         * SessionStatus
+         * @description Every status a planning session can have. E3 uses planning, awaiting_approval, failed.
+         * @enum {string}
+         */
+        SessionStatus: "planning" | "awaiting_clarification" | "awaiting_approval" | "approved" | "rejected" | "failed";
+        /**
+         * TargetSegment
+         * @description Who a plan line is offered to: one segment exclusively, or All customers (ADR 0006).
+         * @enum {string}
+         */
+        TargetSegment: "Value Seekers" | "Families" | "Premium" | "Young Urban" | "All customers";
+        /** ValidationError */
+        ValidationError: {
+            /** Context */
+            ctx?: Record<string, never>;
+            /** Input */
+            input?: unknown;
+            /** Location */
+            loc: (string | number)[];
+            /** Message */
+            msg: string;
+            /** Error Type */
+            type: string;
         };
     };
     responses: never;
@@ -91,6 +283,77 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HealthResponse"];
+                };
+            };
+        };
+    };
+    create_session_api_sessions_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateSessionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SessionCreated"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_session_api_sessions__session_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SessionResponse"];
+                };
+            };
+            /** @description Unknown session */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

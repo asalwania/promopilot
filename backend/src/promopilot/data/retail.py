@@ -28,6 +28,14 @@ class RetailData:
     def __init__(self, engine: AsyncEngine) -> None:
         self._engine = engine
 
+    async def default_as_of_week(self) -> int:
+        """The first week after the sales history (ADR 0008)."""
+        async with self._engine.connect() as connection:
+            last = (await connection.execute(select(func.max(sales_weekly.c.week_id)))).scalar()
+        if last is None:
+            raise LookupError("no sales history is loaded; run `make data`")
+        return int(last) + 1
+
     async def products(self) -> pd.DataFrame:
         return await self._frame(select(products).order_by(products.c.sku_id))
 

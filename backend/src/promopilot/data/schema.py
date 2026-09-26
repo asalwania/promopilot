@@ -1,18 +1,24 @@
-"""The SPEC §8.2 data tables (SQLAlchemy Core). Migrations in migrations/ create them."""
+"""The SPEC §8.2 data tables and the app-state tables (SQLAlchemy Core).
+
+Migrations in migrations/ create them.
+"""
 
 from sqlalchemy import (
     Boolean,
     Column,
     Date,
+    DateTime,
     Float,
     ForeignKey,
+    ForeignKeyConstraint,
     Index,
     Integer,
     MetaData,
     Table,
     Text,
+    func,
 )
-from sqlalchemy.dialects.postgresql import ARRAY, JSONB
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
 
 metadata = MetaData()
 
@@ -124,3 +130,50 @@ DATA_TABLES = [
     baskets,
 ]
 """In load order: referenced tables first."""
+
+# App state (E3): planning sessions and their plan revisions. No foreign keys into the data
+# tables, so reloading the data (TRUNCATE ... CASCADE) never deletes a session.
+
+planning_sessions = Table(
+    "planning_sessions",
+    metadata,
+    Column("id", UUID, primary_key=True),
+    Column("brief", Text, nullable=False),
+    Column("status", Text, nullable=False),
+    Column("planning_request", JSONB),
+    Column("error", Text),
+    Column("created_at", DateTime(timezone=True), nullable=False, server_default=func.now()),
+    Column("updated_at", DateTime(timezone=True), nullable=False, server_default=func.now()),
+    Index("ix_planning_sessions_status", "status"),
+)
+
+plan_revisions = Table(
+    "plan_revisions",
+    metadata,
+    Column("session_id", UUID, ForeignKey("planning_sessions.id"), primary_key=True),
+    Column("number", Integer, primary_key=True),
+    Column("created_at", DateTime(timezone=True), nullable=False, server_default=func.now()),
+)
+
+plan_lines = Table(
+    "plan_lines",
+    metadata,
+    Column("session_id", UUID, primary_key=True),
+    Column("revision_number", Integer, primary_key=True),
+    Column("position", Integer, primary_key=True),
+    Column("sku_id", Text, nullable=False),
+    Column("region", Text, nullable=False),
+    Column("mechanism", Text, nullable=False),
+    Column("depth_pct", Integer, nullable=False),
+    Column("duration_weeks", Integer, nullable=False),
+    Column("start_week", Integer, nullable=False),
+    Column("target_segment", Text, nullable=False),
+    Column("bundle_partner_sku_id", Text),
+    Column("expected_units", Float, nullable=False),
+    Column("promo_cost", Float, nullable=False),
+    Column("expected_incremental_profit", Float, nullable=False),
+    ForeignKeyConstraint(
+        ["session_id", "revision_number"],
+        ["plan_revisions.session_id", "plan_revisions.number"],
+    ),
+)

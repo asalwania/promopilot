@@ -167,7 +167,7 @@ The set of plan lines produced for a planning request.
 _Avoid_: strategy, schedule, plan (when a specific revision is meant)
 
 **Plan revision**:
-One numbered version of the promo plan within a planning session; every amendment produces a new revision, and a diff compares consecutive revisions.
+One numbered version of the promo plan within a planning session; every amendment produces a new revision, and a diff compares consecutive revisions. Each of its plan lines carries the expected units, promo cost and expected incremental profit computed by the tool that planned it.
 _Avoid_: version, iteration
 
 **Planning session**:

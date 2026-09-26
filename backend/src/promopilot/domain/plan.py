@@ -63,3 +63,28 @@ class PromoPlan(BaseModel):
                     )
                 seen.add(key)
         return self
+
+
+class PlanRevisionLine(BaseModel):
+    """A plan line with the expected numbers the planning tool computed for it (rupees)."""
+
+    model_config = ConfigDict(frozen=True)
+
+    line: PlanLine
+    expected_units: float = Field(ge=0)
+    promo_cost: float = Field(ge=0)
+    expected_incremental_profit: float
+
+
+class PlanRevision(BaseModel):
+    """One numbered version of the promo plan within a planning session."""
+
+    model_config = ConfigDict(frozen=True)
+
+    number: int = Field(ge=1)
+    lines: tuple[PlanRevisionLine, ...] = ()
+
+    @model_validator(mode="after")
+    def _is_a_valid_promo_plan(self) -> Self:
+        PromoPlan(lines=tuple(line.line for line in self.lines))
+        return self

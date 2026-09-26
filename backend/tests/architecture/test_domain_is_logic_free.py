@@ -3,7 +3,7 @@ from pathlib import Path
 
 import promopilot.domain
 
-ALLOWED_IMPORTS = {"collections", "enum", "pydantic", "typing", "promopilot"}
+ALLOWED_IMPORTS = {"collections", "enum", "pydantic", "typing", "uuid", "promopilot"}
 
 
 def test_domain_imports_nothing_that_could_do_io_or_numerics() -> None:
