@@ -59,6 +59,7 @@ def test_fitting_ignores_rows_at_or_after_the_as_of_week(
 
     weeks = [AS_OF, AS_OF + 3]
     assert_frame_equal(leaky.baseline(weeks), model.baseline(weeks))
+    assert_frame_equal(leaky.coefficients(), model.coefficients())
     assert leaky.metrics == model.metrics
 
 
@@ -76,7 +77,7 @@ def test_fitting_is_deterministic_for_a_seed(
 def test_the_holdout_wape_is_reported_at_the_model_store_and_region_grains(
     model: DemandModel,
 ) -> None:
-    wape = model.metrics
+    wape = {name: value for name, value in model.metrics.items() if "wape" in name}
 
     assert set(wape) == {"baseline_wape", "baseline_wape_store_sku", "baseline_wape_region_sku"}
     assert all(0 < value < 1 for value in wape.values())

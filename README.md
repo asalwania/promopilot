@@ -27,8 +27,8 @@ To run the full stack in containers with only Docker installed:
 
 ```bash
 docker compose up -d --build --wait   # or: make up
-docker compose exec api python -m promopilot.datagen --out /tmp/data --load   # the seed-42 world, about a minute
-docker compose exec api python -m promopilot.models   # train and register the demand model, about a minute
+docker compose exec api python -m promopilot.datagen --out /tmp/data --load   # the seed-42 world, about a minute and a half
+docker compose exec api python -m promopilot.models   # train and register the demand model, about a minute and a half
 ```
 
 The Docker stack needs no API key. Compose runs the api with `LLM_PROVIDER=replay` and the cassettes baked into its image, whatever `.env` says (ADR 0022). CI runs exactly these steps, then Playwright types the brief from `backend/cassettes/briefs.json`, clicks **Plan it** and waits for the plan table.
@@ -66,7 +66,15 @@ For a different world, run `cd backend && uv run python -m promopilot.datagen --
 
 ## Demand model
 
-`make train` fits the baseline demand forecast on the data in Postgres (SPEC §9.1, ADR 0023). By default it uses the as-of week after the history (`--as-of-week` and `--seed`, default 42, override this) and registers a new version. The baseline is LightGBM. It forecasts no-promotion units per store × SKU × segment × week and learns only from weeks free of promotions and their 4-week pull-forward dip. It never sees history at or after the as-of week (ADR 0008). Before the final fit, it is validated on the last 12 weeks: the registry records holdout WAPE at the model grain (`baseline_wape`) and summed to store × SKU and region × SKU. On the seed-42 world these are 0.44, 0.25 and 0.14. Training takes 30 to 60 seconds.
+`make train` fits the baseline demand forecast on the data in Postgres (SPEC §9.1, ADR 0023). By default it uses the as-of week after the history (`--as-of-week` and `--seed`, default 42, override this) and registers a new version. The baseline is LightGBM. It forecasts no-promotion units per store × SKU × segment × week and learns only from weeks free of promotions and their 4-week pull-forward dip. It never sees history at or after the as-of week (ADR 0008). Before the final fit, it is validated on the last 12 weeks: the registry records holdout WAPE at the model grain (`baseline_wape`) and summed to store × SKU and region × SKU. On the seed-42 world these are 0.44, 0.25 and 0.14.
+
+The promo response is fitted on the same history (ADR 0024). A Poisson GLM per SKU estimates:
+- own-price elasticity per segment;
+- competitor sensitivity, which controls for the competitor price index so the true elasticity is recovered (ADR 0016);
+- mechanism effects;
+- pull-forward.
+
+Empirical Bayes shrinks each estimate toward its subcategory. `DemandModel.predict(options, context)` takes a batch of plan lines. It returns each one's mean and std of units, its uplift net of pull-forward, and its revenue, gross profit, margin and promo cost. `coefficients()` lists the fitted terms with their standard errors. The registry also records `response_skus_fitted` and `elasticity_median_std_error`. On the seed-42 world the median error of the recovered elasticities is 7.6%. Training takes 40 to 90 seconds.
 
 | Setting | Default | Meaning |
 |---|---|---|
@@ -144,6 +152,7 @@ docs/agents/ Agent workflow config (issue tracker, triage labels, domain docs)
 - [ADR 0021: The session page polls every second, stops on any settled status or failed read, and shows plan numbers in en-IN rupees](docs/adr/0021-session-page-polling-and-plan-display.md)
 - [ADR 0022: The Docker stack always replays cassettes baked into the api image, and `make record-cassettes` replaces them all or none](docs/adr/0022-no-key-skeleton-and-cassette-recording.md)
 - [ADR 0023: The baseline trains on clean weeks with horizon-safe features, and the registry pickles artifacts to a volume the api loads from](docs/adr/0023-baseline-forecast-and-model-registry.md)
+- [ADR 0024: The promo response is a per-SKU Poisson GLM on a reference-index baseline, shrunk by empirical Bayes](docs/adr/0024-promo-response-glm-with-empirical-bayes.md)
 
 The domain glossary is [CONTEXT.md](CONTEXT.md).
 
