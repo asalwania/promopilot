@@ -14,6 +14,7 @@ from hypothesis import given
 
 from promopilot.domain import (
     BindingConstraint,
+    BindingEvidence,
     CompanyPolicy,
     ConstraintKind,
     ConstraintSource,
@@ -25,7 +26,7 @@ from promopilot.domain import (
     SolveStatus,
 )
 from promopilot.guardrails import SkuFacts
-from promopilot.optimizer import OptimisationResult, PromoOptions, solve
+from promopilot.optimizer import OptimisationResult, PromoOptions, SolverSettings, solve
 from tests.unit.optimizer.test_solve import (
     PROPERTY,
     SEED,
@@ -47,6 +48,8 @@ def objective(result: OptimisationResult) -> int:
 
 
 def kinds(result: OptimisationResult) -> set[ConstraintKind]:
+    """The constraints reported binding; small instances always settle each one."""
+    assert all(c.evidence is BindingEvidence.EXACT for c in result.binding_constraints)
     return {constraint.kind for constraint in result.binding_constraints}
 
 
@@ -124,6 +127,7 @@ def test_the_promoted_sku_cap_is_reported_binding_exactly_when_dropping_it_gains
     result = instance.solve()
 
     capped = [c for c in result.binding_constraints if c.kind is ConstraintKind.MAX_PROMOTED_SKUS]
+    assert all(c.evidence is BindingEvidence.EXACT for c in capped)
 
     assert bool(capped) == gains(result, without_caps(instance).solve())
     for constraint in capped:
@@ -141,6 +145,7 @@ def test_a_binding_constraint_reports_what_dropping_it_gains(instance: Instance)
     }
 
     for constraint in result.binding_constraints:
+        assert constraint.objective_gain is not None
         assert constraint.objective_gain >= 0.01
         if constraint.kind in dropped:
             relaxed = dropped[constraint.kind](instance).solve()
@@ -161,6 +166,7 @@ def test_a_budget_that_leaves_money_unspent_still_binds() -> None:
             kind=ConstraintKind.MARKETING_BUDGET,
             source=ConstraintSource.BRIEF,
             limit=1_500.0,
+            evidence=BindingEvidence.EXACT,
             objective_gain=80.0,
         ),
     )
@@ -176,6 +182,7 @@ def test_the_briefs_minimum_margin_binds_above_the_floor() -> None:
             kind=ConstraintKind.MINIMUM_MARGIN,
             source=ConstraintSource.BRIEF,
             limit=0.25,
+            evidence=BindingEvidence.EXACT,
             objective_gain=80.0,
         ),
     )
@@ -203,9 +210,38 @@ def test_the_promoted_sku_cap_binds_per_category_and_region() -> None:
             limit=1,
             category="Snacks",
             region=Region.NORTH,
+            evidence=BindingEvidence.EXACT,
             objective_gain=80.0,
         ),
     )
+
+
+def test_constraints_left_unsettled_when_the_time_for_re_solving_runs_out_are_unproven() -> None:
+    result = solve(
+        request(budget=1_500),
+        options_of([Row(A, 100.0, promo_cost=1_000.0), Row(B, 80.0, promo_cost=1_000.0)]),
+        FakeFacts(),
+        CompanyPolicy(),
+        settings=SolverSettings(binding_time_limit_seconds=0),
+        seed=SEED,
+    )
+
+    assert result.status is SolveStatus.OPTIMAL
+    assert [(c.kind, c.evidence, c.objective_gain) for c in result.binding_constraints] == [
+        (ConstraintKind.MARKETING_BUDGET, BindingEvidence.UNPROVEN, None),
+        (ConstraintKind.MARGIN_FLOOR, BindingEvidence.UNPROVEN, None),
+    ]
+
+
+def test_re_solving_prices_each_pair_of_options_once() -> None:
+    rows = [Row(line(sku_id), 100.0, promo_cost=1_000.0) for sku_id in "ABCD"]
+    facts = FakeFacts(pairwise={frozenset((rows[0].line, rows[1].line)): 30.0})
+
+    result = run(rows, facts, budget=2_500)
+
+    assert result.binding_constraints
+    asked = [frozenset(pair) for pair in facts.asked]
+    assert len(asked) == len(set(asked))
 
 
 def test_nothing_binds_when_every_worthwhile_option_is_selected() -> None:

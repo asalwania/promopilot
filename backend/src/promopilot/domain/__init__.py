@@ -6,6 +6,7 @@ from promopilot.domain.request import PlanningRequest, PromoWindow, Scope
 from promopilot.domain.revision import PlanRevision, PlanRevisionLine
 from promopilot.domain.selection import (
     BindingConstraint,
+    BindingEvidence,
     ConstraintKind,
     ConstraintSource,
     NotSelectedOption,
@@ -20,6 +21,7 @@ from promopilot.domain.vocabulary import Mechanism, Region, Segment, TargetSegme
 
 __all__ = [
     "BindingConstraint",
+    "BindingEvidence",
     "CompanyPolicy",
     "ConstraintKind",
     "ConstraintSource",

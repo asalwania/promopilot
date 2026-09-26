@@ -36,8 +36,21 @@ class ConstraintSource(StrEnum):
     COMPANY_POLICY = "company_policy"
 
 
+class BindingEvidence(StrEnum):
+    """How sure the optimiser is that a constraint binds (ADR 0038)."""
+
+    EXACT = "exact"
+    """Re-solved to optimality without it: the objective gains exactly `objective_gain`."""
+    LOWER_BOUND = "lower_bound"
+    """The re-solve without it timed out after finding a better plan: it binds, and the
+    objective gains at least `objective_gain`."""
+    UNPROVEN = "unproven"
+    """It may bind, but the time for re-solving ran out before that was settled."""
+
+
 class BindingConstraint(BaseModel):
-    """A constraint that limits the plan: dropping it gives a strictly better objective."""
+    """A constraint that limits the plan: dropping it gives a strictly better objective, or,
+    when time ran out, one that may."""
 
     model_config = ConfigDict(frozen=True)
 
@@ -49,8 +62,10 @@ class BindingConstraint(BaseModel):
     """The category, for the promoted-SKU cap."""
     region: Region | None = None
     """The region, for the promoted-SKU cap."""
-    objective_gain: float
-    """Rupees the objective gains when the constraint is dropped (at least this much)."""
+    evidence: BindingEvidence
+    objective_gain: float | None
+    """Rupees the objective gains when the constraint is dropped: exact, or at least this
+    much; None when unproven."""
 
 
 class SelectionReasonCode(StrEnum):

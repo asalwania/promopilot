@@ -25,7 +25,8 @@ whole paise, so every plan the solver accepts also passes `validate_plan` (ADR 0
 Beside the plan, `solve` reports (ADR 0038):
 
 - the binding constraints: the budget, the margin and each promoted-SKU cap whose removal
-  gives a strictly better objective, found by re-solving without it from the plan found;
+  gives a strictly better objective, found by re-solving without it from the plan found,
+  within a shared time limit; one left unsettled when time runs out is reported unproven;
 - why each plan line was chosen: the positive parts of its value, and whether it is the
   best eligible option of its SKU and region;
 - the best option of up to five SKUs and regions with no plan line, with every rule it
@@ -37,6 +38,7 @@ optimality within its time limit.
 """
 
 import math
+import time
 from collections import defaultdict
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -47,6 +49,7 @@ from ortools.sat.python import cp_model
 
 from promopilot.domain import (
     BindingConstraint,
+    BindingEvidence,
     CompanyPolicy,
     ConstraintKind,
     ConstraintSource,
@@ -70,21 +73,27 @@ PAISE = 100
 _EPSILON = 1e-9
 _ROUNDING = 1e-6
 """Paise lost to float noise before rounding a coefficient up or down."""
+_MIN_RESOLVE_SECONDS = 0.001
+"""Less binding time left than this settles no more constraints."""
 
 
 @dataclass(frozen=True)
 class SolverSettings:
     """The solver's time limit and worker count (OPTIMIZER_TIME_LIMIT_SECONDS,
-    OPTIMIZER_WORKERS)."""
+    OPTIMIZER_WORKERS), and the time shared by the re-solves that find binding constraints
+    (OPTIMIZER_BINDING_TIME_LIMIT_SECONDS, ADR 0038)."""
 
     time_limit_seconds: float = 10.0
     workers: int = 1
+    binding_time_limit_seconds: float = 3.0
 
     def __post_init__(self) -> None:
         if self.time_limit_seconds <= 0:
             raise ValueError("the solver's time limit must be positive")
         if self.workers < 1:
             raise ValueError("the solver needs at least one worker")
+        if self.binding_time_limit_seconds < 0:
+            raise ValueError("the binding time limit cannot be negative")
 
 
 class OptionFacts(Protocol):
@@ -120,7 +129,7 @@ class OptimisationResult:
     pairs: int
     """Pairs of eligible options with a pairwise term."""
     binding_constraints: tuple[BindingConstraint, ...] = ()
-    """Constraints whose removal gives a strictly better objective; only for OPTIMAL plans."""
+    """Constraints whose removal gives a strictly better objective, or may (unproven)."""
     why_chosen: tuple[WhyChosen, ...] = ()
     """One per plan line, in the plan's order."""
     not_selected: tuple[NotSelectedOption, ...] = ()
@@ -167,7 +176,7 @@ def solve(
         binding_constraints=(
             problem.binding(picked, objective, settings, seed)
             if status is SolveStatus.OPTIMAL
-            else ()
+            else problem.unproven()
         ),
         why_chosen=tuple(problem.why_chosen(n) for n in picked),
         not_selected=problem.not_selected(picked),
@@ -267,8 +276,12 @@ class _Problem:
         *,
         drop: _Limit | None = None,
         hint: Sequence[int] = (),
+        beat: int | None = None,
+        time_limit: float | None = None,
     ) -> _Outcome:
-        """Solve the model, without the `drop` constraint, starting from the `hint` plan."""
+        """Solve the model, without the `drop` constraint, starting from the `hint` plan,
+        within `time_limit` seconds (the time limit of `settings` by default). With `beat`,
+        only plans whose objective (paise) is at least that are feasible."""
         model = cp_model.CpModel()
         x = [model.new_bool_var(f"x{n}") for n in range(len(self.lines))]
         occupied: defaultdict[tuple[str, Region], list[cp_model.IntVar]] = defaultdict(list)
@@ -292,7 +305,10 @@ class _Problem:
             model.add_bool_and([x[i], x[j]]).only_enforce_if(both)
             model.add_bool_or([x[i].Not(), x[j].Not()]).only_enforce_if(both.Not())
             y.append(both)
-        model.maximize(_dot(np.concatenate([self.value, -self.charges]), [*x, *y]))
+        objective = _dot(np.concatenate([self.value, -self.charges]), [*x, *y])
+        if beat is not None:
+            model.add(objective >= beat)
+        model.maximize(objective)
         if hint:
             hinted = set(hint)
             for n, chosen in enumerate(x):
@@ -304,7 +320,7 @@ class _Problem:
         solver.parameters.random_seed = seed
         solver.parameters.num_workers = settings.workers
         solver.parameters.interleave_search = settings.workers > 1
-        solver.parameters.max_time_in_seconds = settings.time_limit_seconds
+        solver.parameters.max_time_in_seconds = time_limit or settings.time_limit_seconds
         status = solver.solve(model)
         if status not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
             return _Outcome(status, [], 0)
@@ -317,25 +333,57 @@ class _Problem:
     def binding(
         self, picked: list[int], objective: int, settings: SolverSettings, seed: int
     ) -> tuple[BindingConstraint, ...]:
-        """Each constraint whose removal gives a strictly better objective: re-solved without
-        it from the current plan, so a gain found is proven even if the re-solve times out."""
+        """Each constraint whose removal gives a strictly better objective.
+
+        Each is re-solved without it, from the current plan, for a plan at least a paisa
+        better, with an even share of what is left of the binding time limit; the pairwise
+        terms are the ones already priced. No such plan (infeasible) proves it does not bind.
+        One found proves it binds: the gain is exact when the re-solve is optimal and a lower
+        bound when it timed out. A re-solve that timed out without one, or no time left,
+        leaves it unproven (ADR 0038).
+        """
+        limits = self._limits()
+        deadline = time.monotonic() + settings.binding_time_limit_seconds
+        found = []
+        for k, limit in enumerate(limits):
+            left = deadline - time.monotonic()
+            if left < _MIN_RESOLVE_SECONDS:
+                found.append(self._named(limit, BindingEvidence.UNPROVEN, None))
+                continue
+            share = min(left / (len(limits) - k), settings.time_limit_seconds)
+            relaxed = self.solve(
+                settings, seed, drop=limit, hint=picked, beat=objective + 1, time_limit=share
+            )
+            if relaxed.status == cp_model.INFEASIBLE:
+                continue
+            if relaxed.status not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
+                found.append(self._named(limit, BindingEvidence.UNPROVEN, None))
+                continue
+            gain = int(self.value[relaxed.picked].sum()) - relaxed.charged - objective
+            exact = relaxed.status == cp_model.OPTIMAL
+            evidence = BindingEvidence.EXACT if exact else BindingEvidence.LOWER_BOUND
+            found.append(self._named(limit, evidence, gain))
+        return tuple(found)
+
+    def unproven(self) -> tuple[BindingConstraint, ...]:
+        """Every constraint that could bind, none settled: the plan itself is not proven
+        best, so no gain from dropping one would prove it binds."""
+        return tuple(self._named(limit, BindingEvidence.UNPROVEN, None) for limit in self._limits())
+
+    def _limits(self) -> list[_Limit]:
+        """The budget, the margin, and each promoted-SKU cap with more options than it
+        allows (any other cannot bind)."""
         cap = self.policy.max_promoted_skus_per_category_per_region
-        limits = [_BUDGET, _MARGIN] + [
+        return [_BUDGET, _MARGIN] + [
             _Limit(ConstraintKind.MAX_PROMOTED_SKUS, group)
             for group, members in sorted(self.groups.items())
             if len(members) > cap
         ]
-        found = []
-        for limit in limits:
-            relaxed = self.solve(settings, seed, drop=limit, hint=picked)
-            if relaxed.status not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
-                continue
-            gain = int(self.value[relaxed.picked].sum()) - relaxed.charged - objective
-            if gain >= 1:
-                found.append(self._named(limit, gain))
-        return tuple(found)
 
-    def _named(self, limit: _Limit, gain: int) -> BindingConstraint:
+    def _named(
+        self, limit: _Limit, evidence: BindingEvidence, gain: int | None
+    ) -> BindingConstraint:
+        rupees = None if gain is None else gain / PAISE
         if limit.kind is ConstraintKind.MAX_PROMOTED_SKUS:
             assert limit.group is not None
             category, region = limit.group
@@ -345,14 +393,16 @@ class _Problem:
                 limit=self.policy.max_promoted_skus_per_category_per_region,
                 category=category,
                 region=region,
-                objective_gain=gain / PAISE,
+                evidence=evidence,
+                objective_gain=rupees,
             )
         if limit.kind is ConstraintKind.MARKETING_BUDGET:
             return BindingConstraint(
                 kind=limit.kind,
                 source=ConstraintSource.BRIEF,
                 limit=self.request.marketing_budget,
-                objective_gain=gain / PAISE,
+                evidence=evidence,
+                objective_gain=rupees,
             )
         brief = self.request.min_margin
         from_brief = brief is not None and brief > self.policy.margin_floor
@@ -360,7 +410,8 @@ class _Problem:
             kind=ConstraintKind.MINIMUM_MARGIN if from_brief else ConstraintKind.MARGIN_FLOOR,
             source=ConstraintSource.BRIEF if from_brief else ConstraintSource.COMPANY_POLICY,
             limit=self.minimum,
-            objective_gain=gain / PAISE,
+            evidence=evidence,
+            objective_gain=rupees,
         )
 
     def why_chosen(self, n: int) -> WhyChosen:

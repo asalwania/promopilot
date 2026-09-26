@@ -123,6 +123,7 @@ def build_app() -> FastAPI:
     solver_settings = SolverSettings(
         time_limit_seconds=settings.optimizer_time_limit_seconds,
         workers=settings.optimizer_workers,
+        binding_time_limit_seconds=settings.optimizer_binding_time_limit_seconds,
     )
     # Sessions plan with the latest demand model and the live relations model (ADR 0038).
     sessions = SessionService(
