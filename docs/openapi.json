@@ -141,7 +141,8 @@
       },
       "ModelKind": {
         "enum": [
-          "demand"
+          "demand",
+          "relations"
         ],
         "title": "ModelKind",
         "type": "string"

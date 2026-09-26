@@ -1,4 +1,4 @@
-"""`python -m promopilot.models`: train the demand model on the loaded data and register it.
+"""`python -m promopilot.models`: train demand, then relations, on the loaded data; register both.
 
 `make train` fits on the data `make data` loaded into Postgres at DATABASE_URL, as of the
 first week after the history unless --as-of-week says otherwise, and saves the artifact
@@ -17,7 +17,7 @@ from sqlalchemy.ext.asyncio import create_async_engine
 from promopilot.config import Settings
 from promopilot.data import RetailData
 from promopilot.models.registry import ModelRegistry
-from promopilot.models.training import DEFAULT_SEED, train_demand_model
+from promopilot.models.training import DEFAULT_SEED, train_models
 
 
 async def run(argv: Sequence[str] | None = None) -> int:
@@ -37,14 +37,16 @@ async def run(argv: Sequence[str] | None = None) -> int:
             as_of_week = await data.default_as_of_week()
         registry = ModelRegistry(engine, args.model_dir or settings.model_dir)
         started = time.perf_counter()
-        entry, _ = await train_demand_model(data, registry, as_of_week=as_of_week, seed=args.seed)
+        trained = await train_models(data, registry, as_of_week=as_of_week, seed=args.seed)
     finally:
         await engine.dispose()
-    metrics = ", ".join(f"{name} {value:.3f}" for name, value in entry.metrics.items())
-    print(
-        f"registered {entry.kind} v{entry.version} (as of week {entry.as_of_week}, seed "
-        f"{args.seed}; {metrics}) in {time.perf_counter() - started:.1f}s"
-    )
+    for entry in (trained.demand, trained.relations):
+        metrics = ", ".join(f"{name} {value:.3f}" for name, value in entry.metrics.items())
+        print(
+            f"registered {entry.kind} v{entry.version} (as of week {entry.as_of_week}, seed "
+            f"{args.seed}; {metrics})"
+        )
+    print(f"trained in {time.perf_counter() - started:.1f}s")
     return 0
 
 

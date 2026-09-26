@@ -113,7 +113,7 @@ record-cassettes: db ## Re-record the LLM cassettes live (OPENAI_API_KEY, OPENAI
 	$(BACKEND) LLM_PROVIDER=openai uv run python -m promopilot.cassettes --briefs cassettes/briefs.json
 
 .PHONY: train
-train: db ## Fit the demand model on the loaded data (make data first) and register it
+train: db ## Fit the demand then relations models on the loaded data (make data first) and register both
 	$(BACKEND) uv run python -m promopilot.models
 
 .PHONY: eval demo

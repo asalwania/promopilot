@@ -84,6 +84,15 @@ The % change in a SKU's units per 1% change in its own price (negative).
 **Cross-price elasticity**:
 The effect of one SKU's price on another SKU's units: positive for substitutes, negative for complements.
 
+**Substitute**:
+A SKU in the same subcategory whose price cut takes units from another: a positive cross-price effect, kept only when significant after the Benjamini–Hochberg adjustment and at least the minimum effect size.
+
+**Complement**:
+A SKU bought with another more often than chance (basket lift above 1.5, with minimum support), confirmed by a negative cross-price effect where one can be estimated.
+
+**Basket lift**:
+P(both SKUs in a basket) / (P(first) · P(second)). Its **support** is the share of baskets holding both.
+
 **Cannibalisation**:
 Sales a promoted SKU takes from its substitutes in the same region, whether or not those substitutes are in the brief's scope.
 

@@ -13,6 +13,7 @@ from promopilot.datagen import GeneratedDataset, write
 from promopilot.models.__main__ import run
 from promopilot.models.demand import DemandModel
 from promopilot.models.registry import ModelKind, ModelRegistry
+from promopilot.models.relations import Relations
 
 pytestmark = pytest.mark.integration
 
@@ -31,7 +32,7 @@ def postgres_url(
         yield url
 
 
-async def test_train_fits_the_demand_model_on_loaded_data_and_registers_it(
+async def test_train_fits_demand_then_relations_on_loaded_data_and_registers_both(
     postgres_url: str, tmp_path: Path
 ) -> None:
     exit_code = await run(
@@ -41,8 +42,10 @@ async def test_train_fits_the_demand_model_on_loaded_data_and_registers_it(
     engine = create_async_engine(postgres_url)
     try:
         registry = ModelRegistry(engine, tmp_path)
-        [entry] = await registry.list()
+        [entry] = await registry.list(ModelKind.DEMAND)
+        [relations_entry] = await registry.list(ModelKind.RELATIONS)
         latest = await registry.load_latest(ModelKind.DEMAND, DemandModel)
+        latest_relations = await registry.load_latest(ModelKind.RELATIONS, Relations)
     finally:
         await engine.dispose()
     assert exit_code == 0
@@ -50,6 +53,12 @@ async def test_train_fits_the_demand_model_on_loaded_data_and_registers_it(
     assert "baseline_wape_region_sku" in entry.metrics
     assert latest is not None
     assert latest[1].as_of_week == HISTORY_WEEKS
+    assert (relations_entry.version, relations_entry.as_of_week) == (1, HISTORY_WEEKS)
+    assert relations_entry.metrics["demand_version"] == entry.version
+    assert relations_entry.metrics["substitute_min_theta"] == 0.1
+    assert "complement_pairs" in relations_entry.metrics
+    assert latest_relations is not None
+    assert latest_relations[1].as_of_week == HISTORY_WEEKS
 
 
 async def test_train_takes_an_explicit_as_of_week(postgres_url: str, tmp_path: Path) -> None:
@@ -71,4 +80,5 @@ async def test_train_takes_an_explicit_as_of_week(postgres_url: str, tmp_path: P
         entries = await ModelRegistry(engine, tmp_path).list()
     finally:
         await engine.dispose()
-    assert entries[0].as_of_week == 40
+    assert {entry.kind for entry in entries[:2]} == {ModelKind.DEMAND, ModelKind.RELATIONS}
+    assert [entry.as_of_week for entry in entries[:2]] == [40, 40]
