@@ -3,7 +3,7 @@
 Tens of thousands of options never reach the LLM. The tool keeps the full set in the
 in-process `CandidateStore` and returns a summary: counts, pruned counts per reason, counts
 per region and mechanism, the top options by value, and the candidate set's id, which
-`run_optimizer` (#34) takes (ADR 0035). The latest demand model and the live relations model
+`run_optimizer` takes (ADR 0035, ADR 0036). The latest demand model and the live relations model
 are resolved on every call, and the as-of week is bound when the tool is built (ADR 0025,
 ADR 0032); the planning request must be for that week.
 """
@@ -32,6 +32,7 @@ from promopilot.domain import (
 from promopilot.models.registry import RegisteredModel
 from promopilot.optimizer import (
     CandidateStore,
+    FittedOptionFacts,
     OptionContext,
     PromoOptions,
     PruneReason,
@@ -178,7 +179,7 @@ def generate_candidates_tool(
             )
         except ValueError as error:
             raise ToolCallError("invalid_input", str(error)) from error
-        stored = store.put(request, options)
+        stored = store.put(request, options, FittedOptionFacts(context))
         return _summary(stored.candidate_set_id, options, week, demand[0], relations[0])
 
     return Tool(

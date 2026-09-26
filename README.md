@@ -105,13 +105,34 @@ The thresholds live in `RelationsConfig`. The registry records them with the cou
 
 The API serves the latest relations model only while it was fitted on the live demand model; otherwise `get_relations` answers `model_unavailable` and `GET /api/relations/{sku_id}` answers `503` (ADR 0033). The `get_relations` tool takes 1 to 50 SKU ids and returns each one's substitutes and complements with the model's id and version.
 
-**Cannibalisation and halo** (ADR 0033). `line_effects(lines, relations, demand_model, products)` returns one row per plan line and each SKU it moves in its region, in scope or not (ADR 0005). Each row has the SKU's baseline units, the change in units and in percent, the change in profit at its base margin, and that change as cannibalised or halo profit. A detected relation moves units by baseline × (exp(Σ θ·log(p_eff/base)) − 1) over the promo weeks and targeted segments. `pairwise_cannibalisation(line_i, line_j, ...)` is what two substitute lines in one region lose together beyond their single-line figures, for the optimiser's `y_ij` terms. The web app's `CannibalisationCallout` and `HaloCallout` read "Promoting A reduces B's units by N% (−₹X profit)" and "…lifts…", showing effects of 1% or more, the top 3 by profit.
+**Cannibalisation and halo** (ADR 0033). `line_effects(lines, relations, demand_model, products)` returns one row per plan line and each SKU it moves in its region, in scope or not (ADR 0005). Each row has the SKU's baseline units, the change in units and in percent, the change in profit at its base margin, and that change as cannibalised or halo profit. A detected relation moves units by baseline × (exp(Σ θ·log(p_eff/base)) − 1) over the promo weeks and targeted segments. `pairwise_cannibalisation(line_i, line_j, ...)` is what two substitute lines in one region lose together beyond their single-line figures, for the optimiser's `y_ij` terms; `pairwise_cannibalisations(pairs, ...)` computes a whole batch at once (ADR 0036). The web app's `CannibalisationCallout` and `HaloCallout` read "Promoting A reduces B's units by N% (−₹X profit)" and "…lifts…", showing effects of 1% or more, the top 3 by profit.
 
 ## Promo options
 
 `promopilot.optimizer.generate_options(request, context)` enumerates every promo option for a planning request (SPEC §9.3, ADR 0035). For each in-scope SKU and region it lists mechanism × depth × duration × start week × target segment. PCT_OFF and FIXED_PRICE use 5–50% depths, BOGO uses 50% only, and BUNDLE uses 10–25% with each detected complement as its partner, in scope or not. Every duration from 1 to 4 weeks is tried at every start week that fits inside the promo window, for each of the four segments and for All customers. Before prediction it prunes options deeper than the policy maximum discount, options that sell the anchor or partner below unit cost (unless that SKU is overstocked in the region), and FIXED_PRICE depths that land on a charm price a shallower depth already offers. It predicts the rest in one batch. It then prunes options whose P90 units (mean + 1.2816 × std) exceed the anchor's pooled available stock, or the partner's. Each survivor carries its predictions, cannibalisation and halo, and clearance value. The result is a frozen `PromoOptions`: the plan lines, a table with one row per line, the enumerated count, and the pruned count per reason.
 
 The `generate_candidates` tool takes a planning request plus optional mechanisms, target segments and SKU ids. It keeps the full set in an in-process `CandidateStore` and returns a summary: counts, pruned counts per reason, counts per region and mechanism, the top 20 options by value, and a `candidate_set_id` for the optimiser. On the seed-42 demo brief (Snacks and Beverages, North and West, Diwali weeks 108–109) it enumerates 28,980 options, keeps 10,988 and takes about 7 s.
+
+## Optimiser
+
+`promopilot.optimizer.solve(request, options, facts, policy, *, settings, seed)` selects the promo plan from a candidate set with OR-Tools CP-SAT (SPEC §9.4, ADR 0036). It maximises the objective in integer paise: the selected options' values less what selected substitute pairs lose together (ADR 0005, ADR 0033). The plan has:
+
+- at most one plan line per SKU per region, a BUNDLE's partner included (ADR 0014);
+- total promo cost within the marketing budget;
+- a blended margin at or above the minimum margin, never below the policy margin floor (ADR 0007);
+- at most 10 promoted SKUs per category per region, a partner counting in its own category.
+
+Only options worth at least a paisa alone, which keep every per-line rule (stock, window, maximum discount, below cost), are eligible. The result carries the status (`OPTIMAL`, `FEASIBLE` when the time limit ran out first, `INFEASIBLE`), the objective, the plan, and the selected rows of the candidate table.
+
+The `run_optimizer` tool takes the `candidate_set_id` from `generate_candidates`. It returns the status, the objective, each selected line with its numbers, and the plan's totals. The solver is deterministic: one worker and a fixed seed by default, and interleaved search with more workers. It is configured by:
+
+| Setting | Default | Meaning |
+|---|---|---|
+| `OPTIMIZER_TIME_LIMIT_SECONDS` | `10` | Wall-clock limit per solve |
+| `OPTIMIZER_WORKERS` | `1` | CP-SAT workers |
+| `OPTIMIZER_SEED` | `0` | CP-SAT random seed |
+
+On the demo brief it solves in under 0.1 s.
 
 ## LLM providers
 
@@ -213,6 +234,7 @@ docs/agents/ Agent workflow config (issue tracker, triage labels, domain docs)
 - [ADR 0033: Cannibalisation and halo per plan line use the oracle's method on fitted inputs, with a pairwise correction for promoted substitutes](docs/adr/0033-cannibalisation-and-halo-per-plan-line.md)
 - [ADR 0034: The data explorer loads flat lists once, filters them in the browser, and names each number's source tool](docs/adr/0034-data-explorer-and-catalogue-endpoints.md)
 - [ADR 0035: Promo options are enumerated in full, pruned before and after one batch prediction, and handed to the optimiser through an in-process store](docs/adr/0035-promo-option-generation.md)
+- [ADR 0036: The CP-SAT optimiser selects from positive-value options, charges exact pairwise terms, and runs single-threaded with a fixed seed](docs/adr/0036-cp-sat-optimiser.md)
 
 The domain glossary is [CONTEXT.md](CONTEXT.md).
 

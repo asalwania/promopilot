@@ -2,7 +2,8 @@
 
 The planner sees only a summary of the options it generated and the id of the full set; the
 optimiser looks the set up by that id, so tens of thousands of options never pass through
-the LLM. Only the most recent sets are kept.
+the LLM. A set keeps the facts it was generated with, so the optimiser prices pairs on the
+same models even after a retrain (ADR 0036). Only the most recent sets are kept.
 """
 
 from collections import OrderedDict
@@ -11,6 +12,7 @@ from uuid import UUID, uuid4
 
 from promopilot.domain import PlanningRequest
 from promopilot.optimizer.options import PromoOptions
+from promopilot.optimizer.solver import OptionFacts
 
 DEFAULT_CAPACITY = 16
 
@@ -22,6 +24,7 @@ class CandidateSet:
     candidate_set_id: UUID
     request: PlanningRequest
     options: PromoOptions
+    facts: OptionFacts
 
 
 class CandidateStore:
@@ -33,8 +36,12 @@ class CandidateStore:
         self._capacity = capacity
         self._sets: OrderedDict[UUID, CandidateSet] = OrderedDict()
 
-    def put(self, request: PlanningRequest, options: PromoOptions) -> CandidateSet:
-        stored = CandidateSet(candidate_set_id=uuid4(), request=request, options=options)
+    def put(
+        self, request: PlanningRequest, options: PromoOptions, facts: OptionFacts
+    ) -> CandidateSet:
+        stored = CandidateSet(
+            candidate_set_id=uuid4(), request=request, options=options, facts=facts
+        )
         self._sets[stored.candidate_set_id] = stored
         while len(self._sets) > self._capacity:
             self._sets.popitem(last=False)

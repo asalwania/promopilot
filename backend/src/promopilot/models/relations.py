@@ -544,43 +544,100 @@ def pairwise_cannibalisation(
     SKU of one is a detected substitute of a SKU of the other. It can be negative: a deep
     promotion that sells at a loss loses less to its substitute's cut.
     """
-    if line.region is not other.region:
-        return 0.0
-    if not any(
+    pairs = [(line, other)]
+    return float(pairwise_cannibalisations(pairs, relations, demand_model, products, context)[0])
+
+
+def pairwise_cannibalisations(
+    pairs: Sequence[tuple[PlanLine, PlanLine]],
+    relations: RelationLookup,
+    demand_model: LineForecast,
+    products: pd.DataFrame,
+    context: PredictionContext | None = None,
+) -> np.ndarray:
+    """`pairwise_cannibalisation` of every pair, in input order, computed as one batch.
+
+    The optimiser prices every pair of promo options it could select together (ADR 0036):
+    the lines' own units come from one `line_paths` call, the baseline is forecast once per
+    region, and each SKU's relations and each line's price shifts are looked up once.
+    """
+    result = np.zeros(len(pairs))
+    lookup = _MemoLookup(relations)
+    live: list[tuple[int, list[int], list[str]]] = []
+    for n, (line, other) in enumerate(pairs):
+        if line.region is not other.region or not _substitutes(line, other, lookup):
+            continue
+        weeks = sorted(set(_weeks(line)) & set(_weeks(other)))
+        segments = sorted(set(_segments(line)) & set(_segments(other)))
+        if weeks and segments:
+            live.append((n, weeks, segments))
+    if not live:
+        return result
+
+    economics = _Economics.of(products)
+    index: dict[PlanLine, int] = {}
+    for n, _, _ in live:
+        for line in pairs[n]:
+            index.setdefault(line, len(index))
+    shifts = [_price_shifts(line, lookup, economics) for line in index]
+    paths = demand_model.line_paths(list(index), context or PredictionContext())
+    own = {key: rows for key, rows in paths.groupby(["option", "sku_id"], sort=False)}
+
+    both_of: dict[int, list[str]] = {}
+    wanted: dict[str, tuple[set[int], set[str]]] = {}
+    for n, weeks, _ in live:
+        line, other = pairs[n]
+        moved = set(shifts[index[line]]) & set(shifts[index[other]])
+        both = sorted(moved - set(line.skus) - set(other.skus))
+        if both:
+            both_of[n] = both
+            region_weeks, region_skus = wanted.setdefault(line.region.value, (set(), set()))
+            region_weeks.update(weeks)
+            region_skus.update(both)
+    baselines = {
+        region: demand_model.baseline(sorted(weeks), regions=[region], sku_ids=sorted(skus))
+        for region, (weeks, skus) in wanted.items()
+    }
+
+    for n, weeks, segments in live:
+        line, other = pairs[n]
+        interaction = 0.0
+        for own_line, moved_by in ((line, shifts[index[other]]), (other, shifts[index[line]])):
+            for sku_id in own_line.skus:
+                if sku_id not in moved_by:
+                    continue
+                rows = own.get((index[own_line], sku_id))
+                if rows is None:
+                    continue
+                rows = rows[rows["week_id"].isin(weeks) & rows["segment"].isin(segments)]
+                base_price = economics.base_price[sku_id]
+                unit_cost = economics.unit_cost[sku_id]
+                promoted = float((rows["units"] * (rows["price"] - unit_cost)).sum())
+                unpromoted = float(rows["baseline_units"].sum()) * (base_price - unit_cost)
+                interaction += float(np.expm1(moved_by[sku_id][1])) * (promoted - unpromoted)
+        shared = both_of.get(n)
+        if shared:
+            baseline = baselines[line.region.value]
+            baseline = baseline[
+                baseline["week_id"].isin(weeks)
+                & baseline["segment"].isin(segments)
+                & baseline["sku_id"].isin(shared)
+            ]
+            units = _units_by_sku(baseline, shared)
+            first = np.expm1([shifts[index[line]][sku_id][1] for sku_id in shared])
+            second = np.expm1([shifts[index[other]][sku_id][1] for sku_id in shared])
+            interaction += float((units * first * second * economics.margins(shared)).sum())
+        result[n] = -interaction
+    return result
+
+
+def _substitutes(line: PlanLine, other: PlanLine, relations: RelationLookup) -> bool:
+    """Whether a SKU of one line is a detected substitute of a SKU of the other."""
+    return any(
         partner in set(relations.substitutes(sku_id)["sku_id"])
         for sku_id in line.skus
         for partner in other.skus
-    ):
-        return 0.0
-    weeks = sorted(set(_weeks(line)) & set(_weeks(other)))
-    segments = sorted(set(_segments(line)) & set(_segments(other)))
-    if not weeks or not segments:
-        return 0.0
-    economics = _Economics.of(products)
-    shifts = (_price_shifts(line, relations, economics), _price_shifts(other, relations, economics))
-
-    paths = demand_model.line_paths([line, other], context or PredictionContext())
-    paths = paths[paths["week_id"].isin(weeks) & paths["segment"].isin(segments)]
-    interaction = 0.0
-    for n, (own, moved_by) in enumerate(((line, shifts[1]), (other, shifts[0]))):
-        for sku_id in own.skus:
-            if sku_id not in moved_by:
-                continue
-            rows = paths[(paths["option"] == n) & (paths["sku_id"] == sku_id)]
-            base_price = economics.base_price[sku_id]
-            unit_cost = economics.unit_cost[sku_id]
-            promoted = float((rows["units"] * (rows["price"] - unit_cost)).sum())
-            unpromoted = float(rows["baseline_units"].sum()) * (base_price - unit_cost)
-            interaction += float(np.expm1(moved_by[sku_id][1])) * (promoted - unpromoted)
-
-    both = sorted((set(shifts[0]) & set(shifts[1])) - set(line.skus) - set(other.skus))
-    if both:
-        baseline = demand_model.baseline(weeks, regions=[line.region.value], sku_ids=both)
-        units = _units_by_sku(baseline[baseline["segment"].isin(segments)], both)
-        first = np.expm1([shifts[0][sku_id][1] for sku_id in both])
-        second = np.expm1([shifts[1][sku_id][1] for sku_id in both])
-        interaction += float((units * first * second * economics.margins(both)).sum())
-    return -interaction
+    )
 
 
 def _price_shifts(
