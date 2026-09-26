@@ -29,7 +29,7 @@ We chose these with the owner:
   Costs and margin shortfalls are rounded **up** to whole paise and the budget **down**. Every plan the solver accepts therefore passes `validate_plan` (ADR 0012). Values and pairwise terms are rounded to the nearest paisa.
 - **Pairwise terms are exact, per option pair, with no cap.**
   - Pairs are the eligible options in one region that share no SKU and share a week and a target segment.
-  - Their `pairwise_cannibalisation` (ADR 0033) comes from a new batch function, `pairwise_cannibalisations`. It makes one `line_paths` call and one baseline forecast per region, so 2,000 demo pairs take about 3 s instead of 0.28 s each.
+  - Their `pairwise_cannibalisation` (ADR 0033) comes from a new batch function, `pairwise_cannibalisations`. It makes one `line_paths` call and one baseline forecast per region, so 2,000 demo pairs take about 3 s instead of 0.28 s each. #112 later vectorised it across pairs (ADR 0039).
   - A pair with a non-zero term gets y_ij = x_i ∧ x_j, enforced both ways. So a negative term, a gain, is credited too, not just a positive one charged.
   - We rejected a constant per SKU pair, as ADR 0033 did.
 - **Deterministic solver settings, in config:**
@@ -62,5 +62,6 @@ We chose these with the owner:
 
 - Until #36, the empty plan is always feasible, so `INFEASIBLE` cannot happen yet. #36 must revisit the "no plan in time" case once clearance targets can make the empty plan infeasible.
 - On the seed-42 demo brief (weeks 108–109, ₹2 lakh), the world as first generated had no option with positive incremental profit. Only 92 of 10,981 options were eligible, all clearance lines on two overstocked SKUs, and the optimal plan was 4 clearance lines worth about ₹11,248, found in under 0.1 s.
-- After the world was retuned (ADR 0037, #109), 1,935 of 10,396 options are eligible, with 3,796 pairwise terms. The optimal plan has 35 lines, 21 of them without clearance, worth ₹172,384 for ₹199,909 of promo cost. The oracle scores it at +₹66,607 incremental profit. Solving takes about 18 s: about 14 s computes the pairwise terms, and CP-SAT takes about 4 s. That is above SPEC's 10 s optimiser budget, so the pairwise batch needs speeding up. The optimiser's logic is unchanged.
+- After the world was retuned (ADR 0037, #109), 1,935 of 10,396 options are eligible, with 3,796 pairwise terms. The optimal plan has 35 lines, 21 of them without clearance, worth ₹172,384 for ₹199,909 of promo cost. The oracle scores it at +₹66,607 incremental profit. Solving took about 18 s: about 14 s computed the pairwise terms, and CP-SAT took about 4 s. That was above SPEC's 10 s optimiser budget.
+- #112 vectorised the pairwise batch (ADR 0039). The terms and the plan are unchanged, and solving now takes about 6–7 s: about 4.5 s of CP-SAT and about 2 s of pairwise terms and pair set-up. The 10 s budget covers `solve` only. Candidate generation takes another 7–9 s, and follow-up #113 speeds it up.
 - OR-Tools is pinned to one exact version, so solver behaviour and determinism do not drift with an upgrade.

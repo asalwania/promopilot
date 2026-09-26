@@ -47,7 +47,10 @@ We rejected:
   - Objective: ₹172,384. Promo cost: ₹199,909. Model incremental profit: +₹86,124.
   - The oracle, scoring the plan jointly: incremental profit +₹66,607, clearance value ₹86,654, blended margin 26.0%.
   - This meets #109's acceptance criterion: objective > 0, oracle incremental profit > 0, and at least one line without clearance.
-- **The optimiser is now slower.** With 1,935 eligible options instead of 92, the solve takes about 18 s. About 14 s of that is `pairwise_cannibalisations` for 3,796 pairs, and CP-SAT takes about 4 s. This is above SPEC's 10 s optimiser budget and is left for a follow-up on the pairwise batch.
+- **The optimiser was slower.** With 1,935 eligible options instead of 92, the solve took about 18 s. About 14 s of that was `pairwise_cannibalisations` for 3,796 pairs, and CP-SAT took about 4 s.
+  - That was above SPEC's 10 s optimiser budget. #112 vectorised the pairwise batch (ADR 0039).
+  - The solve now takes about 6–7 s, with the same plan.
+  - Candidate generation adds 7–9 s, tracked in #113.
 - Model quality on the seed-42 world:
   - median elasticity recovery error 8.1% (was 7.6%);
   - fitted μ means match the truth (PCT_OFF 0.292 vs 0.293, BOGO 0.669 vs 0.671; BUNDLE is overstated, 0.51 vs 0.45, as before);
