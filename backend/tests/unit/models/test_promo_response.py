@@ -122,14 +122,25 @@ def test_uplift_is_net_of_the_pull_forward_dip(model: DemandModel, skus: list[st
 
     predicted = model.predict(short + long, CONTEXT).options
 
-    assert (predicted["pull_forward_units"] > 0).all()
+    assert (predicted["pull_forward_units"] >= 0).all()
     np.testing.assert_allclose(
         predicted["incremental_units"],
         predicted["units"] - predicted["baseline_units"] - predicted["pull_forward_units"],
     )
-    # Longer promotions pull more demand forward (ADR 0016).
+    # Longer promotions pull more demand forward (ADR 0016), wherever there is a dip.
+    coefficients = model.coefficients()
+    phi = coefficients[coefficients["parameter"] == "phi"].set_index("sku_id")["estimate"]
+    dipping = (phi.loc[skus] > 0).to_numpy()
     dips = predicted["pull_forward_units"].to_numpy()
-    assert (dips[len(skus) :] > dips[: len(skus)]).all()
+    assert dipping.any()
+    assert (dips[len(skus) :][dipping] > dips[: len(skus)][dipping]).all()
+
+
+def test_the_fitted_pull_forward_dip_is_never_negative(model: DemandModel) -> None:
+    # A promotion never lifts demand in the weeks after it: phi is floored at 0 (ADR 0037).
+    coefficients = model.coefficients()
+
+    assert (coefficients.loc[coefficients["parameter"] == "phi", "estimate"] >= 0).all()
 
 
 def test_promo_economics_follow_the_shared_definitions(
