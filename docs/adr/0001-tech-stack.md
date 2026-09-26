@@ -16,7 +16,7 @@ We build PromoPilot as a single public monorepo (`backend/`, `frontend/`, `docs/
 ## Setup-time decisions (confirmed with the owner, not in SPEC.md)
 
 - **`make dev` is hybrid**: Postgres runs in Docker; API (`uvicorn --reload`) and web (`next dev`) run natively for fast reload. The full containerised stack is `make up`; `make demo` (E11) stays Docker-only.
-- **`/health` is a liveness endpoint**: always HTTP 200 while the process runs; `status` is `ok` or `degraded` with per-check detail (`database`, `model_registry`). `model_registry` reports `not_initialised` until E4.
+- **`/health` is a liveness endpoint**: always HTTP 200 while the process runs; `status` is `ok` or `degraded` with per-check detail (`database`, `model_registry`). `model_registry` reported `not_initialised` until E4; it is now `ok` or `missing` (ADR 0023).
 - **The web app calls the API server-side** (Next.js server components using `API_URL`), so there is no CORS surface and the same code works inside compose (`http://api:8000`).
 - **Makefile recipes are POSIX sh.** On Windows, run `make` from Git Bash; the Makefile refuses to run under cmd.exe/PowerShell.
 

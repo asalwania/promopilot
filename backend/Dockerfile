@@ -12,8 +12,12 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --locked --no-dev --no-editable
 
 FROM python:3.12-slim AS runtime
+# LightGBM needs the OpenMP runtime.
+RUN apt-get update     && apt-get install -y --no-install-recommends libgomp1     && rm -rf /var/lib/apt/lists/*
 RUN useradd --create-home --uid 1000 app
 WORKDIR /app
+# The model-artifacts volume mounts here; it copies this owner on first use.
+RUN mkdir models && chown app:app models
 COPY --from=builder --chown=app:app /app/.venv /app/.venv
 # Recorded LLM responses: the image plans briefs with LLM_PROVIDER=replay and no key (ADR 0019).
 COPY --chown=app:app cassettes ./cassettes

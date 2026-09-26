@@ -20,6 +20,7 @@ from promopilot.data import RetailData, SessionStore, load_dataset
 from promopilot.datagen import GeneratedDataset, write
 from promopilot.domain import Region
 from promopilot.llm import FakeProvider, LLMError, LLMProvider, Message
+from tests.offline import NoModel
 
 pytestmark = pytest.mark.integration
 
@@ -73,7 +74,9 @@ async def running_api(url: str, llm: LLMProvider) -> AsyncIterator[AsyncClient]:
     """One API process: its own engine, startup and shutdown, like a uvicorn worker."""
     engine = create_async_engine(url)
     sessions = SessionService(store=SessionStore(engine), data=RetailData(engine), llm=llm)
-    app: FastAPI = create_app(database_probe=HealthyProbe(), sessions=sessions)
+    app: FastAPI = create_app(
+        database_probe=HealthyProbe(), model_status=NoModel(), sessions=sessions
+    )
     try:
         async with app.router.lifespan_context(app):
             transport = ASGITransport(app=app)

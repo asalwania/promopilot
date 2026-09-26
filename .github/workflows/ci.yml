@@ -109,6 +109,10 @@ jobs:
       - name: Load the synthetic dataset (generate + COPY, about a minute)
         timeout-minutes: 5
         run: docker compose exec -T api python -m promopilot.datagen --out /tmp/data --load
+      # /health is degraded until a demand model is registered (ADR 0023).
+      - name: Train and register the demand model
+        timeout-minutes: 5
+        run: docker compose exec -T api python -m promopilot.models
       - uses: pnpm/action-setup@v6
         with:
           package_json_file: frontend/package.json

@@ -40,7 +40,10 @@
             "type": "string"
           },
           "model_registry": {
-            "const": "not_initialised",
+            "enum": [
+              "ok",
+              "missing"
+            ],
             "title": "Model Registry",
             "type": "string"
           }

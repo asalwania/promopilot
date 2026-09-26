@@ -10,7 +10,7 @@ from promopilot.domain import PlanningRequest, PlanningSession, PlanRevision, Se
 
 class HealthChecks(BaseModel):
     database: Literal["ok", "error"]
-    model_registry: Literal["not_initialised"]
+    model_registry: Literal["ok", "missing"]
 
 
 class HealthResponse(BaseModel):

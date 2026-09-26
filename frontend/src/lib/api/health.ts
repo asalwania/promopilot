@@ -11,7 +11,7 @@ export const healthSchema = z.object({
   version: z.string(),
   checks: z.object({
     database: z.enum(["ok", "error"]),
-    model_registry: z.literal("not_initialised"),
+    model_registry: z.enum(["ok", "missing"]),
   }),
 }) satisfies z.ZodType<HealthResponse>;
 

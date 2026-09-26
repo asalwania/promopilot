@@ -112,9 +112,11 @@ data: db ## Generate the seeded synthetic dataset + ground truth into DATA_DIR a
 record-cassettes: db ## Re-record the LLM cassettes live (OPENAI_API_KEY, OPENAI_MODEL; run make data first)
 	$(BACKEND) LLM_PROVIDER=openai uv run python -m promopilot.cassettes --briefs cassettes/briefs.json
 
-.PHONY: train eval demo
-train: ## (E4) Train demand + relations models
-	@echo "make train arrives in epic E4 (SPEC.md §15)" >&2; exit 1
+.PHONY: train
+train: db ## Fit the demand model on the loaded data (make data first) and register it
+	$(BACKEND) uv run python -m promopilot.models
+
+.PHONY: eval demo
 eval: ## (E9) Run the eval suite
 	@echo "make eval arrives in epic E9 (SPEC.md §15)" >&2; exit 1
 demo: ## (E11) One-command demo, no API key

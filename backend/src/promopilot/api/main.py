@@ -15,6 +15,8 @@ from promopilot.config import Settings
 from promopilot.data import RetailData, SessionStore, migrate
 from promopilot.data.database import PostgresDatabaseProbe
 from promopilot.llm import build_provider
+from promopilot.models.demand import DemandModel
+from promopilot.models.registry import LatestModel, ModelKind, ModelRegistry
 
 log = structlog.get_logger(__name__)
 
@@ -23,7 +25,13 @@ class DatabaseProbe(Protocol):
     async def is_healthy(self) -> bool: ...
 
 
-def create_app(*, database_probe: DatabaseProbe, sessions: SessionService) -> FastAPI:
+class ModelStatus(Protocol):
+    async def is_loaded(self) -> bool: ...
+
+
+def create_app(
+    *, database_probe: DatabaseProbe, model_status: ModelStatus, sessions: SessionService
+) -> FastAPI:
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
         try:
@@ -31,6 +39,8 @@ def create_app(*, database_probe: DatabaseProbe, sessions: SessionService) -> Fa
         except Exception:
             # Liveness first (ADR 0001): /health reports the database as it recovers.
             log.exception("sessions.recover_failed")
+        # Load the latest model now; if there is none, /health keeps retrying (ADR 0023).
+        await model_status.is_loaded()
         yield
         await sessions.close()
 
@@ -45,12 +55,16 @@ def create_app(*, database_probe: DatabaseProbe, sessions: SessionService) -> Fa
             database_ok = await database_probe.is_healthy()
         except Exception:
             database_ok = False
+        try:
+            model_loaded = await model_status.is_loaded()
+        except Exception:
+            model_loaded = False
         return HealthResponse(
-            status="ok" if database_ok else "degraded",
+            status="ok" if database_ok and model_loaded else "degraded",
             version=__version__,
             checks=HealthChecks(
                 database="ok" if database_ok else "error",
-                model_registry="not_initialised",
+                model_registry="ok" if model_loaded else "missing",
             ),
         )
 
@@ -65,7 +79,10 @@ def build_app() -> FastAPI:
     sessions = SessionService(
         store=SessionStore(engine), data=RetailData(engine), llm=build_provider(settings)
     )
-    app = create_app(database_probe=probe, sessions=sessions)
+    demand_model = LatestModel(
+        ModelRegistry(engine, settings.model_dir), ModelKind.DEMAND, DemandModel
+    )
+    app = create_app(database_probe=probe, model_status=demand_model, sessions=sessions)
     serve = app.router.lifespan_context
 
     @asynccontextmanager

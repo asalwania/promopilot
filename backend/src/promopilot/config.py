@@ -12,6 +12,10 @@ class Settings(BaseSettings):
 
     database_url: str = "postgresql+asyncpg://promopilot:promopilot@localhost:5432/promopilot"
 
+    # Trained model artifacts (ADR 0023); the registry rows hold paths relative to it.
+    # Relative paths are from backend/.
+    model_dir: Path = Path("../models")
+
     # LLM layer (ADR 0001, ADR 0019). `replay` needs no key; relative paths are from backend/.
     llm_provider: Literal["openai", "anthropic", "replay", "fake"] = "replay"
     llm_cassette_dir: Path = Path("cassettes")

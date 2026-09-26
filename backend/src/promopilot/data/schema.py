@@ -16,6 +16,7 @@ from sqlalchemy import (
     MetaData,
     Table,
     Text,
+    UniqueConstraint,
     func,
 )
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
@@ -176,4 +177,20 @@ plan_lines = Table(
         ["session_id", "revision_number"],
         ["plan_revisions.session_id", "plan_revisions.number"],
     ),
+)
+
+# Model registry (E4): one row per trained model version; the artifact is a file under
+# MODEL_DIR, and artifact_path is relative to it (ADR 0023).
+
+model_registry = Table(
+    "model_registry",
+    metadata,
+    Column("model_id", UUID, primary_key=True),
+    Column("kind", Text, nullable=False),
+    Column("version", Integer, nullable=False),
+    Column("trained_at", DateTime(timezone=True), nullable=False, server_default=func.now()),
+    Column("as_of_week", Integer, nullable=False),
+    Column("metrics", JSONB, nullable=False),
+    Column("artifact_path", Text, nullable=False),
+    UniqueConstraint("kind", "version", name="uq_model_registry_kind_version"),
 )

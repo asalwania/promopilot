@@ -98,9 +98,9 @@ export interface components {
             database: "ok" | "error";
             /**
              * Model Registry
-             * @constant
+             * @enum {string}
              */
-            model_registry: "not_initialised";
+            model_registry: "ok" | "missing";
         };
         /** HealthResponse */
         HealthResponse: {

@@ -6,7 +6,7 @@ from testcontainers.community.postgres import PostgresContainer
 
 from promopilot.api.main import create_app
 from promopilot.data.database import PostgresDatabaseProbe
-from tests.offline import offline_sessions
+from tests.offline import NoModel, offline_sessions
 
 pytestmark = pytest.mark.integration
 
@@ -20,7 +20,7 @@ def postgres_url() -> Iterator[str]:
 async def get_database_check(database_url: str) -> str:
     probe = PostgresDatabaseProbe(database_url)
     try:
-        app = create_app(database_probe=probe, sessions=offline_sessions())
+        app = create_app(database_probe=probe, model_status=NoModel(), sessions=offline_sessions())
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             response = await client.get("/health")

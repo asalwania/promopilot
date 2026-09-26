@@ -15,7 +15,7 @@ describe("HealthPanel", () => {
       return Response.json({
         status: "ok",
         version: "0.1.0",
-        checks: { database: "ok", model_registry: "not_initialised" },
+        checks: { database: "ok", model_registry: "ok" },
       });
     });
 
