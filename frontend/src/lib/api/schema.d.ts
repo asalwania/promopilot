@@ -4,6 +4,46 @@
  */
 
 export interface paths {
+    "/api/catalog/products": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Products
+         * @description Every product in SKU order; an unknown category is 422.
+         */
+        get: operations["list_products_api_catalog_products_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/catalog/regions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Regions
+         * @description Each region's stores with their customer segment mix.
+         */
+        get: operations["list_regions_api_catalog_regions_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/competitors/gaps": {
         parameters: {
             query?: never;
@@ -35,6 +75,28 @@ export interface paths {
         };
         /** Health */
         get: operations["health_api_health_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/inventory": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Inventory
+         * @description Stock per SKU x region pooled over the region's stores, with overstock flags.
+         *
+         *     An unknown category, or a region without stores, is 422.
+         */
+        get: operations["inventory_api_inventory_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -277,6 +339,39 @@ export interface components {
             /** Version */
             version: string;
         };
+        /** InventoryReport */
+        InventoryReport: {
+            /** As Of Week */
+            as_of_week: number;
+            /** Overstock Threshold Days */
+            overstock_threshold_days: number;
+            /** Snapshot Week */
+            snapshot_week: number;
+            /** Statuses */
+            statuses: components["schemas"]["InventoryRow"][];
+        };
+        /** InventoryRow */
+        InventoryRow: {
+            /** Available Stock */
+            available_stock: number;
+            /** Category */
+            category: string;
+            /** Days Of Cover */
+            days_of_cover: number;
+            /** Is Overstock */
+            is_overstock: boolean;
+            /** Name */
+            name: string;
+            /** On Hand */
+            on_hand: number;
+            /** On Order */
+            on_order: number;
+            region: components["schemas"]["Region"];
+            /** Safety Stock */
+            safety_stock: number;
+            /** Sku Id */
+            sku_id: string;
+        };
         /**
          * Mechanism
          * @enum {string}
@@ -396,6 +491,32 @@ export interface components {
             promo_window: components["schemas"]["PromoWindow"];
             scope: components["schemas"]["Scope"];
         };
+        /** Product */
+        Product: {
+            /** Base Price */
+            base_price: number;
+            /** Brand */
+            brand: string;
+            /** Category */
+            category: string;
+            /** Is Kvi */
+            is_kvi: boolean;
+            /** Name */
+            name: string;
+            /** Pack Size */
+            pack_size: string;
+            /** Sku Id */
+            sku_id: string;
+            /** Subcategory */
+            subcategory: string;
+            /** Unit Cost */
+            unit_cost: number;
+        };
+        /** ProductList */
+        ProductList: {
+            /** Products */
+            products: components["schemas"]["Product"][];
+        };
         /**
          * PromoWindow
          * @description The future weeks, inclusive, in which a plan's promotions must start and end.
@@ -411,6 +532,17 @@ export interface components {
          * @enum {string}
          */
         Region: "North" | "South" | "East" | "West";
+        /** RegionList */
+        RegionList: {
+            /** Regions */
+            regions: components["schemas"]["RegionStores"][];
+        };
+        /** RegionStores */
+        RegionStores: {
+            region: components["schemas"]["Region"];
+            /** Stores */
+            stores: components["schemas"]["Store"][];
+        };
         /**
          * RelationsResponse
          * @description A SKU's substitutes (strongest first) and complements (highest lift first).
@@ -439,6 +571,12 @@ export interface components {
              */
             sku_ids: string[];
         };
+        /**
+         * Segment
+         * @description A behavioural customer group; never defined by protected attributes.
+         * @enum {string}
+         */
+        Segment: "Value Seekers" | "Families" | "Premium" | "Young Urban";
         /** SessionCreated */
         SessionCreated: {
             /**
@@ -471,6 +609,17 @@ export interface components {
          * @enum {string}
          */
         SessionStatus: "planning" | "awaiting_clarification" | "awaiting_approval" | "approved" | "rejected" | "failed";
+        /** Store */
+        Store: {
+            /** City */
+            city: string;
+            /** Segment Mix */
+            segment_mix: {
+                [key: string]: number;
+            };
+            /** Store Id */
+            store_id: string;
+        };
         /** Substitute */
         Substitute: {
             /** Q Value */
@@ -513,6 +662,58 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    list_products_api_catalog_products_get: {
+        parameters: {
+            query?: {
+                category?: string | null;
+                kvi_only?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProductList"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_regions_api_catalog_regions_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RegionList"];
+                };
+            };
+        };
+    };
     competitor_gaps_api_competitors_gaps_get: {
         parameters: {
             query?: {
@@ -571,6 +772,48 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HealthResponse"];
+                };
+            };
+        };
+    };
+    inventory_api_inventory_get: {
+        parameters: {
+            query?: {
+                /** @description Defaults to the data's default as-of week. */
+                as_of_week?: number | null;
+                region?: components["schemas"]["Region"] | null;
+                category?: string | null;
+                overstocked_only?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InventoryReport"];
+                };
+            };
+            /** @description No data is loaded for the week */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

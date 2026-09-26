@@ -6,6 +6,7 @@ from pathlib import Path
 
 from sqlalchemy.ext.asyncio import create_async_engine
 
+from promopilot.api.catalog import CatalogService
 from promopilot.api.competitors import CompetitorService
 from promopilot.api.main import create_app
 from promopilot.api.models import ModelService
@@ -47,6 +48,7 @@ def main() -> None:
         models=models,
         competitors=CompetitorService(RetailData(engine), policy=CompanyPolicy()),
         relations=RelationsService(relations, RetailData(engine)),
+        catalog=CatalogService(RetailData(engine), policy=CompanyPolicy()),
     )
     document = json.dumps(app.openapi(), indent=2, sort_keys=True) + "\n"
     # Write bytes so Windows doesn't emit CRLF; CI diffs this file on Linux.
