@@ -275,3 +275,41 @@ def test_fitted_history_gives_the_models_mean_for_every_past_region_series_week(
     assert (fitted["log_price_ratio"] <= 0).all()
     ratio = fitted["fitted_units"].sum() / fitted["units"].sum()
     assert ratio == pytest.approx(1.0, abs=0.05)
+
+
+def test_line_paths_break_each_prediction_down_by_week_sku_and_segment(
+    small_dataset: GeneratedDataset,
+    model: DemandModel,
+    skus: list[str],
+    base_prices: dict[str, float],
+) -> None:
+    anchor, partner = small_dataset.ground_truth.complement_pairs[0]
+    options = [
+        option(skus[0], target_segment=TargetSegment.FAMILIES),
+        option(anchor, mechanism=Mechanism.BUNDLE, depth_pct=15, bundle_partner_sku_id=partner),
+    ]
+
+    paths = model.line_paths(options, CONTEXT)
+    prediction = model.predict(options, CONTEXT).options
+
+    assert list(paths.columns) == [
+        "option",
+        "week_id",
+        "sku_id",
+        "segment",
+        "units",
+        "baseline_units",
+        "price",
+    ]
+    assert not paths.duplicated(["option", "week_id", "sku_id", "segment"]).any()
+    promo_weeks = paths["week_id"] < START + 2
+    for n, line in enumerate(options):
+        own = paths[(paths["option"] == n) & promo_weeks & (paths["sku_id"] == line.sku_id)]
+        assert own["units"].sum() == pytest.approx(prediction["units"].iloc[n])
+        assert own["baseline_units"].sum() == pytest.approx(prediction["baseline_units"].iloc[n])
+    # The promo price reaches only the targeted segment and the promo weeks.
+    first = paths[(paths["option"] == 0) & (paths["sku_id"] == skus[0])]
+    discounted = first["price"] < base_prices[skus[0]]
+    targeted = (first["segment"] == Segment.FAMILIES.value) & (first["week_id"] < START + 2)
+    assert (discounted == targeted).all()
+    assert set(paths.loc[paths["option"] == 1, "sku_id"]) == {anchor, partner}

@@ -116,6 +116,56 @@
         "title": "CompetitorGaps",
         "type": "object"
       },
+      "Complement": {
+        "properties": {
+          "lift": {
+            "description": "P(both in a basket) / (P(one) x P(other)).",
+            "title": "Lift",
+            "type": "number"
+          },
+          "sku_id": {
+            "title": "Sku Id",
+            "type": "string"
+          },
+          "std_error": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Std Error"
+          },
+          "support": {
+            "description": "Share of baskets holding both SKUs.",
+            "title": "Support",
+            "type": "number"
+          },
+          "theta": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Cross-price effect, or null if not estimable.",
+            "title": "Theta"
+          }
+        },
+        "required": [
+          "sku_id",
+          "lift",
+          "support",
+          "theta",
+          "std_error"
+        ],
+        "title": "Complement",
+        "type": "object"
+      },
       "CreateSessionRequest": {
         "properties": {
           "brief": {
@@ -277,6 +327,31 @@
           "models"
         ],
         "title": "ModelList",
+        "type": "object"
+      },
+      "ModelVersion": {
+        "description": "The registered model that produced the numbers, so a plan can be traced to it.",
+        "properties": {
+          "as_of_week": {
+            "title": "As Of Week",
+            "type": "integer"
+          },
+          "model_id": {
+            "format": "uuid",
+            "title": "Model Id",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "model_id",
+          "version",
+          "as_of_week"
+        ],
+        "title": "ModelVersion",
         "type": "object"
       },
       "PlanLine": {
@@ -462,6 +537,40 @@
         "title": "Region",
         "type": "string"
       },
+      "RelationsResponse": {
+        "description": "A SKU's substitutes (strongest first) and complements (highest lift first).",
+        "properties": {
+          "complements": {
+            "items": {
+              "$ref": "#/components/schemas/Complement"
+            },
+            "title": "Complements",
+            "type": "array"
+          },
+          "model": {
+            "$ref": "#/components/schemas/ModelVersion"
+          },
+          "sku_id": {
+            "title": "Sku Id",
+            "type": "string"
+          },
+          "substitutes": {
+            "items": {
+              "$ref": "#/components/schemas/Substitute"
+            },
+            "title": "Substitutes",
+            "type": "array"
+          }
+        },
+        "required": [
+          "model",
+          "sku_id",
+          "substitutes",
+          "complements"
+        ],
+        "title": "RelationsResponse",
+        "type": "object"
+      },
       "Scope": {
         "description": "The regions and categories a planning request covers, optionally narrowed to SKUs.",
         "properties": {
@@ -581,6 +690,35 @@
         ],
         "title": "SessionStatus",
         "type": "string"
+      },
+      "Substitute": {
+        "properties": {
+          "q_value": {
+            "title": "Q Value",
+            "type": "number"
+          },
+          "sku_id": {
+            "title": "Sku Id",
+            "type": "string"
+          },
+          "std_error": {
+            "title": "Std Error",
+            "type": "number"
+          },
+          "theta": {
+            "description": "Cross-price effect: positive for a substitute.",
+            "title": "Theta",
+            "type": "number"
+          }
+        },
+        "required": [
+          "sku_id",
+          "theta",
+          "std_error",
+          "q_value"
+        ],
+        "title": "Substitute",
+        "type": "object"
       },
       "TargetSegment": {
         "description": "Who a plan line is offered to: one segment exclusively, or All customers (ADR 0006).",
@@ -800,6 +938,54 @@
         "summary": "Retrain",
         "tags": [
           "models"
+        ]
+      }
+    },
+    "/api/relations/{sku_id}": {
+      "get": {
+        "operationId": "get_relations_api_relations__sku_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "sku_id",
+            "required": true,
+            "schema": {
+              "title": "Sku Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RelationsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "description": "No such SKU"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "503": {
+            "description": "No relations model fitted on the live demand model"
+          }
+        },
+        "summary": "Get Relations",
+        "tags": [
+          "relations"
         ]
       }
     },

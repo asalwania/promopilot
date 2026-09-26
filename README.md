@@ -99,7 +99,11 @@ Three data tools show the planner the world as of a week (ADR 0032). `get_scope_
 - **Substitutes**: for each within-subcategory pair, one pooled Poisson GLM on top of the demand model's fit estimates a symmetric cross-price effect θ. A pair is kept if its Benjamini–Hochberg q across all tested pairs is below 0.05 and θ ≥ 0.1 (ADR 0013).
 - **Complements**: basket lift above 1.5, where at least 0.1% of baskets hold both SKUs. Where θ is estimable, the pair must also have θ < 0 with q < 0.05.
 
-The thresholds live in `RelationsConfig`. The registry records them with the counts and the demand version used. On the seed-42 world, substitute precision/recall is 0.89/1.00 and complement precision/recall is 1.00/1.00. The API does not serve relations until #31.
+The thresholds live in `RelationsConfig`. The registry records them with the counts and the demand version used. On the seed-42 world, substitute precision/recall is 0.89/1.00 and complement precision/recall is 1.00/1.00.
+
+The API serves the latest relations model only while it was fitted on the live demand model; otherwise `get_relations` answers `model_unavailable` and `GET /api/relations/{sku_id}` answers `503` (ADR 0033). The `get_relations` tool takes 1 to 50 SKU ids and returns each one's substitutes and complements with the model's id and version.
+
+**Cannibalisation and halo** (ADR 0033). `line_effects(lines, relations, demand_model, products)` returns one row per plan line and each SKU it moves in its region, in scope or not (ADR 0005). Each row has the SKU's baseline units, the change in units and in percent, the change in profit at its base margin, and that change as cannibalised or halo profit. A detected relation moves units by baseline × (exp(Σ θ·log(p_eff/base)) − 1) over the promo weeks and targeted segments. `pairwise_cannibalisation(line_i, line_j, ...)` is what two substitute lines in one region lose together beyond their single-line figures, for the optimiser's `y_ij` terms. The web app's `CannibalisationCallout` and `HaloCallout` read "Promoting A reduces B's units by N% (−₹X profit)" and "…lifts…", showing effects of 1% or more, the top 3 by profit.
 
 ## LLM providers
 
@@ -136,8 +140,9 @@ make up                 # rebuild the api image with the new cassettes
 | POST | `/api/sessions` | Start a planning session from `{"brief": "..."}` (1–2000 characters, not blank; otherwise `422`). Returns `202 {"session_id"}` at once; planning runs in the background |
 | GET | `/api/sessions/{id}` | `{session_id, status, brief, planning_request, plan_revision, error}`; `404` if unknown. `status` is `planning`, then `awaiting_approval` with plan revision 1, or `failed` with an `error` saying why |
 | GET | `/api/models` | `{"models": [{model_id, kind, version, trained_at, as_of_week, metrics, live}]}`, newest first. `live` marks the model this API process is serving (ADR 0026) |
-| POST | `/api/models/retrain` | Retrain the demand and relations models as `make train` does by default (the as-of week after the history, seed 42). The request stays open while it fits (60 to 110 seconds on the default world), then returns `201` with the new demand entry, which is now the latest and live. The relations version is listed but not yet served. `409` if a retrain is already running or no data is loaded |
+| POST | `/api/models/retrain` | Retrain the demand and relations models as `make train` does by default (the as-of week after the history, seed 42). The request stays open while it fits (60 to 110 seconds on the default world), then returns `201` with the new demand entry, which is now the latest and live, as is the new relations version. `409` if a retrain is already running or no data is loaded |
 | GET | `/api/competitors/gaps` | Competitor price index, gap and KVI undercut per SKU × region, widest gap first (ADR 0031). Optional filters `region`, `category`, `kvi_only` and `as_of_week` (default: the week after the loaded history). `409` if no data is loaded, `422` for an unknown category |
+| GET | `/api/relations/{sku_id}` | `{model: {model_id, version, as_of_week}, sku_id, substitutes: [{sku_id, theta, std_error, q_value}], complements: [{sku_id, lift, support, theta, std_error}]}`; θ is null where not estimable. `404` for an unknown SKU, `503` when no relations model fitted on the live demand model is registered (ADR 0033) |
 | GET | `/health`, `/api/health` | Always `200` while the process runs. `/health` is for the container healthcheck; the web app uses `/api/health` through its proxy. `{"status": "ok" \| "degraded", "version", "checks": {"database": "ok" \| "error", "model_registry": "ok" \| "missing"}}`. `status` is `degraded` if the database is unreachable or no demand model is loaded |
 
 In E3 a planning session is a walking skeleton (ADR 0020). A minimal Context agent reads the brief into a planning request: scope, a promo window chosen from the weeks after the as-of week, and a marketing budget in rupees. If any of these is missing, the session fails and the error names it. A naive greedy planner then offers 20% off to All customers on in-scope SKUs, ranked by base margin, within the budget. It has no uplift model yet, so each line's expected incremental profit is minus its promo cost. E4–E8 replace it. The as-of week is the first week after the loaded sales history.
@@ -194,6 +199,7 @@ docs/agents/ Agent workflow config (issue tracker, triage labels, domain docs)
 - [ADR 0030: The models page groups versions by kind, times the retrain, and reports its outcome inline](docs/adr/0030-models-page-display-and-retrain-feedback.md)
 - [ADR 0031: Competitor gaps compare the last known competitor price with our base price; the KVI tolerance is one-sided; data tools bind the as-of week](docs/adr/0031-competitor-gaps-and-kvi-tolerance.md)
 - [ADR 0032: Data tools read at a bound as-of week, pool stock per region, and a deterministic resolver scores brief phrases](docs/adr/0032-data-tools-as-of-source-and-brief-resolution.md)
+- [ADR 0033: Cannibalisation and halo per plan line use the oracle's method on fitted inputs, with a pairwise correction for promoted substitutes](docs/adr/0033-cannibalisation-and-halo-per-plan-line.md)
 
 The domain glossary is [CONTEXT.md](CONTEXT.md).
 

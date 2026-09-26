@@ -3,7 +3,9 @@ import json
 import pytest
 
 from promopilot.datagen import GeneratedDataset, GeneratorConfig, generate, load_config
-from promopilot.models.demand import DemandHistory
+from promopilot.models import demand, relations
+from promopilot.models.demand import DemandHistory, DemandModel
+from promopilot.models.relations import Relations
 
 LLM_ENV = ("LLM_PROVIDER", "LLM_CASSETTE_DIR", "OPENAI_API_KEY", "OPENAI_MODEL")
 
@@ -14,6 +16,9 @@ def no_llm_config_from_env(monkeypatch: pytest.MonkeyPatch) -> None:
     for name in LLM_ENV:
         monkeypatch.delenv(name, raising=False)
 
+
+SMALL_AS_OF = 52
+"""The first week after the small world's 52 history weeks."""
 
 SMALL_OVERRIDES = {
     "catalogue": {"categories_limit": 3, "skus_per_category": 8},
@@ -89,3 +94,14 @@ def history_of(dataset: GeneratedDataset) -> DemandHistory:
 @pytest.fixture(scope="session")
 def small_history(small_dataset: GeneratedDataset) -> DemandHistory:
     return history_of(small_dataset)
+
+
+@pytest.fixture(scope="session")
+def small_models(
+    small_dataset: GeneratedDataset, small_history: DemandHistory
+) -> tuple[DemandModel, Relations]:
+    """Demand, then relations, fitted on the small world as of its first future week."""
+    model = demand.fit(small_history, as_of_week=SMALL_AS_OF, seed=7)
+    return model, relations.fit(
+        small_history, small_dataset.baskets, model, as_of_week=SMALL_AS_OF, seed=7
+    )

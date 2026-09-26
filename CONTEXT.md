@@ -105,6 +105,9 @@ Sales a promoted SKU takes from its substitutes in the same region, whether or n
 **Halo**:
 Extra sales a promoted SKU drives for its complements in the same region, whether or not those complements are in the brief's scope.
 
+**Pairwise cannibalisation**:
+What two plan lines promoting substitutes in the same region, in overlapping weeks, lose together beyond their separate cannibalisation figures. The optimiser charges it once for each such pair it selects.
+
 **Pull-forward**:
 Customers stocking up during a promotion, causing a post-promo dip.
 _Avoid_: post-promo dip (as a separate term)
