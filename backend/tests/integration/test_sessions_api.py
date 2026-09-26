@@ -19,7 +19,7 @@ from promopilot.api.sessions import SessionService
 from promopilot.data import RetailData, SessionStore, load_dataset
 from promopilot.datagen import GeneratedDataset, write
 from promopilot.domain import Region
-from promopilot.llm import FakeProvider, LLMError, LLMProvider, Message
+from promopilot.llm import FakeProvider, LLMError, LLMProvider, Message, ToolSpec, ToolTurn
 from tests.offline import NoModel
 
 pytestmark = pytest.mark.integration
@@ -55,6 +55,12 @@ class GatedProvider:
     ) -> T:
         await self.gate.wait()
         return await self.inner.complete_structured(schema, messages)
+
+    async def complete_with_tools(
+        self, tools: Sequence[ToolSpec], messages: Sequence[Message]
+    ) -> ToolTurn:
+        await self.gate.wait()
+        return await self.inner.complete_with_tools(tools, messages)
 
 
 @pytest.fixture(scope="module")

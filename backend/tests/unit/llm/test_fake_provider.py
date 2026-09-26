@@ -1,7 +1,7 @@
 import pytest
 from pydantic import BaseModel
 
-from promopilot.llm import FakeProvider, LLMError, Message
+from promopilot.llm import FakeProvider, LLMError, Message, ToolCall, ToolSpec, ToolTurn
 
 
 class Weather(BaseModel):
@@ -46,3 +46,31 @@ async def test_fake_provider_rejects_a_scripted_response_of_the_wrong_schema() -
 
     with pytest.raises(AssertionError, match="scripted Other, but Weather asked"):
         await llm.complete_structured(Weather, ASK)
+
+
+FORECAST = ToolSpec(
+    name="get_forecast",
+    description="Forecast for a city.",
+    input_schema={"type": "object", "properties": {"city": {"type": "string"}}},
+)
+
+
+async def test_fake_provider_answers_tool_calls_from_its_script_and_records_the_tools() -> None:
+    turn = ToolTurn(
+        tool_calls=(ToolCall(id="call_1", name="get_forecast", arguments={"city": "Pune"}),)
+    )
+    llm = FakeProvider([turn])
+
+    answer = await llm.complete_with_tools([FORECAST], ASK)
+
+    assert answer == turn
+    assert llm.calls[0].tools == (FORECAST,)
+    assert llm.calls[0].schema is None
+    assert llm.calls[0].messages == ASK
+
+
+async def test_fake_provider_rejects_a_structured_answer_scripted_for_a_tool_call() -> None:
+    llm = FakeProvider([Weather(city="Pune", celsius=31)])
+
+    with pytest.raises(AssertionError, match="scripted Weather, but a tool turn asked"):
+        await llm.complete_with_tools([FORECAST], ASK)

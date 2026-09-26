@@ -1,6 +1,9 @@
+import hashlib
+import json
 import os
 import subprocess
 import sys
+from collections.abc import Sequence
 from pathlib import Path
 
 import pytest
@@ -12,7 +15,14 @@ from promopilot.llm import (
     Message,
     RecordingProvider,
     ReplayProvider,
+    ToolCall,
+    ToolSpec,
+    ToolTurn,
+    Usage,
+    record_usage,
     request_hash,
+    tool_request_hash,
+    track_usage,
 )
 
 
@@ -90,3 +100,116 @@ def test_request_hash_is_stable_across_processes() -> None:
     }
 
     assert hashes == {request_hash(Weather, ASK)}
+
+
+FORECAST = ToolSpec(
+    name="get_forecast",
+    description="Forecast for a city.",
+    input_schema={"type": "object", "properties": {"city": {"type": "string"}}},
+)
+CALL = ToolCall(id="call_1", name="get_forecast", arguments={"city": "Pune"})
+TOOL_ROUND = [
+    Message(role="user", content="Weather in Pune?"),
+    Message(role="assistant", content="", tool_calls=(CALL,)),
+    Message(role="tool", content='{"celsius": 31}', tool_call_id="call_1"),
+]
+
+
+async def test_replay_answers_a_recorded_tool_call(tmp_path: Path) -> None:
+    turn = ToolTurn(text="It is 31 C in Pune.")
+    await RecordingProvider(FakeProvider([turn]), tmp_path).complete_with_tools(
+        [FORECAST], TOOL_ROUND
+    )
+
+    replayed = await ReplayProvider(tmp_path).complete_with_tools([FORECAST], list(TOOL_ROUND))
+
+    assert replayed == turn
+
+
+async def test_a_tool_request_misses_when_the_tools_change(tmp_path: Path) -> None:
+    await RecordingProvider(FakeProvider([ToolTurn(text="31 C")]), tmp_path).complete_with_tools(
+        [FORECAST], TOOL_ROUND
+    )
+    renamed = FORECAST.model_copy(update={"description": "Forecast for a town."})
+
+    with pytest.raises(CassetteMissError, match=tool_request_hash([renamed], TOOL_ROUND)):
+        await ReplayProvider(tmp_path).complete_with_tools([renamed], TOOL_ROUND)
+
+
+def test_the_tool_call_ids_are_part_of_the_tool_request_hash() -> None:
+    other_id = [
+        TOOL_ROUND[0],
+        Message(role="assistant", content="", tool_calls=(CALL.model_copy(update={"id": "c2"}),)),
+        TOOL_ROUND[2].model_copy(update={"tool_call_id": "c2"}),
+    ]
+
+    assert tool_request_hash([FORECAST], other_id) != tool_request_hash([FORECAST], TOOL_ROUND)
+
+
+def test_provider_state_is_left_out_of_the_hash() -> None:
+    thinking = {"type": "thinking", "thinking": "", "signature": "sig-abc"}
+    with_state = [
+        TOOL_ROUND[0],
+        TOOL_ROUND[1].model_copy(update={"provider_state": (thinking,)}),
+        TOOL_ROUND[2],
+    ]
+
+    assert tool_request_hash([FORECAST], with_state) == tool_request_hash([FORECAST], TOOL_ROUND)
+
+
+def test_a_plain_message_hashes_as_before_the_tool_fields_existed() -> None:
+    # The committed cassettes were hashed over {role, content}: empty tool fields add nothing.
+    before = {
+        "schema": Weather.model_json_schema(),
+        "messages": [{"role": m.role, "content": m.content} for m in ASK],
+        "temperature": 0.0,
+    }
+    canonical = json.dumps(before, sort_keys=True, separators=(",", ":")).encode("utf-8")
+
+    assert request_hash(Weather, ASK) == hashlib.sha256(canonical).hexdigest()
+
+
+class BilledFake(FakeProvider):
+    """A fake that reports usage for each call, as live providers do."""
+
+    async def complete_with_tools(
+        self, tools: Sequence[ToolSpec], messages: Sequence[Message]
+    ) -> ToolTurn:
+        record_usage(Usage(model="gpt-4.1-mini", input_tokens=120, output_tokens=30))
+        return await super().complete_with_tools(tools, messages)
+
+
+async def test_a_cassette_records_usage_that_replay_reports_again(tmp_path: Path) -> None:
+    with track_usage() as recording:
+        await RecordingProvider(BilledFake([ToolTurn(text="31 C")]), tmp_path).complete_with_tools(
+            [FORECAST], TOOL_ROUND
+        )
+    with track_usage() as replaying:
+        await ReplayProvider(tmp_path).complete_with_tools([FORECAST], TOOL_ROUND)
+
+    billed = Usage(model="gpt-4.1-mini", input_tokens=120, output_tokens=30)
+    assert recording.usages == (billed,)
+    assert replaying.usages == (billed,)
+    cassette = json.loads(only_cassette(tmp_path).read_text(encoding="utf-8"))
+    assert cassette["usage"] == [billed.model_dump()]
+    assert "usage" not in cassette["request"]
+
+
+async def test_a_cassette_without_usage_replays_with_none(tmp_path: Path) -> None:
+    await RecordingProvider(
+        FakeProvider([Weather(city="Pune", celsius=31)]), tmp_path
+    ).complete_structured(Weather, ASK)
+    path = only_cassette(tmp_path)
+    cassette = json.loads(path.read_text(encoding="utf-8"))
+    del cassette["usage"]
+    path.write_text(json.dumps(cassette), encoding="utf-8")
+
+    with track_usage() as meter:
+        await ReplayProvider(tmp_path).complete_structured(Weather, ASK)
+
+    assert meter.usages == ()
+
+
+def only_cassette(cassette_dir: Path) -> Path:
+    [cassette] = cassette_dir.glob("*.json")
+    return cassette
