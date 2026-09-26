@@ -6,21 +6,25 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from promopilot.agents.context import BriefError
-from promopilot.agents.session import PlanningData, PlanningResult, plan_session
+from promopilot.agents.session import BriefData, read_planning_request
+from promopilot.domain import PlanningRequest
 from promopilot.llm import LLMError, LLMProvider, RecordingProvider, cassette_paths
 
 
 class RecordingError(Exception):
-    """A brief did not reach a plan, so no cassette was changed."""
+    """A brief did not become a planning request, so no cassette was changed."""
 
 
 async def record_cassettes(
-    briefs: Sequence[str], live: LLMProvider, data: PlanningData, cassette_dir: Path
-) -> list[PlanningResult]:
-    """Plan each brief through `live`, recording every LLM request as a cassette.
+    briefs: Sequence[str], live: LLMProvider, data: BriefData, cassette_dir: Path
+) -> list[PlanningRequest]:
+    """Read each brief through `live`, recording every LLM request as a cassette.
+
+    Planning after the brief is read calls no LLM until E8, so recording needs no trained
+    model (ADR 0038).
 
     Cassettes are recorded into a scratch directory and replace those in `cassette_dir` only
-    once every brief has reached a plan, so a failed run changes nothing and a full run
+    once every brief has become a planning request, so a failed run changes nothing and a full run
     leaves no stale cassette behind. Other files in `cassette_dir` are kept.
     """
     with tempfile.TemporaryDirectory() as scratch:
@@ -28,9 +32,11 @@ async def record_cassettes(
         results = []
         for brief in briefs:
             try:
-                results.append(await plan_session(brief, recorder, data))
+                results.append(await read_planning_request(brief, recorder, data))
             except (BriefError, LLMError) as error:
-                raise RecordingError(f"brief {brief!r} did not reach a plan: {error}") from error
+                raise RecordingError(
+                    f"brief {brief!r} did not become a planning request: {error}"
+                ) from error
         _replace_cassettes(Path(scratch), cassette_dir)
     return results
 

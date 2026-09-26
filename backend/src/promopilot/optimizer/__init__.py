@@ -1,5 +1,6 @@
 """The optimiser (SPEC §9.3-9.4): promo option generation, then CP-SAT selection."""
 
+from promopilot.domain import SolveStatus
 from promopilot.optimizer.options import (
     DEPTHS,
     P90_Z,
@@ -15,7 +16,6 @@ from promopilot.optimizer.solver import (
     OptimisationResult,
     OptionFacts,
     SolverSettings,
-    SolveStatus,
     solve,
 )
 from promopilot.optimizer.store import CandidateSet, CandidateStore

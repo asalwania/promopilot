@@ -22,13 +22,19 @@ from promopilot.agents.tools.run_optimizer import (
 from promopilot.datagen import GeneratedDataset
 from promopilot.domain import (
     CompanyPolicy,
+    ConstraintKind,
+    ConstraintSource,
     Mechanism,
+    NotSelectedReason,
     PlanLine,
     PlanningRequest,
     PromoWindow,
     Region,
     Scope,
+    SelectionReason,
+    SelectionReasonCode,
     TargetSegment,
+    WhyChosen,
 )
 from promopilot.guardrails import LineFacts, PlanFacts, SkuFacts, validate_plan
 from promopilot.models.demand import DemandHistory, DemandModel
@@ -146,6 +152,36 @@ async def test_a_call_returns_the_selected_plan_with_its_numbers(store: Candidat
     assert output.blended_margin == pytest.approx(1_800 / 9_000)
     assert output.min_margin == pytest.approx(0.10)  # the request's 5% is held at the floor
     assert (output.candidate_options, output.eligible_options, output.pairs) == (3, 2, 1)
+    assert output.binding_constraints == []
+    assert first.why_chosen == WhyChosen(
+        reasons=(
+            SelectionReason(code=SelectionReasonCode.INCREMENTAL_PROFIT, amount=450.0),
+            SelectionReason(code=SelectionReasonCode.HALO, amount=60.0),
+        ),
+        value=500.0,
+        best_for_sku_region=True,
+    )
+    assert [(entry.option, entry.reasons) for entry in output.not_selected] == [
+        (line("C"), (NotSelectedReason.LOW_UPLIFT,))
+    ]
+
+
+async def test_a_binding_budget_is_reported_in_domain_terms(store: CandidateStore) -> None:
+    tight = REQUEST.model_copy(update={"marketing_budget": 1_000.0})
+    stored = store.put(tight, hand_built(), Facts())
+
+    result = await registry(store).call(
+        "run_optimizer", {"candidate_set_id": str(stored.candidate_set_id)}
+    )
+
+    assert isinstance(result, ToolOk), result
+    assert isinstance(result.output, RunOptimizerOutput)
+    [binding] = result.output.binding_constraints
+    assert (binding.kind, binding.source, binding.limit) == (
+        ConstraintKind.MARKETING_BUDGET,
+        ConstraintSource.BRIEF,
+        1_000.0,
+    )
 
 
 async def test_an_unknown_or_evicted_candidate_set_must_be_regenerated(

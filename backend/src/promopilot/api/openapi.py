@@ -6,6 +6,7 @@ from pathlib import Path
 
 from sqlalchemy.ext.asyncio import create_async_engine
 
+from promopilot.agents import OptimisingPlanner
 from promopilot.api.catalog import CatalogService
 from promopilot.api.competitors import CompetitorService
 from promopilot.api.main import create_app
@@ -19,6 +20,7 @@ from promopilot.models.demand import DemandModel
 from promopilot.models.registry import LatestModel, ModelKind, ModelRegistry
 from promopilot.models.relations import Relations
 from promopilot.models.serving import LiveRelations
+from promopilot.optimizer import SolverSettings
 
 
 class _UnusedProbe:
@@ -31,12 +33,22 @@ class _UnusedProbe:
 
 def main() -> None:
     engine = create_async_engine("postgresql+asyncpg://unused@127.0.0.1:1/unused")  # never connects
-    sessions = SessionService(
-        store=SessionStore(engine), data=RetailData(engine), llm=FakeProvider([])
-    )
     registry = ModelRegistry(engine, Path("unused"))
     demand = LatestModel(registry, ModelKind.DEMAND, DemandModel)
     relations = LiveRelations(LatestModel(registry, ModelKind.RELATIONS, Relations), demand)
+    sessions = SessionService(
+        store=SessionStore(engine),
+        data=RetailData(engine),
+        llm=FakeProvider([]),
+        planner=OptimisingPlanner(
+            demand,
+            relations,
+            RetailData(engine),
+            policy=CompanyPolicy(),
+            settings=SolverSettings(),
+            seed=0,
+        ),
+    )
     models = ModelService(
         registry=registry, data=RetailData(engine), live=demand, live_relations=relations
     )

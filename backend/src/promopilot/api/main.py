@@ -9,6 +9,7 @@ from fastapi import FastAPI
 from sqlalchemy.ext.asyncio import create_async_engine
 
 from promopilot import __version__
+from promopilot.agents import OptimisingPlanner
 from promopilot.agents.tools import ToolRegistry
 from promopilot.agents.tools.estimate_demand import estimate_demand_tool
 from promopilot.agents.tools.generate_candidates import generate_candidates_tool
@@ -108,9 +109,6 @@ def build_app() -> FastAPI:
     settings = Settings()
     probe = PostgresDatabaseProbe(settings.database_url)
     engine = create_async_engine(settings.database_url, pool_pre_ping=True)
-    sessions = SessionService(
-        store=SessionStore(engine), data=RetailData(engine), llm=build_provider(settings)
-    )
     registry = ModelRegistry(engine, settings.model_dir)
     demand_model = LatestModel(registry, ModelKind.DEMAND, DemandModel)
     # Relations are served only on the demand model they were fitted on (ADR 0033).
@@ -122,6 +120,24 @@ def build_app() -> FastAPI:
         registry=registry, data=data, live=demand_model, live_relations=relations_model
     )
     policy = CompanyPolicy()
+    solver_settings = SolverSettings(
+        time_limit_seconds=settings.optimizer_time_limit_seconds,
+        workers=settings.optimizer_workers,
+    )
+    # Sessions plan with the latest demand model and the live relations model (ADR 0038).
+    sessions = SessionService(
+        store=SessionStore(engine),
+        data=data,
+        llm=build_provider(settings),
+        planner=OptimisingPlanner(
+            demand_model,
+            relations_model,
+            data,
+            policy=policy,
+            settings=solver_settings,
+            seed=settings.optimizer_seed,
+        ),
+    )
     app = create_app(
         database_probe=probe,
         model_status=demand_model,
@@ -154,10 +170,7 @@ def build_app() -> FastAPI:
             run_optimizer_tool(
                 app.state.candidates,
                 policy=policy,
-                settings=SolverSettings(
-                    time_limit_seconds=settings.optimizer_time_limit_seconds,
-                    workers=settings.optimizer_workers,
-                ),
+                settings=solver_settings,
                 seed=settings.optimizer_seed,
             ),
         ]

@@ -1,6 +1,7 @@
 """Planning sessions over HTTP: start one from a brief, then read its state (SPEC §10, ADR 0001).
 
-`POST /api/sessions` returns at once; planning runs as a background task in this process.
+`POST /api/sessions` returns at once; planning runs as a background task in this process: the
+brief is read into a planning request, then the optimising planner plans it (ADR 0038).
 """
 
 import asyncio
@@ -9,10 +10,9 @@ from uuid import UUID
 import structlog
 from fastapi import APIRouter, HTTPException, status
 
-from promopilot.agents import BriefError, PlanningData, plan_session
+from promopilot.agents import BriefData, BriefError, Planner, PlanningError, plan_session
 from promopilot.api.schemas import CreateSessionRequest, SessionCreated, SessionResponse
 from promopilot.data import SessionStore
-from promopilot.domain import CompanyPolicy
 from promopilot.llm import LLMError, LLMProvider
 
 log = structlog.get_logger(__name__)
@@ -25,14 +25,14 @@ class SessionService:
         self,
         *,
         store: SessionStore,
-        data: PlanningData,
+        data: BriefData,
         llm: LLMProvider,
-        policy: CompanyPolicy | None = None,
+        planner: Planner,
     ) -> None:
         self._store = store
         self._data = data
         self._llm = llm
-        self._policy = policy
+        self._planner = planner
         self._tasks: set[asyncio.Task[None]] = set()
 
     async def start(self, brief: str) -> UUID:
@@ -59,9 +59,11 @@ class SessionService:
 
     async def _run(self, session_id: UUID, brief: str) -> None:
         try:
-            result = await plan_session(brief, self._llm, self._data, policy=self._policy)
+            result = await plan_session(brief, self._llm, self._data, self._planner)
         except BriefError as error:
             await self._store.mark_failed(session_id, f"The brief could not be planned: {error}")
+        except PlanningError as error:
+            await self._store.mark_failed(session_id, f"Planning is not possible yet: {error}")
         except LLMError as error:
             await self._store.mark_failed(session_id, f"The language model failed: {error}")
         except Exception:
