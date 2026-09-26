@@ -36,7 +36,7 @@ docker compose up -d --build --wait   # or: make up
 | `make lint` / `make format` | ruff, ESLint, Prettier |
 | `make typecheck` | mypy strict, tsc strict |
 | `make api-types` | Export OpenAPI to `docs/openapi.json` and regenerate frontend types |
-| `make data` | Generate the seeded synthetic dataset into `data/generated/` (Parquet) and its hidden ground truth into `data/ground_truth/` |
+| `make data` | Generate the seeded synthetic dataset into `data/generated/` (Parquet) and its hidden ground truth into `data/ground_truth/`, then load the tables into Postgres (starts it if needed) |
 | `make train`, `make eval`, `make demo` | Arrive in epics E4, E9, E11 |
 
 ## Synthetic data
@@ -50,7 +50,7 @@ The organisers give no data, so `make data` generates a synthetic multi-region I
 |---|---|---|
 | `DATA_DIR` (`.env`) | `../data` | Output directory, relative to `backend/` |
 
-For a different world, run `cd backend && uv run python -m promopilot.datagen --config my.yaml --seed 7 --out ../data`. The YAML only needs the keys it overrides. The same seed and config always give byte-identical files. Only `promopilot.datagen` and `promopilot.evals` may read `data/ground_truth/`.
+For a different world, run `cd backend && uv run python -m promopilot.datagen --config my.yaml --seed 7 --out ../data --load`. The YAML only needs the keys it overrides. The same seed and config always give byte-identical files. Loading is idempotent: the first Alembic migration creates the tables, and every load replaces their rows in one transaction. The app reads them through `promopilot.data.RetailData`, whose time-dependent queries take an explicit as-of week and never return sales, promotions, baskets or competitor prices at or after it (ADR 0008). Only `promopilot.datagen` and `promopilot.evals` may read `data/ground_truth/`.
 
 ## API
 
