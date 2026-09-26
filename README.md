@@ -107,6 +107,12 @@ The API serves the latest relations model only while it was fitted on the live d
 
 **Cannibalisation and halo** (ADR 0033). `line_effects(lines, relations, demand_model, products)` returns one row per plan line and each SKU it moves in its region, in scope or not (ADR 0005). Each row has the SKU's baseline units, the change in units and in percent, the change in profit at its base margin, and that change as cannibalised or halo profit. A detected relation moves units by baseline × (exp(Σ θ·log(p_eff/base)) − 1) over the promo weeks and targeted segments. `pairwise_cannibalisation(line_i, line_j, ...)` is what two substitute lines in one region lose together beyond their single-line figures, for the optimiser's `y_ij` terms. The web app's `CannibalisationCallout` and `HaloCallout` read "Promoting A reduces B's units by N% (−₹X profit)" and "…lifts…", showing effects of 1% or more, the top 3 by profit.
 
+## Promo options
+
+`promopilot.optimizer.generate_options(request, context)` enumerates every promo option for a planning request (SPEC §9.3, ADR 0035). For each in-scope SKU and region it lists mechanism × depth × duration × start week × target segment. PCT_OFF and FIXED_PRICE use 5–50% depths, BOGO uses 50% only, and BUNDLE uses 10–25% with each detected complement as its partner, in scope or not. Every duration from 1 to 4 weeks is tried at every start week that fits inside the promo window, for each of the four segments and for All customers. Before prediction it prunes options deeper than the policy maximum discount, options that sell the anchor or partner below unit cost (unless that SKU is overstocked in the region), and FIXED_PRICE depths that land on a charm price a shallower depth already offers. It predicts the rest in one batch. It then prunes options whose P90 units (mean + 1.2816 × std) exceed the anchor's pooled available stock, or the partner's. Each survivor carries its predictions, cannibalisation and halo, and clearance value. The result is a frozen `PromoOptions`: the plan lines, a table with one row per line, the enumerated count, and the pruned count per reason.
+
+The `generate_candidates` tool takes a planning request plus optional mechanisms, target segments and SKU ids. It keeps the full set in an in-process `CandidateStore` and returns a summary: counts, pruned counts per reason, counts per region and mechanism, the top 20 options by value, and a `candidate_set_id` for the optimiser. On the seed-42 demo brief (Snacks and Beverages, North and West, Diwali weeks 108–109) it enumerates 28,980 options, keeps 10,988 and takes about 7 s.
+
 ## LLM providers
 
 Agents reach an LLM only through `promopilot.llm` (ADR 0001, ADR 0019, ADR 0027). `LLM_PROVIDER` picks the provider:
@@ -206,6 +212,7 @@ docs/agents/ Agent workflow config (issue tracker, triage labels, domain docs)
 - [ADR 0032: Data tools read at a bound as-of week, pool stock per region, and a deterministic resolver scores brief phrases](docs/adr/0032-data-tools-as-of-source-and-brief-resolution.md)
 - [ADR 0033: Cannibalisation and halo per plan line use the oracle's method on fitted inputs, with a pairwise correction for promoted substitutes](docs/adr/0033-cannibalisation-and-halo-per-plan-line.md)
 - [ADR 0034: The data explorer loads flat lists once, filters them in the browser, and names each number's source tool](docs/adr/0034-data-explorer-and-catalogue-endpoints.md)
+- [ADR 0035: Promo options are enumerated in full, pruned before and after one batch prediction, and handed to the optimiser through an in-process store](docs/adr/0035-promo-option-generation.md)
 
 The domain glossary is [CONTEXT.md](CONTEXT.md).
 

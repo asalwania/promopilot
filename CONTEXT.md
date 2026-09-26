@@ -177,8 +177,11 @@ Who a promotion is offered to: either one segment, as a segment-exclusive offer 
 _Avoid_: target audience, targeting
 
 **Promo option**:
-One fully specified possibility (SKU, region, mechanism, depth, duration, start week, target segment) together with its predicted outcomes.
+One fully specified possibility (SKU, region, mechanism, depth, duration, start week, target segment) together with its predicted outcomes. A planning request's promo options are enumerated in full and pruned when they are deeper than the maximum discount, below unit cost without overstock, a repeated charm price, or when their P90 units exceed available stock (ADR 0035). The set that survives is a **candidate set**, which the optimiser selects plan lines from.
 _Avoid_: candidate, option (bare)
+
+**P90 units**:
+The units a promo option sells at the 90th percentile of its prediction: mean + 1.2816 × std. They must fit within available stock.
 
 **Plan line**:
 A promo option selected into a promo plan. A plan has at most one plan line per SKU per region.

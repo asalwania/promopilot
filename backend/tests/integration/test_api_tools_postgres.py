@@ -95,6 +95,7 @@ async def test_the_api_serves_the_data_tools_at_the_loaded_datas_as_of_week(
     app = build_app()
     async with app.router.lifespan_context(app):
         tools = app.state.tools
+        assert "generate_candidates" in {spec.name for spec in tools.specs()}
         scope = await tools.call("get_scope_data", {"regions": ["North"]})
         stock = await tools.call("get_inventory_status", {"sku_ids": [sku_id]})
         holidays = await tools.call(
