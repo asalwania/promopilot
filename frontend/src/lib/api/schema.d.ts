@@ -212,6 +212,29 @@ export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
         /**
+         * BindingConstraint
+         * @description A constraint that limits the plan: dropping it gives a strictly better objective, or,
+         *     when time ran out, one that may.
+         */
+        BindingConstraint: {
+            /** Category */
+            category?: string | null;
+            evidence: components["schemas"]["BindingEvidence"];
+            kind: components["schemas"]["ConstraintKind"];
+            /** Limit */
+            limit: number;
+            /** Objective Gain */
+            objective_gain: number | null;
+            region?: components["schemas"]["Region"] | null;
+            source: components["schemas"]["ConstraintSource"];
+        };
+        /**
+         * BindingEvidence
+         * @description How sure the optimiser is that a constraint binds (ADR 0038).
+         * @enum {string}
+         */
+        BindingEvidence: "exact" | "lower_bound" | "unproven";
+        /**
          * CompetitorGap
          * @description One SKU in one region against the competitor's latest price before the as-of week.
          */
@@ -302,6 +325,18 @@ export interface components {
              */
             theta: number | null;
         };
+        /**
+         * ConstraintKind
+         * @description A plan-level constraint the optimiser enforces (ADR 0036, ADR 0038).
+         * @enum {string}
+         */
+        ConstraintKind: "marketing_budget" | "minimum_margin" | "margin_floor" | "max_promoted_skus";
+        /**
+         * ConstraintSource
+         * @description Who set a constraint: only the brief's constraints may be relaxed (ADR 0007).
+         * @enum {string}
+         */
+        ConstraintSource: "brief" | "company_policy";
         /** CreateSessionRequest */
         CreateSessionRequest: {
             /**
@@ -433,6 +468,28 @@ export interface components {
             version: number;
         };
         /**
+         * NotSelectedOption
+         * @description The best option of a SKU and region with no plan line, and why it was left out.
+         */
+        NotSelectedOption: {
+            /**
+             * Cannibalises
+             * @default []
+             */
+            cannibalises: string[];
+            option: components["schemas"]["PlanLine"];
+            /** Reasons */
+            reasons: components["schemas"]["NotSelectedReason"][];
+            /** Value */
+            value: number;
+        };
+        /**
+         * NotSelectedReason
+         * @description Why a promo option is not in the plan: a rule it breaks alone or added to the plan.
+         * @enum {string}
+         */
+        NotSelectedReason: "low_uplift" | "out_of_stock" | "breaks_policy" | "over_budget" | "breaks_margin" | "max_promoted_skus" | "cannibalises" | "time_limit";
+        /**
          * PlanLine
          * @description A promo option selected into a promo plan: one (SKU, region) decision (ADR 0004).
          */
@@ -457,12 +514,25 @@ export interface components {
          */
         PlanRevision: {
             /**
+             * Binding Constraints
+             * @default []
+             */
+            binding_constraints: components["schemas"]["BindingConstraint"][];
+            /**
              * Lines
              * @default []
              */
             lines: components["schemas"]["PlanRevisionLine"][];
+            /**
+             * Not Selected
+             * @default []
+             */
+            not_selected: components["schemas"]["NotSelectedOption"][];
             /** Number */
             number: number;
+            /** Objective */
+            objective?: number | null;
+            solver_status?: components["schemas"]["SolveStatus"] | null;
         };
         /**
          * PlanRevisionLine
@@ -476,6 +546,7 @@ export interface components {
             line: components["schemas"]["PlanLine"];
             /** Promo Cost */
             promo_cost: number;
+            why_chosen?: components["schemas"]["WhyChosen"] | null;
         };
         /**
          * PlanningRequest
@@ -577,6 +648,18 @@ export interface components {
          * @enum {string}
          */
         Segment: "Value Seekers" | "Families" | "Premium" | "Young Urban";
+        /** SelectionReason */
+        SelectionReason: {
+            /** Amount */
+            amount: number;
+            code: components["schemas"]["SelectionReasonCode"];
+        };
+        /**
+         * SelectionReasonCode
+         * @description A positive part of a plan line's value (ADR 0005, ADR 0035).
+         * @enum {string}
+         */
+        SelectionReasonCode: "incremental_profit" | "clearance_value" | "halo";
         /** SessionCreated */
         SessionCreated: {
             /**
@@ -609,6 +692,11 @@ export interface components {
          * @enum {string}
          */
         SessionStatus: "planning" | "awaiting_clarification" | "awaiting_approval" | "approved" | "rejected" | "failed";
+        /**
+         * SolveStatus
+         * @enum {string}
+         */
+        SolveStatus: "OPTIMAL" | "FEASIBLE" | "INFEASIBLE";
         /** Store */
         Store: {
             /** City */
@@ -652,6 +740,19 @@ export interface components {
             msg: string;
             /** Error Type */
             type: string;
+        };
+        /**
+         * WhyChosen
+         * @description Why a plan line was chosen: the positive parts of its value, what it is worth alone,
+         *     and whether it is the best option the optimiser could pick for its SKU and region.
+         */
+        WhyChosen: {
+            /** Best For Sku Region */
+            best_for_sku_region: boolean;
+            /** Reasons */
+            reasons: components["schemas"]["SelectionReason"][];
+            /** Value */
+            value: number;
         };
     };
     responses: never;

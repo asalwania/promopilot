@@ -32,6 +32,11 @@ export const planLines: PlanRevisionLine[] = [
     expected_units: 812.5,
     promo_cost: 13812.5,
     expected_incremental_profit: -13812.5,
+    why_chosen: {
+      reasons: [{ code: "clearance_value", amount: 20000 }],
+      value: 6187.5,
+      best_for_sku_region: true,
+    },
   },
   {
     line: {
@@ -47,6 +52,11 @@ export const planLines: PlanRevisionLine[] = [
     expected_units: 1540,
     promo_cost: 123456.4,
     expected_incremental_profit: -123456.4,
+    why_chosen: {
+      reasons: [{ code: "clearance_value", amount: 130000 }],
+      value: 6543.6,
+      best_for_sku_region: false,
+    },
   },
 ];
 
@@ -64,7 +74,38 @@ export const awaitingApprovalSession: SessionResponse = {
     marketing_budget: 200000,
     min_margin: null,
   },
-  plan_revision: { number: 1, lines: planLines },
+  plan_revision: {
+    number: 1,
+    lines: planLines,
+    solver_status: "OPTIMAL",
+    objective: 12731.1,
+    binding_constraints: [
+      {
+        kind: "marketing_budget",
+        source: "brief",
+        limit: 200000,
+        evidence: "exact",
+        objective_gain: 812.4,
+      },
+    ],
+    not_selected: [
+      {
+        option: {
+          sku_id: "SKU0007",
+          region: "North",
+          mechanism: "BOGO",
+          depth_pct: 50,
+          start_week: 105,
+          duration_weeks: 2,
+          target_segment: "Families",
+          bundle_partner_sku_id: null,
+        },
+        value: -250,
+        reasons: ["low_uplift"],
+        cannibalises: [],
+      },
+    ],
+  },
 };
 
 export const failedSession: SessionResponse = {
