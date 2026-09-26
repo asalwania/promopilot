@@ -77,6 +77,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/relations/{sku_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Relations */
+        get: operations["get_relations_api_relations__sku_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/sessions": {
         parameters: {
             query?: never;
@@ -201,6 +218,28 @@ export interface components {
             /** Undercut Threshold */
             undercut_threshold: number;
         };
+        /** Complement */
+        Complement: {
+            /**
+             * Lift
+             * @description P(both in a basket) / (P(one) x P(other)).
+             */
+            lift: number;
+            /** Sku Id */
+            sku_id: string;
+            /** Std Error */
+            std_error: number | null;
+            /**
+             * Support
+             * @description Share of baskets holding both SKUs.
+             */
+            support: number;
+            /**
+             * Theta
+             * @description Cross-price effect, or null if not estimable.
+             */
+            theta: number | null;
+        };
         /** CreateSessionRequest */
         CreateSessionRequest: {
             /**
@@ -284,6 +323,21 @@ export interface components {
             models: components["schemas"]["ModelEntry"][];
         };
         /**
+         * ModelVersion
+         * @description The registered model that produced the numbers, so a plan can be traced to it.
+         */
+        ModelVersion: {
+            /** As Of Week */
+            as_of_week: number;
+            /**
+             * Model Id
+             * Format: uuid
+             */
+            model_id: string;
+            /** Version */
+            version: number;
+        };
+        /**
          * PlanLine
          * @description A promo option selected into a promo plan: one (SKU, region) decision (ADR 0004).
          */
@@ -358,6 +412,19 @@ export interface components {
          */
         Region: "North" | "South" | "East" | "West";
         /**
+         * RelationsResponse
+         * @description A SKU's substitutes (strongest first) and complements (highest lift first).
+         */
+        RelationsResponse: {
+            /** Complements */
+            complements: components["schemas"]["Complement"][];
+            model: components["schemas"]["ModelVersion"];
+            /** Sku Id */
+            sku_id: string;
+            /** Substitutes */
+            substitutes: components["schemas"]["Substitute"][];
+        };
+        /**
          * Scope
          * @description The regions and categories a planning request covers, optionally narrowed to SKUs.
          */
@@ -404,6 +471,20 @@ export interface components {
          * @enum {string}
          */
         SessionStatus: "planning" | "awaiting_clarification" | "awaiting_approval" | "approved" | "rejected" | "failed";
+        /** Substitute */
+        Substitute: {
+            /** Q Value */
+            q_value: number;
+            /** Sku Id */
+            sku_id: string;
+            /** Std Error */
+            std_error: number;
+            /**
+             * Theta
+             * @description Cross-price effect: positive for a substitute.
+             */
+            theta: number;
+        };
         /**
          * TargetSegment
          * @description Who a plan line is offered to: one segment exclusively, or All customers (ADR 0006).
@@ -534,6 +615,51 @@ export interface operations {
             };
             /** @description A retrain is running or no data */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    get_relations_api_relations__sku_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sku_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RelationsResponse"];
+                };
+            };
+            /** @description No such SKU */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description No relations model fitted on the live demand model */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };

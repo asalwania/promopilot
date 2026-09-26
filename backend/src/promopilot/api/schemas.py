@@ -6,6 +6,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field, field_validator
 
+from promopilot.agents.tools.estimate_demand import ModelVersion
+from promopilot.agents.tools.get_relations import Complement, Substitute
 from promopilot.domain import PlanningRequest, PlanningSession, PlanRevision, SessionStatus
 from promopilot.models.registry import ModelKind, RegisteredModel
 
@@ -38,6 +40,15 @@ class ModelList(BaseModel):
     """Registered models, newest first."""
 
     models: list[ModelEntry]
+
+
+class RelationsResponse(BaseModel):
+    """A SKU's substitutes (strongest first) and complements (highest lift first)."""
+
+    model: ModelVersion
+    sku_id: str
+    substitutes: list[Substitute]
+    complements: list[Complement]
 
 
 class HealthChecks(BaseModel):

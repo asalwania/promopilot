@@ -12,11 +12,13 @@ from promopilot import __version__
 from promopilot.agents.tools import ToolRegistry
 from promopilot.agents.tools.estimate_demand import estimate_demand_tool
 from promopilot.agents.tools.get_competitor_gaps import get_competitor_gaps_tool
+from promopilot.agents.tools.get_relations import get_relations_tool
 from promopilot.agents.tools.holidays import get_holidays_tool
 from promopilot.agents.tools.inventory_status import get_inventory_status_tool
 from promopilot.agents.tools.scope_data import get_scope_data_tool
 from promopilot.api.competitors import CompetitorService, competitors_router
 from promopilot.api.models import ModelService, models_router
+from promopilot.api.relations import RelationsService, relations_router
 from promopilot.api.schemas import HealthChecks, HealthResponse
 from promopilot.api.sessions import SessionService, sessions_router
 from promopilot.config import Settings
@@ -26,6 +28,8 @@ from promopilot.domain import CompanyPolicy
 from promopilot.llm import build_provider
 from promopilot.models.demand import DemandModel
 from promopilot.models.registry import LatestModel, ModelKind, ModelRegistry
+from promopilot.models.relations import Relations
+from promopilot.models.serving import LiveRelations
 
 log = structlog.get_logger(__name__)
 
@@ -45,6 +49,7 @@ def create_app(
     sessions: SessionService,
     models: ModelService | None = None,
     competitors: CompetitorService | None = None,
+    relations: RelationsService | None = None,
 ) -> FastAPI:
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
@@ -64,6 +69,8 @@ def create_app(
         app.include_router(models_router(models))
     if competitors is not None:
         app.include_router(competitors_router(competitors))
+    if relations is not None:
+        app.include_router(relations_router(relations))
 
     # `/health` serves the container healthcheck; `/api/health` is what the web proxy forwards.
     @app.get("/health")
@@ -99,8 +106,14 @@ def build_app() -> FastAPI:
     )
     registry = ModelRegistry(engine, settings.model_dir)
     demand_model = LatestModel(registry, ModelKind.DEMAND, DemandModel)
+    # Relations are served only on the demand model they were fitted on (ADR 0033).
+    relations_model = LiveRelations(
+        LatestModel(registry, ModelKind.RELATIONS, Relations), demand_model
+    )
     data = RetailData(engine)
-    models = ModelService(registry=registry, data=data, live=demand_model)
+    models = ModelService(
+        registry=registry, data=data, live=demand_model, live_relations=relations_model
+    )
     policy = CompanyPolicy()
     app = create_app(
         database_probe=probe,
@@ -108,6 +121,7 @@ def build_app() -> FastAPI:
         sessions=sessions,
         models=models,
         competitors=CompetitorService(data, policy=policy),
+        relations=RelationsService(relations_model, data),
     )
     # The agents' tools (ADR 0025): the model is resolved per call, so a retrain is picked up,
     # and so is the as-of week, so newly loaded data moves the data tools' clock (ADR 0032).
@@ -118,6 +132,7 @@ def build_app() -> FastAPI:
             get_inventory_status_tool(data, data.default_as_of_week, policy=policy),
             get_holidays_tool(data, data.default_as_of_week),
             get_competitor_gaps_tool(data, data.default_as_of_week, policy=policy),
+            get_relations_tool(relations_model, data),
         ]
     )
     serve = app.router.lifespan_context

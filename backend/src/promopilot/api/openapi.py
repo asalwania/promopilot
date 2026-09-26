@@ -9,12 +9,15 @@ from sqlalchemy.ext.asyncio import create_async_engine
 from promopilot.api.competitors import CompetitorService
 from promopilot.api.main import create_app
 from promopilot.api.models import ModelService
+from promopilot.api.relations import RelationsService
 from promopilot.api.sessions import SessionService
 from promopilot.data import RetailData, SessionStore
 from promopilot.domain import CompanyPolicy
 from promopilot.llm import FakeProvider
 from promopilot.models.demand import DemandModel
 from promopilot.models.registry import LatestModel, ModelKind, ModelRegistry
+from promopilot.models.relations import Relations
+from promopilot.models.serving import LiveRelations
 
 
 class _UnusedProbe:
@@ -31,10 +34,10 @@ def main() -> None:
         store=SessionStore(engine), data=RetailData(engine), llm=FakeProvider([])
     )
     registry = ModelRegistry(engine, Path("unused"))
+    demand = LatestModel(registry, ModelKind.DEMAND, DemandModel)
+    relations = LiveRelations(LatestModel(registry, ModelKind.RELATIONS, Relations), demand)
     models = ModelService(
-        registry=registry,
-        data=RetailData(engine),
-        live=LatestModel(registry, ModelKind.DEMAND, DemandModel),
+        registry=registry, data=RetailData(engine), live=demand, live_relations=relations
     )
     probe = _UnusedProbe()
     app = create_app(
@@ -43,6 +46,7 @@ def main() -> None:
         sessions=sessions,
         models=models,
         competitors=CompetitorService(RetailData(engine), policy=CompanyPolicy()),
+        relations=RelationsService(relations, RetailData(engine)),
     )
     document = json.dumps(app.openapi(), indent=2, sort_keys=True) + "\n"
     # Write bytes so Windows doesn't emit CRLF; CI diffs this file on Linux.

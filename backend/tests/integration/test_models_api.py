@@ -1,4 +1,7 @@
-"""The models API against real Postgres: list, retrain, and the new version going live (#29)."""
+"""The models API against real Postgres: list, retrain, and the new versions going live (#29).
+
+Retrain puts relations live too, and `GET /api/relations/{sku_id}` serves them (#31).
+"""
 
 import asyncio
 from collections.abc import AsyncIterator, Iterator
@@ -12,10 +15,13 @@ from testcontainers.community.postgres import PostgresContainer
 
 from promopilot.api.main import create_app
 from promopilot.api.models import ModelService
+from promopilot.api.relations import RelationsService
 from promopilot.data import RetailData, load_dataset
 from promopilot.datagen import GeneratedDataset, write
 from promopilot.models.demand import DemandModel
 from promopilot.models.registry import LatestModel, ModelKind, ModelRegistry
+from promopilot.models.relations import Relations
+from promopilot.models.serving import LiveRelations
 from tests.offline import offline_sessions
 
 pytestmark = pytest.mark.integration
@@ -48,11 +54,14 @@ async def running_api(url: str, model_dir: Path) -> AsyncIterator[AsyncClient]:
         await connection.exec_driver_sql("TRUNCATE model_registry")
     registry = ModelRegistry(engine, model_dir)
     live = LatestModel(registry, ModelKind.DEMAND, DemandModel)
+    relations = LiveRelations(LatestModel(registry, ModelKind.RELATIONS, Relations), live)
+    data = RetailData(engine)
     app = create_app(
         database_probe=HealthyProbe(),
         model_status=live,
         sessions=offline_sessions(),
-        models=ModelService(registry=registry, data=RetailData(engine), live=live),
+        models=ModelService(registry=registry, data=data, live=live, live_relations=relations),
+        relations=RelationsService(relations, data),
     )
     try:
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
@@ -70,16 +79,20 @@ async def test_an_empty_registry_lists_no_models(postgres_url: str, tmp_path: Pa
 
 
 async def test_retrain_registers_a_new_version_that_becomes_the_latest_and_live(
-    postgres_url: str, tmp_path: Path
+    postgres_url: str, tmp_path: Path, small_dataset: GeneratedDataset
 ) -> None:
+    sku_id = str(small_dataset.products["sku_id"].iloc[0])
     async with running_api(postgres_url, tmp_path) as client:
         missing = (await client.get("/health")).json()
+        no_relations = await client.get(f"/api/relations/{sku_id}")
         first = await client.post("/api/models/retrain")
         second = await client.post("/api/models/retrain")
         listed = await client.get("/api/models")
         health = (await client.get("/health")).json()
+        served = await client.get(f"/api/relations/{sku_id}")
 
     assert missing["checks"]["model_registry"] == "missing"
+    assert no_relations.status_code == 503
     assert first.status_code == 201
     assert second.status_code == 201
     created = second.json()
@@ -95,11 +108,14 @@ async def test_retrain_registers_a_new_version_that_becomes_the_latest_and_live(
     assert [model["live"] for model in demand] == [True, False]
     assert demand[0] == created
     assert demand[1]["model_id"] == first.json()["model_id"]
-    # Retrain fits relations too; the API does not serve them yet (#31).
+    # Retrain fits relations too, on the new demand version, and puts them live (#31).
     relations = [model for model in models if model["kind"] == "relations"]
     assert [model["version"] for model in relations] == [2, 1]
     assert [model["metrics"]["demand_version"] for model in relations] == [2, 1]
-    assert not any(model["live"] for model in relations)
+    assert [model["live"] for model in relations] == [True, False]
+    assert served.status_code == 200
+    assert served.json()["model"]["model_id"] == relations[0]["model_id"]
+    assert served.json()["sku_id"] == sku_id
     assert health["checks"]["model_registry"] == "ok"
 
 

@@ -20,18 +20,28 @@ share of baskets holding both). Where theta is estimable, a candidate is confirm
 theta < 0 with BH q < 0.05 over the estimable candidates; otherwise lift alone decides.
 
 Every fit sees only sales, promotions and baskets strictly before the as-of week (ADR 0008).
+
+Effect calculators (ADR 0033): a plan line's price cut moves every detected substitute and
+complement B in its region, in scope or not (ADR 0005), over its promo weeks and targeted
+segments, by B's baseline x (exp(sum of theta x log(p_eff / base)) - 1), at B's base margin.
+A fall in profit is cannibalisation and a rise is halo, as the oracle counts them (ADR 0017).
+`pairwise_cannibalisation` corrects the single-line figures for two lines promoted together.
 """
 
 import warnings
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 from itertools import combinations
+from typing import Protocol
 
 import numpy as np
 import pandas as pd
 import statsmodels.api as sm
 from statsmodels.stats.multitest import multipletests
 
-from promopilot.models.demand import DemandHistory, DemandModel
+from promopilot.domain import PlanLine, Segment, TargetSegment
+from promopilot.economics import effective_unit_price
+from promopilot.models.demand import DemandHistory, DemandModel, PredictionContext
 
 CELL = ["week_id", "region", "segment"]
 """The unit a cross effect is fitted on: our prices are set per region and segment."""
@@ -292,3 +302,232 @@ def _bh(p_values: pd.Series) -> np.ndarray:
     if p_values.empty:
         return np.array([], dtype=float)
     return np.asarray(multipletests(p_values.to_numpy(dtype=float), method="fdr_bh")[1])
+
+
+# --- effect calculators (ADR 0033) ------------------------------------------------------
+
+
+class RelationLookup(Protocol):
+    """The detected relations of a SKU (`Relations`)."""
+
+    def substitutes(self, sku_id: str) -> pd.DataFrame: ...
+
+    def complements(self, sku_id: str) -> pd.DataFrame: ...
+
+
+class BaselineForecast(Protocol):
+    """No-promotion units per week, store, SKU and segment (`DemandModel.baseline`)."""
+
+    def baseline(
+        self,
+        weeks: Iterable[int],
+        *,
+        regions: Sequence[str] | None = None,
+        store_ids: Sequence[str] | None = None,
+        sku_ids: Sequence[str] | None = None,
+    ) -> pd.DataFrame: ...
+
+
+class LineForecast(BaselineForecast, Protocol):
+    """Also a line's own SKUs per week and segment (`DemandModel.line_paths`)."""
+
+    def line_paths(
+        self, options: Sequence[PlanLine], context: PredictionContext
+    ) -> pd.DataFrame: ...
+
+
+EFFECT_COLUMNS = [
+    "line",
+    "region",
+    "sku_id",
+    "relation",
+    "baseline_units",
+    "units_change",
+    "units_change_pct",
+    "profit_change",
+    "cannibalised_profit",
+    "halo_profit",
+]
+"""One row per plan line and SKU it moves (`line_effects`)."""
+
+
+def line_effects(
+    lines: Sequence[PlanLine],
+    relations: RelationLookup,
+    demand_model: BaselineForecast,
+    products: pd.DataFrame,
+) -> pd.DataFrame:
+    """The cannibalisation and halo of each plan line, as if it ran alone (ADR 0033).
+
+    One row (EFFECT_COLUMNS) per line and each detected substitute or complement with an
+    estimated theta of the line's SKUs, other than those SKUs, in the line's region, the
+    largest profit change first:
+
+    - baseline_units: that SKU's no-promotion units over the promo weeks, every segment;
+    - units_change: baseline units of the targeted segments x (exp(c) - 1), where c sums
+      theta x log(effective price / base price) over the line's SKUs;
+    - units_change_pct: units_change as a percentage of baseline_units;
+    - profit_change: units_change x (base price - unit cost), in rupees;
+    - cannibalised_profit is the profit lost (a fall) and halo_profit the profit gained.
+
+    Other SKUs are assumed at base price, and the units are not stock-capped (ADR 0017).
+    `products` needs sku_id, base_price and unit_cost.
+    """
+    economics = _Economics.of(products)
+    frames = []
+    for n, line in enumerate(lines):
+        shifts = _price_shifts(line, relations, economics)
+        if not shifts:
+            continue
+        affected = sorted(shifts)
+        baseline = demand_model.baseline(
+            _weeks(line), regions=[line.region.value], sku_ids=affected
+        )
+        targeted = baseline[baseline["segment"].isin(_segments(line))]
+        base = _units_by_sku(baseline, affected)
+        units_change = _units_by_sku(targeted, affected) * np.expm1(
+            [shifts[sku_id][1] for sku_id in affected]
+        )
+        profit_change = units_change * economics.margins(affected)
+        frames.append(
+            pd.DataFrame(
+                {
+                    "line": n,
+                    "region": line.region.value,
+                    "sku_id": affected,
+                    "relation": [shifts[sku_id][0] for sku_id in affected],
+                    "baseline_units": base,
+                    "units_change": units_change,
+                    "units_change_pct": np.divide(
+                        100 * units_change, base, out=np.zeros_like(base), where=base > 0
+                    ),
+                    "profit_change": profit_change,
+                    "cannibalised_profit": np.maximum(-profit_change, 0.0),
+                    "halo_profit": np.maximum(profit_change, 0.0),
+                }
+            )
+        )
+    if not frames:
+        return pd.DataFrame(columns=EFFECT_COLUMNS)
+    effects = pd.concat(frames, ignore_index=True)
+    effects = effects.assign(size=effects["profit_change"].abs())
+    effects = effects.sort_values(["line", "size", "sku_id"], ascending=[True, False, True])
+    return effects[EFFECT_COLUMNS].reset_index(drop=True)
+
+
+def pairwise_cannibalisation(
+    line: PlanLine,
+    other: PlanLine,
+    relations: RelationLookup,
+    demand_model: LineForecast,
+    products: pd.DataFrame,
+    context: PredictionContext | None = None,
+) -> float:
+    """What promoting two substitute lines together loses beyond their single-line figures.
+
+    The optimiser subtracts it once for each such pair it selects (SPEC §9.4 y_ij, ADR 0033).
+    It is the two lines' single-line figures (own incremental profit plus `line_effects`)
+    minus their joint effect, over the weeks and segments both lines price:
+
+    - each line's own SKUs lose (exp(c) - 1) of their promoted units at their promoted
+      margin, where the other line's single-line figure charged baseline units at base
+      margin;
+    - a SKU both lines move is moved by both at once, not by each separately.
+
+    It is 0 for lines in different regions, with no week or segment in common, or where no
+    SKU of one is a detected substitute of a SKU of the other. It can be negative: a deep
+    promotion that sells at a loss loses less to its substitute's cut.
+    """
+    if line.region is not other.region:
+        return 0.0
+    if not any(
+        partner in set(relations.substitutes(sku_id)["sku_id"])
+        for sku_id in line.skus
+        for partner in other.skus
+    ):
+        return 0.0
+    weeks = sorted(set(_weeks(line)) & set(_weeks(other)))
+    segments = sorted(set(_segments(line)) & set(_segments(other)))
+    if not weeks or not segments:
+        return 0.0
+    economics = _Economics.of(products)
+    shifts = (_price_shifts(line, relations, economics), _price_shifts(other, relations, economics))
+
+    paths = demand_model.line_paths([line, other], context or PredictionContext())
+    paths = paths[paths["week_id"].isin(weeks) & paths["segment"].isin(segments)]
+    interaction = 0.0
+    for n, (own, moved_by) in enumerate(((line, shifts[1]), (other, shifts[0]))):
+        for sku_id in own.skus:
+            if sku_id not in moved_by:
+                continue
+            rows = paths[(paths["option"] == n) & (paths["sku_id"] == sku_id)]
+            base_price = economics.base_price[sku_id]
+            unit_cost = economics.unit_cost[sku_id]
+            promoted = float((rows["units"] * (rows["price"] - unit_cost)).sum())
+            unpromoted = float(rows["baseline_units"].sum()) * (base_price - unit_cost)
+            interaction += float(np.expm1(moved_by[sku_id][1])) * (promoted - unpromoted)
+
+    both = sorted((set(shifts[0]) & set(shifts[1])) - set(line.skus) - set(other.skus))
+    if both:
+        baseline = demand_model.baseline(weeks, regions=[line.region.value], sku_ids=both)
+        units = _units_by_sku(baseline[baseline["segment"].isin(segments)], both)
+        first = np.expm1([shifts[0][sku_id][1] for sku_id in both])
+        second = np.expm1([shifts[1][sku_id][1] for sku_id in both])
+        interaction += float((units * first * second * economics.margins(both)).sum())
+    return -interaction
+
+
+def _price_shifts(
+    line: PlanLine, relations: RelationLookup, economics: "_Economics"
+) -> dict[str, tuple[str, float]]:
+    """The relation and c = sum of theta x log(p_eff / base) of each SKU the line moves."""
+    shifts: dict[str, tuple[str, float]] = {}
+    for sku_id in line.skus:
+        base_price = economics.base_price[sku_id]
+        effective = effective_unit_price(line.mechanism, base_price, line.depth_pct)
+        log_ratio = float(np.log(effective / base_price))
+        for relation, partners in (
+            ("substitute", relations.substitutes(sku_id)),
+            ("complement", relations.complements(sku_id)),
+        ):
+            for partner, theta in zip(partners["sku_id"], partners["theta"], strict=True):
+                if partner in line.skus or not np.isfinite(theta):
+                    continue
+                known, change = shifts.get(str(partner), (relation, 0.0))
+                shifts[str(partner)] = (known, change + float(theta) * log_ratio)
+    return shifts
+
+
+def _units_by_sku(baseline: pd.DataFrame, sku_ids: list[str]) -> np.ndarray:
+    units = baseline.groupby("sku_id")["units"].sum().reindex(sku_ids, fill_value=0.0)
+    return np.asarray(units, dtype=float)
+
+
+@dataclass(frozen=True)
+class _Economics:
+    """Base price and unit cost per SKU, in rupees."""
+
+    base_price: dict[str, float]
+    unit_cost: dict[str, float]
+
+    @classmethod
+    def of(cls, products: pd.DataFrame) -> "_Economics":
+        sku_ids = [str(sku_id) for sku_id in products["sku_id"]]
+        return cls(
+            base_price=dict(zip(sku_ids, map(float, products["base_price"]), strict=True)),
+            unit_cost=dict(zip(sku_ids, map(float, products["unit_cost"]), strict=True)),
+        )
+
+    def margins(self, sku_ids: list[str]) -> np.ndarray:
+        """Base price minus unit cost of each SKU."""
+        return np.array([self.base_price[sku] - self.unit_cost[sku] for sku in sku_ids])
+
+
+def _weeks(line: PlanLine) -> list[int]:
+    return list(range(line.start_week, line.start_week + line.duration_weeks))
+
+
+def _segments(line: PlanLine) -> list[str]:
+    if line.target_segment is TargetSegment.ALL_CUSTOMERS:
+        return [segment.value for segment in Segment]
+    return [line.target_segment.value]

@@ -178,6 +178,16 @@ class DemandModel:
         """
         return self._response.predict(list(options), context, self._baseline)
 
+    def line_paths(self, options: Sequence[PlanLine], context: PredictionContext) -> pd.DataFrame:
+        """`predict` broken down: each option's SKUs per week, SKU and segment, over its region.
+
+        One row per option, week (the promo weeks and the pull-forward weeks after them), SKU
+        (the anchor and a BUNDLE's partner) and segment: units promoted, baseline_units with
+        no promotion, and the price paid. The anchor's units and baseline_units over the promo
+        weeks sum to `predict`'s. Pairwise cannibalisation reads these (ADR 0033).
+        """
+        return self._response.line_paths(list(options), context, self._baseline)
+
     def fitted_history(self, history: DemandHistory) -> pd.DataFrame:
         """The model's in-sample fit: FITTED_COLUMNS per region x SKU x segment x week.
 
@@ -400,48 +410,26 @@ class _Response:
         rows["fitted_units"] = np.exp(rows["offset"] + self.model.log_effect(rows))
         return rows[FITTED_COLUMNS].sort_values(FITTED_COLUMNS[:4], ignore_index=True)
 
+    def line_paths(
+        self, options: list[PlanLine], context: PredictionContext, baseline: _Baseline
+    ) -> pd.DataFrame:
+        rows, promoted, unpromoted = self._paths(options, context, baseline)
+        paths = rows[["promo", "week_id", "sku_id", "segment", "price"]].assign(
+            units=promoted, baseline_units=unpromoted
+        )
+        paths = paths.groupby(["promo", "week_id", "sku_id", "segment"], sort=True).agg(
+            units=("units", "sum"),
+            baseline_units=("baseline_units", "sum"),
+            price=("price", "first"),
+        )
+        return paths.reset_index().rename(columns={"promo": "option"})
+
     def predict(
         self, options: list[PlanLine], context: PredictionContext, baseline: _Baseline
     ) -> Prediction:
-        regions = set(self.stores["region"])
-        for line in options:
-            for sku_id in line.skus:
-                if sku_id not in self.products.index:
-                    raise ValueError(f"unknown SKU {sku_id}")
-            if line.region not in regions:
-                raise ValueError(f"no stores in {line.region}")
-            if line.start_week < self.as_of_week:
-                raise ValueError(
-                    f"{line.sku_id} in {line.region} starts in week {line.start_week}, "
-                    f"before the as-of week {self.as_of_week}"
-                )
-            if line.start_week + line.duration_weeks > self.last_week + 1:
-                raise ValueError(f"{line.sku_id} in {line.region} runs past the calendar")
-        promotions = _as_promotions(options)
-        exposure = _exposure(promotions, self.products)
-        # Every store x segment week of each option's SKUs, through the pull-forward weeks.
-        rows = exposure[["promo", "region", "sku_id", "anchor"]].drop_duplicates()
-        rows = rows.merge(promotions[["start_week", "duration"]], left_on="promo", right_index=True)
-        rows["week_id"] = [
-            list(range(start, min(start + duration + PULL_FORWARD_WEEKS, self.last_week + 1)))
-            for start, duration in zip(rows["start_week"], rows["duration"], strict=True)
-        ]
-        rows = rows.explode("week_id").astype({"week_id": int})
-        rows = rows.merge(self.stores, on="region")
-        rows = rows.merge(pd.DataFrame({"segment": SEGMENTS}), how="cross")
-        rows = _priced(rows, exposure, ["promo", *SERIES], self.products)
-        rows = _with_reference(rows, self._competitors(context))
+        rows, promoted, unpromoted = self._paths(options, context, baseline)
         base_price = rows["base_price"].to_numpy()
         unit_cost = self.products["unit_cost"].reindex(rows["sku_id"]).to_numpy()
-        rows["competitor_price"] = rows["competitor_price"].fillna(rows["base_price"])
-        rows = _with_ratios(rows)
-        plain = _with_ratios(rows.assign(price=base_price, mechanism=None, pull_forward_share=0.0))
-
-        store_baseline = baseline.predict(
-            rows[KEYS], competitor_index=rows["reference_index"].to_numpy()
-        )
-        promoted = store_baseline * np.exp(self.model.log_effect(rows))
-        unpromoted = store_baseline * np.exp(self.model.log_effect(plain))
         price = rows["price"].to_numpy()
         option = rows["promo"].to_numpy()
         anchor = rows["anchor"].to_numpy(dtype=bool)
@@ -487,6 +475,51 @@ class _Response:
             options=table,
             segments=self._by_segment(rows[counted], promoted[counted], unpromoted[counted]),
         )
+
+    def _paths(
+        self, options: list[PlanLine], context: PredictionContext, baseline: _Baseline
+    ) -> tuple[pd.DataFrame, np.ndarray, np.ndarray]:
+        """Every store x segment week of each option's SKUs, through the pull-forward weeks,
+        with the units it sells promoted and unpromoted."""
+        regions = set(self.stores["region"])
+        for line in options:
+            for sku_id in line.skus:
+                if sku_id not in self.products.index:
+                    raise ValueError(f"unknown SKU {sku_id}")
+            if line.region not in regions:
+                raise ValueError(f"no stores in {line.region}")
+            if line.start_week < self.as_of_week:
+                raise ValueError(
+                    f"{line.sku_id} in {line.region} starts in week {line.start_week}, "
+                    f"before the as-of week {self.as_of_week}"
+                )
+            if line.start_week + line.duration_weeks > self.last_week + 1:
+                raise ValueError(f"{line.sku_id} in {line.region} runs past the calendar")
+        promotions = _as_promotions(options)
+        exposure = _exposure(promotions, self.products)
+        rows = exposure[["promo", "region", "sku_id", "anchor"]].drop_duplicates()
+        rows = rows.merge(promotions[["start_week", "duration"]], left_on="promo", right_index=True)
+        rows["week_id"] = [
+            list(range(start, min(start + duration + PULL_FORWARD_WEEKS, self.last_week + 1)))
+            for start, duration in zip(rows["start_week"], rows["duration"], strict=True)
+        ]
+        rows = rows.explode("week_id").astype({"week_id": int})
+        rows = rows.merge(self.stores, on="region")
+        rows = rows.merge(pd.DataFrame({"segment": SEGMENTS}), how="cross")
+        rows = _priced(rows, exposure, ["promo", *SERIES], self.products)
+        rows = _with_reference(rows, self._competitors(context))
+        rows["competitor_price"] = rows["competitor_price"].fillna(rows["base_price"])
+        rows = _with_ratios(rows)
+        plain = _with_ratios(
+            rows.assign(price=rows["base_price"], mechanism=None, pull_forward_share=0.0)
+        )
+
+        store_baseline = baseline.predict(
+            rows[KEYS], competitor_index=rows["reference_index"].to_numpy()
+        )
+        promoted = store_baseline * np.exp(self.model.log_effect(rows))
+        unpromoted = store_baseline * np.exp(self.model.log_effect(plain))
+        return rows, promoted, unpromoted
 
     def _by_segment(
         self, rows: pd.DataFrame, promoted: np.ndarray, unpromoted: np.ndarray
