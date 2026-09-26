@@ -61,5 +61,6 @@ We chose these with the owner:
 ## Consequences
 
 - Until #36, the empty plan is always feasible, so `INFEASIBLE` cannot happen yet. #36 must revisit the "no plan in time" case once clearance targets can make the empty plan infeasible.
-- On the seed-42 demo brief (weeks 108–109, ₹2 lakh), no option has positive incremental profit; the fixed marketing cost outweighs the uplift. Only 92 of 10,981 options are eligible, all clearance lines on two overstocked SKUs. The optimal plan is 4 clearance lines worth about ₹11,248, found in under 0.1 s. A separate issue tracks the demo economics; the optimiser is unchanged by it.
+- On the seed-42 demo brief (weeks 108–109, ₹2 lakh), the world as first generated had no option with positive incremental profit. Only 92 of 10,981 options were eligible, all clearance lines on two overstocked SKUs, and the optimal plan was 4 clearance lines worth about ₹11,248, found in under 0.1 s.
+- After the world was retuned (ADR 0037, #109), 1,935 of 10,396 options are eligible, with 3,796 pairwise terms. The optimal plan has 35 lines, 21 of them without clearance, worth ₹172,384 for ₹199,909 of promo cost. The oracle scores it at +₹66,607 incremental profit. Solving takes about 18 s: about 14 s computes the pairwise terms, and CP-SAT takes about 4 s. That is above SPEC's 10 s optimiser budget, so the pairwise batch needs speeding up. The optimiser's logic is unchanged.
 - OR-Tools is pinned to one exact version, so solver behaviour and determinism do not drift with an upgrade.

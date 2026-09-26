@@ -79,14 +79,14 @@ def test_discount_funding_for_a_segment_exclusive_offer_counts_only_that_segment
 def test_fixed_marketing_cost_is_charged_per_line_week_by_mechanism() -> None:
     policy = CompanyPolicy()
 
-    assert fixed_marketing_cost(Mechanism.PCT_OFF, 2, policy) == pytest.approx(4_000.0)
-    assert fixed_marketing_cost(Mechanism.BOGO, 3, policy) == pytest.approx(9_000.0)
-    assert fixed_marketing_cost(Mechanism.BUNDLE, 1, policy) == pytest.approx(4_000.0)
+    assert fixed_marketing_cost(Mechanism.PCT_OFF, 2, policy) == pytest.approx(1_000.0)
+    assert fixed_marketing_cost(Mechanism.BOGO, 3, policy) == pytest.approx(2_250.0)
+    assert fixed_marketing_cost(Mechanism.BUNDLE, 1, policy) == pytest.approx(1_000.0)
 
 
 def test_promo_cost_is_discount_funding_plus_fixed_marketing_cost() -> None:
     # BUNDLE ₹60 + ₹40 at 20% for Families only, 2 weeks:
-    # anchor ₹12 x 150 = ₹1,800; partner ₹8 x 120 = ₹960; fixed ₹4,000 x 2 = ₹8,000.
+    # anchor ₹12 x 150 = ₹1,800; partner ₹8 x 120 = ₹960; fixed ₹1,000 x 2 = ₹2,000.
     anchor_units = {**UNITS_BY_SEGMENT}
     partner_units = {segment: 0.8 * units for segment, units in UNITS_BY_SEGMENT.items()}
     funding = discount_funding(60.0, 48.0, anchor_units, TargetSegment.FAMILIES) + discount_funding(
@@ -95,7 +95,7 @@ def test_promo_cost_is_discount_funding_plus_fixed_marketing_cost() -> None:
 
     cost = promo_cost(funding, Mechanism.BUNDLE, 2, CompanyPolicy())
 
-    assert cost == pytest.approx(10_760.0)
+    assert cost == pytest.approx(4_760.0)
 
 
 def test_discount_funding_works_elementwise_on_arrays() -> None:

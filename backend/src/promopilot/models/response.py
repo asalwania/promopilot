@@ -16,7 +16,8 @@ Standard errors are heteroskedasticity-robust, since units are overdispersed.
 Empirical Bayes then shrinks every per-SKU estimate toward its subcategory mean (beta per
 segment, mu per mechanism), with the between-SKU variance pooled over subcategories; a
 term a SKU's history never exercised takes the subcategory mean. The posterior standard
-deviation is the reported standard error (ADR 0024).
+deviation is the reported standard error (ADR 0024). The shrunk pull-forward phi is floored
+at 0: a promotion never lifts demand in the weeks after it (ADR 0037).
 """
 
 import warnings
@@ -41,6 +42,8 @@ TERMS: list[tuple[str, str | None]] = [
 """(parameter, level) for every term; beta's level is a segment, mu's a mechanism."""
 UNSHRUNK = {"alpha"}
 """alpha only recalibrates the baseline for its SKU; it has no subcategory prior."""
+NON_NEGATIVE = {"phi"}
+"""Terms whose sign the demand function fixes: the pull-forward dip is never a lift."""
 
 ROW_COLUMNS = [
     "sku_id",
@@ -190,7 +193,10 @@ def _shrink(coefficients: pd.DataFrame) -> pd.DataFrame:
             shrunk.append(term.fillna({"estimate": 0.0, "std_error": 0.0}))
         else:
             shrunk.append(_empirical_bayes(term))
-    return pd.concat(shrunk).sort_index()
+    result = pd.concat(shrunk).sort_index()
+    floored = result["parameter"].isin(NON_NEGATIVE)
+    result.loc[floored, "estimate"] = result.loc[floored, "estimate"].clip(lower=0.0)
+    return result
 
 
 def _empirical_bayes(term: pd.DataFrame) -> pd.DataFrame:

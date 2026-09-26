@@ -133,11 +133,11 @@ demand:
     - [Bakery, Beverages]
     - [Snacks, Dairy]
   mechanism_effect:                   # log-units beyond the price effect
-    PCT_OFF: [0.05, 0.15]
-    FIXED_PRICE: [0.08, 0.18]
-    BOGO: [0.15, 0.30]
-    BUNDLE: [0.10, 0.20]
-  pull_forward: [0.1, 0.4]            # phi: log-units lost x share of the last k weeks on promo
+    PCT_OFF: [0.15, 0.45]
+    FIXED_PRICE: [0.24, 0.54]
+    BOGO: [0.45, 0.90]
+    BUNDLE: [0.30, 0.60]
+  pull_forward: [0.05, 0.20]          # phi: log-units lost x share of the last k weeks on promo
   pull_forward_window_weeks: 4
   dispersion: [5, 20]                 # negative binomial size
 

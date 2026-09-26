@@ -62,6 +62,8 @@ The organisers give no data, so `make data` generates a synthetic multi-region I
 - A festival calendar on real dates (week 0 = 2024-09-30), 104 weeks of per-segment sales and promotion history.
 - Competitor prices, weekly inventory, 200,000 baskets, and a 52-week future horizon.
 
+The world is tuned so that promotions can pay, not only clearance lines (ADR 0037). Mechanism effects are strong enough to offset the price cut, the post-promotion dip is moderate, and the company-policy fixed marketing cost is ₹500 per line-week (₹750 for BOGO, ₹1,000 for BUNDLE). On the seed-42 Diwali demo brief, short, shallow promotions on regular SKUs earn true incremental profit alongside the clearance lines.
+
 | Setting | Default | Meaning |
 |---|---|---|
 | `DATA_DIR` (`.env`) | `../data` | Output directory, relative to `backend/` |
@@ -70,7 +72,7 @@ For a different world, run `cd backend && uv run python -m promopilot.datagen --
 
 ## Demand model
 
-`make train` fits the baseline demand forecast on the data in Postgres (SPEC §9.1, ADR 0023). By default it uses the as-of week after the history (`--as-of-week` and `--seed`, default 42, override this) and registers a new version. The baseline is LightGBM. It forecasts no-promotion units per store × SKU × segment × week and learns only from weeks free of promotions and their 4-week pull-forward dip. It never sees history at or after the as-of week (ADR 0008). Before the final fit, it is validated on the last 12 weeks: the registry records holdout WAPE at the model grain (`baseline_wape`) and summed to store × SKU and region × SKU. On the seed-42 world these are 0.44, 0.25 and 0.14.
+`make train` fits the baseline demand forecast on the data in Postgres (SPEC §9.1, ADR 0023). By default it uses the as-of week after the history (`--as-of-week` and `--seed`, default 42, override this) and registers a new version. The baseline is LightGBM. It forecasts no-promotion units per store × SKU × segment × week and learns only from weeks free of promotions and their 4-week pull-forward dip. It never sees history at or after the as-of week (ADR 0008). Before the final fit, it is validated on the last 12 weeks: the registry records holdout WAPE at the model grain (`baseline_wape`) and summed to store × SKU and region × SKU. On the seed-42 world these are 0.44, 0.25 and 0.13.
 
 The promo response is fitted on the same history (ADR 0024). A Poisson GLM per SKU estimates:
 - own-price elasticity per segment;
@@ -78,7 +80,7 @@ The promo response is fitted on the same history (ADR 0024). A Poisson GLM per S
 - mechanism effects;
 - pull-forward.
 
-Empirical Bayes shrinks each estimate toward its subcategory. `DemandModel.predict(options, context)` takes a batch of plan lines. It returns each one's mean and std of units, its uplift net of pull-forward, and its revenue, gross profit, margin and promo cost. `coefficients()` lists the fitted terms with their standard errors. The registry also records `response_skus_fitted` and `elasticity_median_std_error`. On the seed-42 world the median error of the recovered elasticities is 7.6%. Training takes 40 to 90 seconds.
+Empirical Bayes shrinks each estimate toward its subcategory, and the pull-forward dip is floored at 0 so a promotion never lifts the weeks after it (ADR 0037). `DemandModel.predict(options, context)` takes a batch of plan lines. It returns each one's mean and std of units, its uplift net of pull-forward, and its revenue, gross profit, margin and promo cost. `coefficients()` lists the fitted terms with their standard errors. The registry also records `response_skus_fitted` and `elasticity_median_std_error`. On the seed-42 world the median error of the recovered elasticities is 8.1%. Training takes 40 to 90 seconds.
 
 | Setting | Default | Meaning |
 |---|---|---|
@@ -101,7 +103,7 @@ Three data tools show the planner the world as of a week (ADR 0032). `get_scope_
 - **Substitutes**: for each within-subcategory pair, one pooled Poisson GLM on top of the demand model's fit estimates a symmetric cross-price effect θ. A pair is kept if its Benjamini–Hochberg q across all tested pairs is below 0.05 and θ ≥ 0.1 (ADR 0013).
 - **Complements**: basket lift above 1.5, where at least 0.1% of baskets hold both SKUs. Where θ is estimable, the pair must also have θ < 0 with q < 0.05.
 
-The thresholds live in `RelationsConfig`. The registry records them with the counts and the demand version used. On the seed-42 world, substitute precision/recall is 0.89/1.00 and complement precision/recall is 1.00/1.00.
+The thresholds live in `RelationsConfig`. The registry records them with the counts and the demand version used. On the seed-42 world, substitute precision/recall is 0.87/1.00 and complement precision/recall is 1.00/0.97.
 
 The API serves the latest relations model only while it was fitted on the live demand model; otherwise `get_relations` answers `model_unavailable` and `GET /api/relations/{sku_id}` answers `503` (ADR 0033). The `get_relations` tool takes 1 to 50 SKU ids and returns each one's substitutes and complements with the model's id and version.
 
@@ -111,7 +113,7 @@ The API serves the latest relations model only while it was fitted on the live d
 
 `promopilot.optimizer.generate_options(request, context)` enumerates every promo option for a planning request (SPEC §9.3, ADR 0035). For each in-scope SKU and region it lists mechanism × depth × duration × start week × target segment. PCT_OFF and FIXED_PRICE use 5–50% depths, BOGO uses 50% only, and BUNDLE uses 10–25% with each detected complement as its partner, in scope or not. Every duration from 1 to 4 weeks is tried at every start week that fits inside the promo window, for each of the four segments and for All customers. Before prediction it prunes options deeper than the policy maximum discount, options that sell the anchor or partner below unit cost (unless that SKU is overstocked in the region), and FIXED_PRICE depths that land on a charm price a shallower depth already offers. It predicts the rest in one batch. It then prunes options whose P90 units (mean + 1.2816 × std) exceed the anchor's pooled available stock, or the partner's. Each survivor carries its predictions, cannibalisation and halo, and clearance value. The result is a frozen `PromoOptions`: the plan lines, a table with one row per line, the enumerated count, and the pruned count per reason.
 
-The `generate_candidates` tool takes a planning request plus optional mechanisms, target segments and SKU ids. It keeps the full set in an in-process `CandidateStore` and returns a summary: counts, pruned counts per reason, counts per region and mechanism, the top 20 options by value, and a `candidate_set_id` for the optimiser. On the seed-42 demo brief (Snacks and Beverages, North and West, Diwali weeks 108–109) it enumerates 28,980 options, keeps 10,988 and takes about 7 s.
+The `generate_candidates` tool takes a planning request plus optional mechanisms, target segments and SKU ids. It keeps the full set in an in-process `CandidateStore` and returns a summary: counts, pruned counts per reason, counts per region and mechanism, the top 20 options by value, and a `candidate_set_id` for the optimiser. On the seed-42 demo brief (Snacks and Beverages, North and West, Diwali weeks 108–109) it enumerates 28,980 options, keeps 10,396 and takes about 7 s. About 1,900 of them have positive value, some 500 of those without clearing overstock (ADR 0037).
 
 ## Optimiser
 
@@ -132,7 +134,7 @@ The `run_optimizer` tool takes the `candidate_set_id` from `generate_candidates`
 | `OPTIMIZER_WORKERS` | `1` | CP-SAT workers |
 | `OPTIMIZER_SEED` | `0` | CP-SAT random seed |
 
-On the demo brief it solves in under 0.1 s.
+On the seed-42 demo brief, 1,935 options are eligible with 3,796 pairwise terms. The optimal plan has 35 lines, 21 of them without clearance, worth ₹172,384 for ₹199,909 of the ₹2 lakh budget. The oracle scores it at +₹66,607 incremental profit and ₹86,654 clearance value (ADR 0037). Solving takes about 18 s, of which about 14 s is computing the pairwise terms.
 
 ## LLM providers
 
@@ -235,6 +237,7 @@ docs/agents/ Agent workflow config (issue tracker, triage labels, domain docs)
 - [ADR 0034: The data explorer loads flat lists once, filters them in the browser, and names each number's source tool](docs/adr/0034-data-explorer-and-catalogue-endpoints.md)
 - [ADR 0035: Promo options are enumerated in full, pruned before and after one batch prediction, and handed to the optimiser through an in-process store](docs/adr/0035-promo-option-generation.md)
 - [ADR 0036: The CP-SAT optimiser selects from positive-value options, charges exact pairwise terms, and runs single-threaded with a fixed seed](docs/adr/0036-cp-sat-optimiser.md)
+- [ADR 0037: Promotions can pay in the synthetic world: stronger mechanism effects, a smaller pull-forward dip floored at 0 when fitted, ₹500 fixed cost per line-week](docs/adr/0037-demo-world-promo-economics.md)
 
 The domain glossary is [CONTEXT.md](CONTEXT.md).
 
