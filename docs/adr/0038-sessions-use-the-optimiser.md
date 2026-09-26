@@ -11,26 +11,31 @@ SPEC §9.4 says binding constraints are "detected from slack/tightness at the so
   - a budget can bind with ₹10 left over when the next option costs ₹50;
   - a promoted-SKU cap can bind while it is not full.
 
-  So after an `OPTIMAL` solve, `solve` re-solves once for each constraint, without that constraint. Each re-solve:
-  - starts from the plan it found;
-  - asks for a plan at least a paisa better;
-  - reuses the pairwise terms already priced, so it never prices them again.
+  After an `OPTIMAL` solve, `solve` settles each candidate constraint in up to four steps, cheapest first. Each step is sound, so a wrong result is never reported. Every step reuses the pairwise terms already priced, and none prices them again.
+  1. **A static check rules out constraints no plan could fill.** At most one line is anchored on each (SKU, region), so:
+     - no plan costs more than the sum, over anchors, of their costliest option;
+     - no plan falls further short of the margin than the sum of their largest positive shortfalls;
+     - a promoted-SKU cap counts each SKU of its category and region at most once.
 
-  The outcome of each re-solve:
-  - **infeasible**: no better plan exists, so the constraint does not bind and is not reported;
-  - **optimal**: the constraint binds with an `exact` gain;
-  - **timed out after finding a better plan**: it binds, and the gain is a `lower_bound`;
-  - **timed out without finding one, or no time left**: it is reported as `unproven`, with no gain. It is never skipped silently.
+     If the budget covers that cost, the margin line that shortfall, or the cap every such SKU, the constraint cannot bind. It is not reported, and no solve is needed. A cap that is not full can still bind, so fill level alone is never used.
+  2. **A swap proves the constraint binds.** The current plan is optimal with every constraint. So any strictly better plan that keeps all constraints but one proves that one binds. One option is swapped into the plan, taking out the lines it clashes with and at most one more line. All swaps are scored at once on arrays, and the best is re-checked from scratch before it counts. It proves binding with the gain as a `lower_bound`.
+  3. **A re-solve settles what is left.** For each constraint still unsettled, the model is re-solved without it. The re-solve starts from the current plan and asks for a plan at least a paisa better that breaks the dropped constraint, since any better plan must break it. The search stops at the first plan found:
+     - such a plan proves the constraint binds: `lower_bound`, or `exact` if the solver also proved it optimal;
+     - infeasibility proves it does not bind, and it is not reported.
+  4. **Leftover time makes gains exact.** Any time still left goes to re-solving the `lower_bound` constraints to optimality, starting from the better plan already found. Those that reach optimality become `exact`.
+
+  Anything still unsettled when the time runs out is reported `unproven`, with no gain. It is never skipped silently.
 
   We rejected slack/tightness, which breaks the issue's test in both directions. We also rejected re-solving only the tight constraints, which misses caps that are not full.
-- **The re-solves share their own time limit.** `OPTIMIZER_BINDING_TIME_LIMIT_SECONDS` defaults to 3. Each re-solve gets an even share of what is left, and never more than `OPTIMIZER_TIME_LIMIT_SECONDS`.
-  - **The optimiser's 10 s budget (SPEC §15 E6) does not include the binding analysis.** That budget covers `solve` itself: pricing the pairwise terms, the solve, "why chosen" and the not-selected list. The binding analysis is a separate post-step that runs within its own limit, so `solve` takes at most that much longer. Candidate generation is outside the budget too (#113).
-  - If the plan itself is not proven optimal (`FEASIBLE`), every candidate constraint is reported `unproven` with no re-solve. A better plan without a constraint would prove nothing when the plan could have been improved anyway.
+- **The binding analysis has its own time limit.** `OPTIMIZER_BINDING_TIME_LIMIT_SECONDS` defaults to 8. Steps 1–2 take milliseconds. In step 3, each re-solve gets an even share of what is left, and never more than `OPTIMIZER_TIME_LIMIT_SECONDS`. A re-solve can overrun its share by about one model build (0.1–0.3 s).
+  - **The optimiser's 10 s budget (SPEC §15 E6) does not include the binding analysis.** That budget covers `solve` itself: pricing the pairwise terms, the solve, "why chosen" and the not-selected list. The binding analysis is a separate post-step that runs within its own limit. Candidate generation is outside the budget too (#113).
+  - At 8 s the full demo plan takes about 9 s of generation, 6 s of solving and 8 s of binding analysis, well within SPEC's 60 s.
+  - If the plan itself is not proven optimal (`FEASIBLE`), every constraint that could bind is reported `unproven`, with no re-solve. A better plan without a constraint would prove nothing when the plan could have been improved anyway.
   - Time-limited re-solves depend on the machine, so their evidence may differ between machines. The plan does not change.
 - **Candidates are the plan-level constraints only.** They are:
   - the marketing budget (source `brief`);
   - the margin. It is named `minimum_margin` (source `brief`) when the brief's minimum is above the company-policy floor, and `margin_floor` (source `company_policy`) otherwise, so the manager is told when policy binds (ADR 0007). Dropping it removes the margin constraint entirely.
-  - each (category, region) promoted-SKU cap (source `company_policy`), and only where more eligible options could fill it than it allows.
+  - each (category, region) promoted-SKU cap (source `company_policy`).
 
   Per-line rules are not binding constraints: stock, window, maximum discount, below cost, and one line per SKU per region. They show up as reasons in the not-selected list.
 - **Why chosen** is a `WhyChosen` on each plan line:
@@ -64,11 +69,16 @@ SPEC §9.4 says binding constraints are "detected from slack/tightness at the so
 
 ## Consequences
 
-- On the seed-42 demo brief, the plan is `OPTIMAL` with 32 lines. `solve` takes about 22 s:
-  - 14 s pricing pairwise terms (#112 speeds that up);
-  - about 4 s for the solve;
-  - the 3 s binding limit.
+- On the seed-42 demo brief (after #112), the plan is `OPTIMAL` with 35 lines, worth ₹172,384.
+  - `solve` takes about 6 s without the binding analysis and about 14 s with the default 8 s. To keep the reports inside the 10 s budget, finding which option pairs could run together is now decided on arrays rather than pair by pair, and only non-zero pairwise terms are kept (a pair of eligible options that is absent has a zero term).
+  - Swaps prove, in about 10 ms, that the marketing budget (gain at least ₹2,241) and both Beverages caps (North at least ₹193, West at least ₹450) bind, as `lower_bound`.
+  - Proving that the margin floor and both Snacks caps do not bind takes CP-SAT about 4 s each, so with the default limit they stay `unproven`.
+  - With a 30 s limit all six settle. The budget and the Beverages caps become `exact` (₹8,030, ₹1,385 and ₹1,732), and the other three are proven not to bind.
+- #112's demo speed test (marker `model`) times `solve` with the binding analysis off, against the 10 s budget. It also checks that every line has a reason and that at most five options are left out. A second test checks two things with the default limit: the analysis overruns by no more than its limit plus model builds, and the marketing budget is proven binding.
+- #36 adds clearance targets, regional caps and the KVI tolerance. Each is a new plan-level constraint and must join:
+  - `_limits` and `_can_bind`;
+  - the swap check;
+  - the "breaking" re-solve;
+  - a `ConstraintKind`, a source, and a not-selected reason.
 
-  Each of the six binding re-solves needs 3–6 s there. So with the 3 s default, all six are reported `unproven`. With 60 s they settle: the budget and both Beverages caps bind exactly, and the margin and both Snacks caps do not. The not-selected list's top five are each `over_budget` and `max_promoted_skus`.
-- The performance test (marker `model`) times `solve` on the demo scope with the binding analysis switched off (`binding_time_limit_seconds=0`). Its 10 s assertion is `xfail` until #112 makes pairwise pricing fast; after #112 the core solve is expected at about 6–7 s. A second test checks that every plan line says why it was chosen and that the not-selected list has at most five entries.
-- #36 adds clearance targets, regional caps and the KVI tolerance. Each is a new plan-level constraint and must join `_limits`, with a `ConstraintKind`, a source and a not-selected reason. A clearance target can make the empty plan infeasible, so the "no plan in time" case needs revisiting (ADR 0036).
+  A clearance target can make the empty plan infeasible, so the "no plan in time" case needs revisiting (ADR 0036).

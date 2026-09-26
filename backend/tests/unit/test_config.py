@@ -16,7 +16,7 @@ def test_the_optimiser_is_deterministic_by_default(monkeypatch: pytest.MonkeyPat
 
     settings = Settings()
 
-    assert settings.optimizer_binding_time_limit_seconds == 3.0
+    assert settings.optimizer_binding_time_limit_seconds == 8.0
     assert settings.optimizer_time_limit_seconds == 10.0
     assert settings.optimizer_workers == 1
     assert settings.optimizer_seed == 0

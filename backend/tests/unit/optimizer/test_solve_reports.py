@@ -227,10 +227,51 @@ def test_constraints_left_unsettled_when_the_time_for_re_solving_runs_out_are_un
     )
 
     assert result.status is SolveStatus.OPTIMAL
+    # Every option keeps a 30% margin, so the 15% floor is settled without re-solving.
     assert [(c.kind, c.evidence, c.objective_gain) for c in result.binding_constraints] == [
         (ConstraintKind.MARKETING_BUDGET, BindingEvidence.UNPROVEN, None),
-        (ConstraintKind.MARGIN_FLOOR, BindingEvidence.UNPROVEN, None),
     ]
+
+
+def no_time(rows: list[Row], policy: CompanyPolicy | None = None, **changes: Any) -> Any:
+    return solve(
+        request(**changes),
+        options_of(rows),
+        FakeFacts(),
+        policy or CompanyPolicy(),
+        settings=SolverSettings(binding_time_limit_seconds=0),
+        seed=SEED,
+    )
+
+
+def test_a_budget_no_plan_could_exhaust_is_settled_as_not_binding_without_re_solving() -> None:
+    rows = [
+        Row(A, 100.0, promo_cost=1_000.0),
+        Row(line("A", depth_pct=30), 90.0, promo_cost=1_400.0),
+    ]
+    rows.append(Row(B, 80.0, promo_cost=1_000.0))
+
+    # At most one line per SKU: the costliest plan spends 1,400 + 1,000 = 2,400.
+    assert no_time(rows, budget=2_400).binding_constraints == ()
+    assert [c.kind for c in no_time(rows, budget=2_399).binding_constraints] == [
+        ConstraintKind.MARKETING_BUDGET
+    ]
+
+
+def test_a_margin_no_plan_could_break_is_settled_as_not_binding_without_re_solving() -> None:
+    rows = [Row(A, 100.0, gross_profit=2_500.0), Row(B, 80.0, gross_profit=2_600.0)]
+
+    assert no_time(rows, min_margin=0.25).binding_constraints == ()
+    assert [c.kind for c in no_time(rows, min_margin=0.26).binding_constraints] == [
+        ConstraintKind.MINIMUM_MARGIN
+    ]
+
+
+def test_a_cap_with_room_for_every_sku_is_settled_as_not_binding_even_with_more_options() -> None:
+    rows = [Row(A, 100.0), Row(line("A", depth_pct=30), 90.0), Row(line("A", depth_pct=10), 50.0)]
+    one = CompanyPolicy(max_promoted_skus_per_category_per_region=1)
+
+    assert no_time(rows, policy=one).binding_constraints == ()
 
 
 def test_re_solving_prices_each_pair_of_options_once() -> None:

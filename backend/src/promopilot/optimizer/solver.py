@@ -25,8 +25,9 @@ whole paise, so every plan the solver accepts also passes `validate_plan` (ADR 0
 Beside the plan, `solve` reports (ADR 0038):
 
 - the binding constraints: the budget, the margin and each promoted-SKU cap whose removal
-  gives a strictly better objective, found by re-solving without it from the plan found,
-  within a shared time limit; one left unsettled when time runs out is reported unproven;
+  gives a strictly better objective, proven by a static bound (cannot bind), a better plan
+  one swap away (binds) or a re-solve without it (either), within their own time limit; one
+  left unsettled when the time runs out is reported unproven;
 - why each plan line was chosen: the positive parts of its value, and whether it is the
   best eligible option of its SKU and region;
 - the best option of up to five SKUs and regions with no plan line, with every rule it
@@ -39,9 +40,9 @@ optimality within its time limit.
 
 import math
 import time
-from collections import defaultdict
+from collections import Counter, defaultdict
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Protocol
 
 import numpy as np
@@ -85,7 +86,7 @@ class SolverSettings:
 
     time_limit_seconds: float = 10.0
     workers: int = 1
-    binding_time_limit_seconds: float = 3.0
+    binding_time_limit_seconds: float = 8.0
 
     def __post_init__(self) -> None:
         if self.time_limit_seconds <= 0:
@@ -205,6 +206,29 @@ class _Outcome:
     """Pairwise terms of selected pairs, in paise."""
 
 
+def out_of_near(near: np.ndarray, clash: np.ndarray) -> np.ndarray:
+    """Option o's pairwise terms with what each swap takes out: its clashes, then line r."""
+    base = np.where(clash, near, 0).sum(axis=1)
+    extra = np.where(clash, 0, near)
+    return np.concatenate([base[:, None] + extra, base[:, None]], axis=1)
+
+
+@dataclass(frozen=True)
+class _Swaps:
+    """Every swap of one option into a plan, scored: rows are options, columns the one
+    extra plan line taken out (the last column: none)."""
+
+    plan: list[int]
+    clash: np.ndarray
+    cost: np.ndarray
+    short: np.ndarray
+    gain: np.ndarray
+    groups: list[tuple[str, Region]]
+    promoted: np.ndarray
+    """options x (plan lines + 1) x caps: SKUs promoted under each cap after the swap."""
+    valid: np.ndarray
+
+
 @dataclass
 class _Problem:
     """The eligible options and every coefficient of the model, in integer paise."""
@@ -230,7 +254,28 @@ class _Problem:
     pairs: list[tuple[int, int]]
     charges: np.ndarray
     terms: dict[tuple[int, int], int]
-    """Pairwise terms in paise, zero or not, by candidate-table rows (lower row first)."""
+    """Pairwise terms in paise by candidate-table rows (lower row first): every non-zero
+    term between eligible options, and any term asked for since, zero or not."""
+    _keys: list[list[tuple[str, Region]]] = field(default_factory=list)
+    """The (SKU, region)s each eligible option occupies."""
+    _in: list[list[tuple[str, Region]]] = field(default_factory=list)
+    """The (category, region) caps each eligible option counts toward, once per SKU."""
+    _near: list[dict[int, int]] = field(default_factory=list)
+    """Each eligible option's non-zero pairwise terms, by the other option."""
+    _swap_cache: dict[tuple[int, ...], "_Swaps | None"] = field(default_factory=dict)
+    _eligible_rows: set[int] = field(default_factory=set)
+
+    def __post_init__(self) -> None:
+        self._eligible_rows = set(self.eligible)
+        self._keys = [[(sku_id, line.region) for sku_id in line.skus] for line in self.lines]
+        self._in = [[] for _ in self.lines]
+        for group, members in self.groups.items():
+            for n in members:
+                self._in[n].append(group)
+        self._near = [{} for _ in self.lines]
+        for (i, j), charge in zip(self.pairs, self.charges, strict=True):
+            self._near[i][j] = int(charge)
+            self._near[j][i] = int(charge)
 
     @classmethod
     def of(
@@ -248,7 +293,7 @@ class _Problem:
         for n, line in enumerate(lines):
             for sku_id in line.skus:
                 groups[(facts.sku(sku_id, line.region).category, line.region)].append(n)
-        pairs, charges, computed = _pairs(lines, facts)
+        pairs, charges = _pairs(lines, facts)
         return cls(
             request=request,
             options=options,
@@ -266,7 +311,10 @@ class _Problem:
             groups=dict(groups),
             pairs=pairs,
             charges=charges,
-            terms={_key(eligible[i], eligible[j]): term for (i, j), term in computed.items()},
+            terms={
+                _key(eligible[i], eligible[j]): int(term)
+                for (i, j), term in zip(pairs, charges, strict=True)
+            },
         )
 
     def solve(
@@ -278,10 +326,14 @@ class _Problem:
         hint: Sequence[int] = (),
         beat: int | None = None,
         time_limit: float | None = None,
+        first: bool = False,
+        breaking: bool = False,
     ) -> _Outcome:
         """Solve the model, without the `drop` constraint, starting from the `hint` plan,
         within `time_limit` seconds (the time limit of `settings` by default). With `beat`,
-        only plans whose objective (paise) is at least that are feasible."""
+        only plans whose objective (paise) is at least that are feasible. With `breaking`,
+        only plans that break the `drop` constraint are. With `first`, the search stops at
+        the first feasible plan."""
         model = cp_model.CpModel()
         x = [model.new_bool_var(f"x{n}") for n in range(len(self.lines))]
         occupied: defaultdict[tuple[str, Region], list[cp_model.IntVar]] = defaultdict(list)
@@ -292,12 +344,19 @@ class _Problem:
             model.add_at_most_one(variables)
         cap = self.policy.max_promoted_skus_per_category_per_region
         for group, members in self.groups.items():
+            promoted = sum(x[n] for n in members)
             if drop != _Limit(ConstraintKind.MAX_PROMOTED_SKUS, group):
-                model.add(sum(x[n] for n in members) <= cap)
+                model.add(promoted <= cap)
+            elif breaking:
+                model.add(promoted >= cap + 1)
         if drop != _BUDGET:
             model.add(_dot(self.cost, x) <= self.budget)
+        elif breaking:
+            model.add(_dot(self.cost, x) >= self.budget + 1)
         if drop != _MARGIN:
             model.add(_dot(self.short, x) <= 0)
+        elif breaking:
+            model.add(_dot(self.short, x) >= 1)
 
         y = []
         for i, j in self.pairs:
@@ -321,6 +380,7 @@ class _Problem:
         solver.parameters.num_workers = settings.workers
         solver.parameters.interleave_search = settings.workers > 1
         solver.parameters.max_time_in_seconds = time_limit or settings.time_limit_seconds
+        solver.parameters.stop_after_first_solution = first
         status = solver.solve(model)
         if status not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
             return _Outcome(status, [], 0)
@@ -333,36 +393,91 @@ class _Problem:
     def binding(
         self, picked: list[int], objective: int, settings: SolverSettings, seed: int
     ) -> tuple[BindingConstraint, ...]:
-        """Each constraint whose removal gives a strictly better objective.
+        """Each constraint whose removal gives a strictly better objective (ADR 0038).
 
-        Each is re-solved without it, from the current plan, for a plan at least a paisa
-        better, with an even share of what is left of the binding time limit; the pairwise
-        terms are the ones already priced. No such plan (infeasible) proves it does not bind.
-        One found proves it binds: the gain is exact when the re-solve is optimal and a lower
-        bound when it timed out. A re-solve that timed out without one, or no time left,
-        leaves it unproven (ADR 0038).
+        A constraint that no plan could ever fill (`_can_bind`) is settled as not binding
+        without solving. For the others, a better plan one swap away from the current one
+        that keeps every other constraint (`_swap`) proves it binds, with the gain as a
+        lower bound. Each constraint still unsettled is re-solved without it, from the
+        current plan, for a plan at least a paisa better that breaks it (the plan is optimal
+        with it, so any better plan must), and the search stops at the first one found:
+        that proves it binds; infeasibility proves it does not. Each gets an even share of
+        what is left of the binding time limit, and any time left after that is spent on
+        making the lower bounds exact. The pairwise terms are the ones already priced. Whatever is
+        still unsettled at the end is unproven.
         """
         limits = self._limits()
         deadline = time.monotonic() + settings.binding_time_limit_seconds
-        found = []
-        for k, limit in enumerate(limits):
-            left = deadline - time.monotonic()
-            if left < _MIN_RESOLVE_SECONDS:
-                found.append(self._named(limit, BindingEvidence.UNPROVEN, None))
-                continue
-            share = min(left / (len(limits) - k), settings.time_limit_seconds)
+        settled: dict[_Limit, tuple[BindingEvidence, int, list[int]] | None] = {}
+
+        def left() -> float:
+            return deadline - time.monotonic()
+
+        for limit in limits:
+            if left() < _MIN_RESOLVE_SECONDS:
+                break
+            swapped = self._swap(picked, limit)
+            if swapped is not None:
+                reached, better = swapped
+                settled[limit] = (BindingEvidence.LOWER_BOUND, reached - objective, better)
+
+        open_ = [limit for limit in limits if limit not in settled]
+        for k, limit in enumerate(open_):
+            if left() < _MIN_RESOLVE_SECONDS:
+                break
+            share = min(left() / (len(open_) - k), settings.time_limit_seconds)
             relaxed = self.solve(
-                settings, seed, drop=limit, hint=picked, beat=objective + 1, time_limit=share
+                settings,
+                seed,
+                drop=limit,
+                hint=picked,
+                beat=objective + 1,
+                time_limit=share,
+                first=True,
+                breaking=True,
             )
             if relaxed.status == cp_model.INFEASIBLE:
-                continue
-            if relaxed.status not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
+                settled[limit] = None
+            elif relaxed.status in (cp_model.OPTIMAL, cp_model.FEASIBLE):
+                exact = relaxed.status == cp_model.OPTIMAL
+                settled[limit] = (
+                    BindingEvidence.EXACT if exact else BindingEvidence.LOWER_BOUND,
+                    self._objective(relaxed) - objective,
+                    relaxed.picked,
+                )
+
+        bounded = [
+            limit
+            for limit, found in settled.items()
+            if found is not None and found[0] is BindingEvidence.LOWER_BOUND
+        ]
+        for k, limit in enumerate(bounded):
+            if left() < _MIN_RESOLVE_SECONDS:
+                break
+            _, gain, better = settled[limit] or (BindingEvidence.LOWER_BOUND, 0, [])
+            relaxed = self.solve(
+                settings,
+                seed,
+                drop=limit,
+                hint=better,
+                beat=objective + gain,
+                breaking=True,
+                time_limit=min(left() / (len(bounded) - k), settings.time_limit_seconds),
+            )
+            if relaxed.status in (cp_model.OPTIMAL, cp_model.FEASIBLE):
+                exact = relaxed.status == cp_model.OPTIMAL
+                settled[limit] = (
+                    BindingEvidence.EXACT if exact else BindingEvidence.LOWER_BOUND,
+                    max(gain, self._objective(relaxed) - objective),
+                    relaxed.picked,
+                )
+
+        found = []
+        for limit in limits:
+            if limit not in settled:
                 found.append(self._named(limit, BindingEvidence.UNPROVEN, None))
-                continue
-            gain = int(self.value[relaxed.picked].sum()) - relaxed.charged - objective
-            exact = relaxed.status == cp_model.OPTIMAL
-            evidence = BindingEvidence.EXACT if exact else BindingEvidence.LOWER_BOUND
-            found.append(self._named(limit, evidence, gain))
+            elif (result := settled[limit]) is not None:
+                found.append(self._named(limit, result[0], result[1]))
         return tuple(found)
 
     def unproven(self) -> tuple[BindingConstraint, ...]:
@@ -370,15 +485,179 @@ class _Problem:
         best, so no gain from dropping one would prove it binds."""
         return tuple(self._named(limit, BindingEvidence.UNPROVEN, None) for limit in self._limits())
 
-    def _limits(self) -> list[_Limit]:
-        """The budget, the margin, and each promoted-SKU cap with more options than it
-        allows (any other cannot bind)."""
+    def _swap(self, picked: list[int], drop: _Limit) -> tuple[int, list[int]] | None:
+        """The best plan, and its objective, that swaps one option into the current plan,
+        taking out the lines it clashes with and at most one more, and is strictly better
+        while keeping every constraint but `drop`. None if there is none.
+
+        Any such plan proves `drop` binds, since the current plan is optimal with it. Every
+        swap is scored at once on arrays; the best is re-checked from scratch
+        (`_evaluate`) before it counts.
+        """
+        swaps = self._swaps(picked)
+        if swaps is None:
+            return None
+        valid = swaps.valid.copy()
+        if drop != _BUDGET:
+            valid &= swaps.cost <= self.budget
+        if drop != _MARGIN:
+            valid &= swaps.short <= 0
         cap = self.policy.max_promoted_skus_per_category_per_region
-        return [_BUDGET, _MARGIN] + [
-            _Limit(ConstraintKind.MAX_PROMOTED_SKUS, group)
-            for group, members in sorted(self.groups.items())
-            if len(members) > cap
+        kept = [
+            g
+            for g, group in enumerate(swaps.groups)
+            if drop != _Limit(ConstraintKind.MAX_PROMOTED_SKUS, group)
         ]
+        if kept:
+            valid &= (swaps.promoted[:, :, kept] <= cap).all(axis=2)
+        gain = np.where(valid, swaps.gain, 0)
+        if gain.max(initial=0) < 1:
+            return None
+        o, r = np.unravel_index(int(np.argmax(gain)), gain.shape)
+        plan_lines = swaps.plan
+        out = {plan_lines[c] for c in np.flatnonzero(swaps.clash[o])}
+        if r < len(plan_lines):
+            out.add(plan_lines[r])
+        better = sorted((set(picked) - out) | {int(o)})
+        found = self._evaluate(better, drop)
+        return None if found is None else (found, better)
+
+    def _swaps(self, picked: list[int]) -> "_Swaps | None":
+        """Every swap into the current plan, scored on arrays (cached per plan)."""
+        key = tuple(picked)
+        if key in self._swap_cache:
+            return self._swap_cache[key]
+        size, count = len(self.lines), len(picked)
+        if size == 0:
+            self._swap_cache[key] = None
+            return None
+        plan = np.array(picked, dtype=np.int64)
+        position = {n: k for k, n in enumerate(picked)}
+        # clash[o, k]: plan line k occupies a (SKU, region) that option o needs.
+        occupant = {key_: position[n] for n in picked for key_ in self._keys[n]}
+        clash = np.zeros((size, count), dtype=bool)
+        for o in range(size):
+            for key_ in self._keys[o]:
+                if key_ in occupant:
+                    clash[o, occupant[key_]] = True
+        # near[o, k]: the pairwise term of option o with plan line k.
+        near = np.zeros((size, count), dtype=np.int64)
+        for o in range(size):
+            for n, charge in self._near[o].items():
+                if n in position:
+                    near[o, position[n]] = charge
+        among = near[plan]  # plan x plan, symmetric, zero diagonal
+        inner = among.sum(axis=1)
+        clash_i = clash.astype(np.int64)
+
+        def out_of(values: np.ndarray) -> np.ndarray:
+            """values summed over what each swap takes out: its clashes, then line r."""
+            base = clash_i @ values
+            extra = np.where(clash, 0, values[None, :])
+            return np.concatenate([base[:, None] + extra, base[:, None]], axis=1)
+
+        value = self.value[plan]
+        cost = int(self.cost[plan].sum()) + self.cost[:, None] - out_of(self.cost[plan])
+        short = int(self.short[plan].sum()) + self.short[:, None] - out_of(self.short[plan])
+        lost_pairs = (  # pairs among what is taken out, counted once
+            np.einsum("ok,kl,ol->o", clash_i, among, clash_i) // 2
+        )
+        with_r = clash_i @ among  # o x k: pairs of the clashes with line k
+        together = np.concatenate([lost_pairs[:, None] + with_r, lost_pairs[:, None]], axis=1)
+        own = near.sum(axis=1)
+        gain = (
+            self.value[:, None]
+            - out_of(value)
+            + out_of(inner)
+            - together
+            - (own[:, None] - out_of_near(near, clash))
+        )
+        groups = sorted({g for members in self._in for g in members})
+        index = {g: k for k, g in enumerate(groups)}
+        member = np.zeros((size, len(groups)), dtype=np.int32)
+        for o, gs in enumerate(self._in):
+            for g in gs:
+                member[o, index[g]] += 1
+        in_plan = member[plan]
+        now = in_plan.sum(axis=0)
+        taken = clash_i @ in_plan  # o x g
+        extra_g = np.where(clash[:, :, None], 0, in_plan[None, :, :])  # o x k x g
+        promoted = (now + member - taken)[:, None, :] - np.concatenate(
+            [extra_g, np.zeros((size, 1, len(groups)), dtype=np.int32)], axis=1
+        )
+        valid = np.ones((size, count + 1), dtype=bool)
+        valid[:, :count] &= ~clash
+        valid[plan, :] = False
+        swaps = _Swaps(
+            plan=picked,
+            clash=clash,
+            cost=cost,
+            short=short,
+            gain=gain,
+            groups=groups,
+            promoted=promoted,
+            valid=valid,
+        )
+        self._swap_cache[key] = swaps
+        return swaps
+
+    def _evaluate(self, plan: list[int], drop: _Limit) -> int | None:
+        """The plan's objective in paise if it keeps every constraint but `drop`."""
+        keys = [key for n in plan for key in self._keys[n]]
+        if len(keys) != len(set(keys)):
+            return None
+        if drop != _BUDGET and int(self.cost[plan].sum()) > self.budget:
+            return None
+        if drop != _MARGIN and int(self.short[plan].sum()) > 0:
+            return None
+        count = Counter(g for n in plan for g in self._in[n])
+        cap = self.policy.max_promoted_skus_per_category_per_region
+        if any(
+            promoted > cap and drop != _Limit(ConstraintKind.MAX_PROMOTED_SKUS, g)
+            for g, promoted in count.items()
+        ):
+            return None
+        charged = sum(self._near[a].get(b, 0) for a in plan for b in plan if a < b)
+        return int(self.value[plan].sum()) - charged
+
+    def _objective(self, outcome: _Outcome) -> int:
+        return int(self.value[outcome.picked].sum()) - outcome.charged
+
+    def _limits(self) -> list[_Limit]:
+        """The budget, the margin and each promoted-SKU cap, where some plan could fill
+        them (`_can_bind`)."""
+        limits = [_BUDGET, _MARGIN] + [
+            _Limit(ConstraintKind.MAX_PROMOTED_SKUS, group) for group in sorted(self.groups)
+        ]
+        return [limit for limit in limits if self._can_bind(limit)]
+
+    def _can_bind(self, limit: _Limit) -> bool:
+        """False only when no plan the other constraints allow could break the constraint.
+
+        A plan has at most one line per SKU and region, so at most one line anchored on each
+        (SKU, region). Its promo cost is at most the sum over anchors of their costliest
+        option, and its margin shortfall at most the sum of their largest positive
+        shortfalls. A promoted-SKU cap counts each SKU of the category and region at most
+        once, so it cannot bind while it allows as many as there are such SKUs. These are
+        sound but not complete: a constraint they cannot rule out is re-solved.
+        """
+        if limit.kind is ConstraintKind.MAX_PROMOTED_SKUS:
+            assert limit.group is not None
+            category, region = limit.group
+            skus = {
+                sku_id
+                for n in self.groups[limit.group]
+                for sku_id in self.lines[n].skus
+                if self.facts.sku(sku_id, region).category == category
+            }
+            return len(skus) > self.policy.max_promoted_skus_per_category_per_region
+        coefficients = self.cost if limit.kind is ConstraintKind.MARKETING_BUDGET else self.short
+        worst: dict[tuple[str, Region], int] = {}
+        for line, coefficient in zip(self.lines, coefficients, strict=True):
+            key = (line.sku_id, line.region)
+            worst[key] = max(worst.get(key, 0), int(coefficient))
+        room = self.budget if limit.kind is ConstraintKind.MARKETING_BUDGET else 0
+        return sum(worst.values()) > room
 
     def _named(
         self, limit: _Limit, evidence: BindingEvidence, gain: int | None
@@ -462,11 +741,15 @@ class _Problem:
     def _terms(self, pairs: list[tuple[int, int]]) -> dict[tuple[int, int], int]:
         """Pairwise terms in paise for pairs of candidate rows that could run together."""
         lines = self.options.lines
+        eligible = self._eligible_rows
         wanted = sorted(
             {
                 _key(a, b)
                 for a, b in pairs
-                if _together(lines[a], lines[b]) and _key(a, b) not in self.terms
+                if _together(lines[a], lines[b])
+                and _key(a, b) not in self.terms
+                # Pairs of eligible options were all priced: absent means zero.
+                and not (a in eligible and b in eligible)
             }
         )
         if wanted:
@@ -475,7 +758,11 @@ class _Problem:
             )
             charges = np.rint(np.asarray(computed, dtype=float) * PAISE).astype(np.int64)
             self.terms.update(zip(wanted, (int(c) for c in charges), strict=True))
-        return {key: self.terms[key] for key in (_key(a, b) for a, b in pairs) if key in self.terms}
+        return {
+            key: self.terms.get(key, 0)
+            for key in (_key(a, b) for a, b in pairs)
+            if _together(lines[key[0]], lines[key[1]])
+        }
 
     def _why_not(
         self,
@@ -583,30 +870,57 @@ def _priced_within_policy(line: PlanLine, facts: OptionFacts, policy: CompanyPol
 
 def _pairs(
     lines: Sequence[PlanLine], facts: OptionFacts
-) -> tuple[list[tuple[int, int]], np.ndarray, dict[tuple[int, int], int]]:
-    """The pairs of lines that could run together with a non-zero pairwise term in whole
-    paise, and every term computed, zero or not."""
+) -> tuple[list[tuple[int, int]], np.ndarray]:
+    """The pairs of lines that could run together with a non-zero pairwise term, in whole
+    paise. Every other pair that could run together has a zero term."""
     candidates = _overlapping(lines)
     if not candidates:
-        return [], np.zeros(0, dtype=np.int64), {}
+        return [], np.zeros(0, dtype=np.int64)
     terms = facts.pairwise_cannibalisation([(lines[i], lines[j]) for i, j in candidates])
     charges = np.rint(np.asarray(terms, dtype=float) * PAISE).astype(np.int64)
     keep = np.flatnonzero(charges != 0)
-    computed = {pair: int(charge) for pair, charge in zip(candidates, charges, strict=True)}
-    return [candidates[k] for k in keep], charges[keep], computed
+    return [candidates[k] for k in keep], charges[keep]
 
 
 def _overlapping(lines: Sequence[PlanLine]) -> list[tuple[int, int]]:
-    """Pairs that could run together (`_together`), region by region."""
+    """Pairs that could run together (`_together`), region by region, decided on arrays."""
     by_region: defaultdict[Region, list[int]] = defaultdict(list)
     for n, line in enumerate(lines):
         by_region[line.region].append(n)
-    found = []
+    sku_codes: dict[str, int] = {}
+    targets = {target: code for code, target in enumerate(TargetSegment)}
+    everyone = targets[TargetSegment.ALL_CUSTOMERS]
+    found: list[tuple[int, int]] = []
     for members in by_region.values():
-        for k, i in enumerate(members):
-            for j in members[k + 1 :]:
-                if _together(lines[i], lines[j]):
-                    found.append((i, j))
+        chosen = [lines[n] for n in members]
+        start = np.array([line.start_week for line in chosen])
+        end = start + np.array([line.duration_weeks for line in chosen])
+        target = np.array([targets[line.target_segment] for line in chosen])
+        anchor = np.array([sku_codes.setdefault(line.sku_id, len(sku_codes)) for line in chosen])
+        partner = np.array(
+            [
+                -1
+                if line.bundle_partner_sku_id is None
+                else sku_codes.setdefault(line.bundle_partner_sku_id, len(sku_codes))
+                for line in chosen
+            ]
+        )
+        weeks = (start[:, None] < end[None, :]) & (start[None, :] < end[:, None])
+        segments = (
+            (target[:, None] == target[None, :])
+            | (target[:, None] == everyone)
+            | (target[None, :] == everyone)
+        )
+        shared = (
+            (anchor[:, None] == anchor[None, :])
+            | (anchor[:, None] == partner[None, :])
+            | (partner[:, None] == anchor[None, :])
+            | ((partner[:, None] == partner[None, :]) & (partner[:, None] >= 0))
+        )
+        upper = np.triu(np.ones((len(chosen), len(chosen)), dtype=bool), k=1)
+        i, j = np.nonzero(weeks & segments & ~shared & upper)
+        index = np.array(members)
+        found += list(zip(index[i].tolist(), index[j].tolist(), strict=True))
     return found
 
 

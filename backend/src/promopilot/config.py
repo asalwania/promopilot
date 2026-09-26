@@ -50,6 +50,6 @@ class Settings(BaseSettings):
     optimizer_time_limit_seconds: float = Field(default=10.0, gt=0)
     optimizer_workers: int = Field(default=1, ge=1)
     optimizer_seed: int = Field(default=0, ge=0)
-    # Wall-clock seconds shared by the re-solves that find binding constraints (ADR 0038). A
-    # constraint left unsettled when they run out is reported as unproven.
-    optimizer_binding_time_limit_seconds: float = Field(default=3.0, ge=0)
+    # Wall-clock seconds for proving which constraints bind, after the solve (ADR 0038). A
+    # constraint left unsettled when the time runs out is reported as unproven.
+    optimizer_binding_time_limit_seconds: float = Field(default=8.0, ge=0)
