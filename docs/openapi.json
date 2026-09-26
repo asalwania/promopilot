@@ -91,6 +91,78 @@
         "title": "Mechanism",
         "type": "string"
       },
+      "ModelEntry": {
+        "description": "One registered model version; `live` marks the one the API is serving.",
+        "properties": {
+          "as_of_week": {
+            "title": "As Of Week",
+            "type": "integer"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/ModelKind"
+          },
+          "live": {
+            "title": "Live",
+            "type": "boolean"
+          },
+          "metrics": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "title": "Metrics",
+            "type": "object"
+          },
+          "model_id": {
+            "format": "uuid",
+            "title": "Model Id",
+            "type": "string"
+          },
+          "trained_at": {
+            "format": "date-time",
+            "title": "Trained At",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "model_id",
+          "kind",
+          "version",
+          "trained_at",
+          "as_of_week",
+          "metrics",
+          "live"
+        ],
+        "title": "ModelEntry",
+        "type": "object"
+      },
+      "ModelKind": {
+        "enum": [
+          "demand"
+        ],
+        "title": "ModelKind",
+        "type": "string"
+      },
+      "ModelList": {
+        "description": "Registered models, newest first.",
+        "properties": {
+          "models": {
+            "items": {
+              "$ref": "#/components/schemas/ModelEntry"
+            },
+            "title": "Models",
+            "type": "array"
+          }
+        },
+        "required": [
+          "models"
+        ],
+        "title": "ModelList",
+        "type": "object"
+      },
       "PlanLine": {
         "description": "A promo option selected into a promo plan: one (SKU, region) decision (ADR 0004).",
         "properties": {
@@ -470,6 +542,51 @@
           }
         },
         "summary": "Health"
+      }
+    },
+    "/api/models": {
+      "get": {
+        "operationId": "list_models_api_models_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Models",
+        "tags": [
+          "models"
+        ]
+      }
+    },
+    "/api/models/retrain": {
+      "post": {
+        "operationId": "retrain_api_models_retrain_post",
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelEntry"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "409": {
+            "description": "A retrain is running or no data"
+          }
+        },
+        "summary": "Retrain",
+        "tags": [
+          "models"
+        ]
       }
     },
     "/api/sessions": {

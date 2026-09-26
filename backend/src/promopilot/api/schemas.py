@@ -1,11 +1,43 @@
 """Request/response schemas: the OpenAPI contract consumed by the frontend."""
 
+from datetime import datetime
 from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, Field, field_validator
 
 from promopilot.domain import PlanningRequest, PlanningSession, PlanRevision, SessionStatus
+from promopilot.models.registry import ModelKind, RegisteredModel
+
+
+class ModelEntry(BaseModel):
+    """One registered model version; `live` marks the one the API is serving."""
+
+    model_id: UUID
+    kind: ModelKind
+    version: int
+    trained_at: datetime
+    as_of_week: int
+    metrics: dict[str, float]
+    live: bool
+
+    @classmethod
+    def of(cls, entry: RegisteredModel, *, live: bool) -> "ModelEntry":
+        return cls(
+            model_id=entry.model_id,
+            kind=entry.kind,
+            version=entry.version,
+            trained_at=entry.trained_at,
+            as_of_week=entry.as_of_week,
+            metrics=entry.metrics,
+            live=live,
+        )
+
+
+class ModelList(BaseModel):
+    """Registered models, newest first."""
+
+    models: list[ModelEntry]
 
 
 class HealthChecks(BaseModel):

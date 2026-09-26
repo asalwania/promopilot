@@ -21,6 +21,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/models": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Models */
+        get: operations["list_models_api_models_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/models/retrain": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Retrain */
+        post: operations["retrain_api_models_retrain_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/sessions": {
         parameters: {
             query?: never;
@@ -118,6 +152,46 @@ export interface components {
          * @enum {string}
          */
         Mechanism: "PCT_OFF" | "BOGO" | "BUNDLE" | "FIXED_PRICE";
+        /**
+         * ModelEntry
+         * @description One registered model version; `live` marks the one the API is serving.
+         */
+        ModelEntry: {
+            /** As Of Week */
+            as_of_week: number;
+            kind: components["schemas"]["ModelKind"];
+            /** Live */
+            live: boolean;
+            /** Metrics */
+            metrics: {
+                [key: string]: number;
+            };
+            /**
+             * Model Id
+             * Format: uuid
+             */
+            model_id: string;
+            /**
+             * Trained At
+             * Format: date-time
+             */
+            trained_at: string;
+            /** Version */
+            version: number;
+        };
+        /**
+         * ModelKind
+         * @enum {string}
+         */
+        ModelKind: "demand";
+        /**
+         * ModelList
+         * @description Registered models, newest first.
+         */
+        ModelList: {
+            /** Models */
+            models: components["schemas"]["ModelEntry"][];
+        };
         /**
          * PlanLine
          * @description A promo option selected into a promo plan: one (SKU, region) decision (ADR 0004).
@@ -284,6 +358,53 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["HealthResponse"];
                 };
+            };
+        };
+    };
+    list_models_api_models_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelList"];
+                };
+            };
+        };
+    };
+    retrain_api_models_retrain_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelEntry"];
+                };
+            };
+            /** @description A retrain is running or no data */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

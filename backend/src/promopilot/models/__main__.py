@@ -17,9 +17,7 @@ from sqlalchemy.ext.asyncio import create_async_engine
 from promopilot.config import Settings
 from promopilot.data import RetailData
 from promopilot.models.registry import ModelRegistry
-from promopilot.models.training import train_demand_model
-
-DEFAULT_SEED = 42
+from promopilot.models.training import DEFAULT_SEED, train_demand_model
 
 
 async def run(argv: Sequence[str] | None = None) -> int:
@@ -39,7 +37,7 @@ async def run(argv: Sequence[str] | None = None) -> int:
             as_of_week = await data.default_as_of_week()
         registry = ModelRegistry(engine, args.model_dir or settings.model_dir)
         started = time.perf_counter()
-        entry = await train_demand_model(data, registry, as_of_week=as_of_week, seed=args.seed)
+        entry, _ = await train_demand_model(data, registry, as_of_week=as_of_week, seed=args.seed)
     finally:
         await engine.dispose()
     metrics = ", ".join(f"{name} {value:.3f}" for name, value in entry.metrics.items())

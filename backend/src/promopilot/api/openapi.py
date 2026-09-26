@@ -2,13 +2,17 @@
 
 import json
 import sys
+from pathlib import Path
 
 from sqlalchemy.ext.asyncio import create_async_engine
 
 from promopilot.api.main import create_app
+from promopilot.api.models import ModelService
 from promopilot.api.sessions import SessionService
 from promopilot.data import RetailData, SessionStore
 from promopilot.llm import FakeProvider
+from promopilot.models.demand import DemandModel
+from promopilot.models.registry import LatestModel, ModelKind, ModelRegistry
 
 
 class _UnusedProbe:
@@ -24,8 +28,14 @@ def main() -> None:
     sessions = SessionService(
         store=SessionStore(engine), data=RetailData(engine), llm=FakeProvider([])
     )
+    registry = ModelRegistry(engine, Path("unused"))
+    models = ModelService(
+        registry=registry,
+        data=RetailData(engine),
+        live=LatestModel(registry, ModelKind.DEMAND, DemandModel),
+    )
     probe = _UnusedProbe()
-    app = create_app(database_probe=probe, model_status=probe, sessions=sessions)
+    app = create_app(database_probe=probe, model_status=probe, sessions=sessions, models=models)
     document = json.dumps(app.openapi(), indent=2, sort_keys=True) + "\n"
     # Write bytes so Windows doesn't emit CRLF; CI diffs this file on Linux.
     sys.stdout.buffer.write(document.encode())
