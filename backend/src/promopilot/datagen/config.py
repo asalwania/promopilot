@@ -102,6 +102,25 @@ class CompetitorsConfig(_Frozen):
     aggressive_kvi_price_level: Range
 
 
+class BasketContentsConfig(_Frozen):
+    mean_extra_items: float = Field(ge=0)
+    complement_attach: float = Field(ge=0, le=1)
+
+
+class InventoryConfig(_Frozen):
+    overstock_share: float = Field(ge=0, le=1)
+    low_stock_share: float = Field(ge=0, le=1)
+    force_overstock: list[str] = []
+    """SKUs whose name contains any of these are overstocked (they count toward the share)."""
+    normal_cover_weeks: Range
+    overstock_cover_weeks: Range
+    low_stock_cover_weeks: Range
+    noise_sd: float = Field(ge=0)
+    safety_stock_weeks: float = Field(ge=0)
+    on_order_weeks: Range
+    demand_window_weeks: int = Field(ge=1)
+
+
 class GeneratorConfig(_Frozen):
     seed: int
     start_date: date
@@ -119,6 +138,8 @@ class GeneratorConfig(_Frozen):
     demand: DemandConfig
     promotions: PromotionsConfig
     competitors: CompetitorsConfig
+    basket_contents: BasketContentsConfig
+    inventory: InventoryConfig
 
     @property
     def total_weeks(self) -> int:
