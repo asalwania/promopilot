@@ -31,6 +31,8 @@ jobs:
       - run: uv run ruff format --check .
       - run: uv run mypy
       - run: uv run pytest --cov --cov-report=term
+      - name: Coverage gate (core packages, line coverage >= 85%, SPEC §6)
+        run: uv run coverage json -q -o coverage.json && uv run python -m tools.coverage_gate coverage.json
 
   backend-integration:
     name: Backend integration (testcontainers Postgres)

@@ -30,7 +30,7 @@ docker compose up -d --build --wait   # or: make up
 | `make setup` | Install dependencies and pre-commit hooks |
 | `make dev` | Postgres in Docker; API and web natively with hot reload |
 | `make up` / `make down` | Full stack (postgres, api, web) in Docker |
-| `make test` | Backend + frontend unit/API tests (no Docker, no LLM) |
+| `make test` | Backend + frontend unit/API tests (no Docker, no LLM). Fails if line coverage of the core packages (datagen, models, optimizer, simulator, agents, economics, domain) is below 85% |
 | `make test-integration` | Backend tests against a throwaway Postgres (testcontainers) |
 | `make test-e2e` | Playwright against a running stack |
 | `make lint` / `make format` | ruff, ESLint, Prettier |

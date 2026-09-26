@@ -85,8 +85,8 @@ typecheck: ## mypy strict + tsc strict
 	$(FRONTEND) pnpm typecheck
 
 .PHONY: test
-test: ## Unit/API tests for both apps (no Docker, no LLM)
-	$(BACKEND) uv run pytest --cov --cov-report=term
+test: ## Unit/API tests for both apps (no Docker, no LLM) + core coverage gate
+	$(BACKEND) uv run pytest --cov --cov-report=term && uv run coverage json -q -o coverage.json && uv run python -m tools.coverage_gate coverage.json
 	$(FRONTEND) pnpm test
 
 .PHONY: test-integration
