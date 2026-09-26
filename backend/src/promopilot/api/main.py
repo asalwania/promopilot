@@ -16,6 +16,7 @@ from promopilot.agents.tools.get_competitor_gaps import get_competitor_gaps_tool
 from promopilot.agents.tools.get_relations import get_relations_tool
 from promopilot.agents.tools.holidays import get_holidays_tool
 from promopilot.agents.tools.inventory_status import get_inventory_status_tool
+from promopilot.agents.tools.run_optimizer import run_optimizer_tool
 from promopilot.agents.tools.scope_data import get_scope_data_tool
 from promopilot.api.catalog import CatalogService, catalog_router
 from promopilot.api.competitors import CompetitorService, competitors_router
@@ -32,7 +33,7 @@ from promopilot.models.demand import DemandModel
 from promopilot.models.registry import LatestModel, ModelKind, ModelRegistry
 from promopilot.models.relations import Relations
 from promopilot.models.serving import LiveRelations
-from promopilot.optimizer import CandidateStore
+from promopilot.optimizer import CandidateStore, SolverSettings
 
 log = structlog.get_logger(__name__)
 
@@ -132,7 +133,7 @@ def build_app() -> FastAPI:
     )
     # The agents' tools (ADR 0025): the model is resolved per call, so a retrain is picked up,
     # and so is the as-of week, so newly loaded data moves the data tools' clock (ADR 0032).
-    # Generated promo options wait here for the optimiser (ADR 0035).
+    # Generated promo options wait here for the optimiser (ADR 0035, ADR 0036).
     app.state.candidates = CandidateStore()
     app.state.tools = ToolRegistry(
         [
@@ -149,6 +150,15 @@ def build_app() -> FastAPI:
                 data.default_as_of_week,
                 policy=policy,
                 store=app.state.candidates,
+            ),
+            run_optimizer_tool(
+                app.state.candidates,
+                policy=policy,
+                settings=SolverSettings(
+                    time_limit_seconds=settings.optimizer_time_limit_seconds,
+                    workers=settings.optimizer_workers,
+                ),
+                seed=settings.optimizer_seed,
             ),
         ]
     )

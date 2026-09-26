@@ -20,6 +20,7 @@ from promopilot.models.relations import (
     line_effect_totals,
     line_effects,
     pairwise_cannibalisation,
+    pairwise_cannibalisations,
 )
 from tests.conftest import SMALL_AS_OF
 
@@ -278,6 +279,27 @@ def test_pairwise_cannibalisation_is_zero_across_regions_and_between_non_substit
     assert pairwise(line("A"), line("C")) == 0  # complements, not substitutes
 
 
+def test_pairwise_cannibalisation_in_a_batch_matches_one_pair_at_a_time() -> None:
+    pairs = [
+        (line("A"), line("B")),
+        (line("B", depth_pct=40), line("A", start_week=61)),
+        (line("A", target_segment=TargetSegment.FAMILIES), line("B")),
+        (line("A"), line("B", region=Region.SOUTH)),
+        (line("A", region=Region.SOUTH), line("E", region=Region.SOUTH, depth_pct=10)),
+        (line("A"), line("C")),
+        (line("A"), line("B", start_week=62)),
+        (line("B", mechanism=Mechanism.BUNDLE, bundle_partner_sku_id="C"), line("E")),
+        (line("A"), line("B")),
+    ]
+
+    batch = pairwise_cannibalisations(
+        pairs, FakeRelations(), FakeDemand(), PRODUCTS, PredictionContext()
+    )
+
+    assert list(batch) == pytest.approx([pairwise(first, second) for first, second in pairs])
+    assert len(pairwise_cannibalisations([], FakeRelations(), FakeDemand(), PRODUCTS)) == 0
+
+
 # --- on a fitted world -----------------------------------------------------------------
 
 
@@ -304,6 +326,18 @@ def test_the_fitted_models_plug_into_the_calculators(
     )
     assert math.isfinite(together)
     assert together != 0
+    others = [
+        (promoted, line(substitute, start_week=SMALL_AS_OF + 3, depth_pct=40)),
+        (line(substitute, target_segment=TargetSegment.FAMILIES), promoted),
+    ]
+    batch = pairwise_cannibalisations(
+        [(promoted, line(substitute, start_week=SMALL_AS_OF + 2)), *others],
+        found,
+        model,
+        products,
+    )
+    singles = [pairwise_cannibalisation(a, b, found, model, products) for a, b in others]
+    assert list(batch) == pytest.approx([together, *singles], rel=1e-9)
 
 
 def test_fitted_effect_totals_match_the_per_line_calculator(

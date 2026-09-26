@@ -24,9 +24,14 @@ from promopilot.domain import (
 )
 from promopilot.economics import effective_unit_price
 from promopilot.models.demand import OPTION_COLUMNS, DemandModel, Prediction, PredictionContext
-from promopilot.models.relations import Relations, line_effect_totals
+from promopilot.models.relations import (
+    Relations,
+    line_effect_totals,
+    pairwise_cannibalisations,
+)
 from promopilot.optimizer import (
     P90_Z,
+    FittedOptionFacts,
     OptionContext,
     PromoOptions,
     PruneReason,
@@ -114,6 +119,9 @@ class FakeDemand:
             options=pd.DataFrame(rows, columns=OPTION_COLUMNS),
             segments=pd.DataFrame(),
         )
+
+    def line_paths(self, options: Sequence[PlanLine], context: PredictionContext) -> pd.DataFrame:
+        raise NotImplementedError("generation never asks for line paths")
 
     def baseline(
         self,
@@ -465,3 +473,21 @@ def test_the_fitted_models_generate_options_deterministically(
     assert first.lines == again.lines
     pd.testing.assert_frame_equal(first.table, again.table)
     assert first.table.notna().all().all()
+    # The facts the optimiser reads come from the same context and fitted models.
+    facts = FittedOptionFacts(fitted)
+    anchor = first.lines[0]
+    sku = facts.sku(anchor.sku_id, anchor.region)
+    assert sku.category == category
+    assert sku.overstocked is False
+    pairs = [(first.lines[0], line) for line in first.lines[1:40]]
+    pairwise = pairwise_cannibalisations(pairs, found, model, products, PredictionContext())
+    assert list(facts.pairwise_cannibalisation(pairs)) == pytest.approx(list(pairwise))
+
+
+def test_the_optimisers_facts_name_each_skus_category_prices_and_overstock() -> None:
+    facts = FittedOptionFacts(context(inventory=stock(D_South=(500.0, True))))
+
+    d = facts.sku("D", Region.SOUTH)
+    assert (d.category, d.base_price, d.unit_cost, d.overstocked) == ("Snacks", 60.0, 20.0, True)
+    assert facts.sku("D", Region.NORTH).overstocked is False
+    assert facts.sku("C", Region.NORTH).category == "Beverages"

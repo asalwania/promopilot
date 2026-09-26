@@ -19,7 +19,7 @@ pruned again when their P90 units, or a BUNDLE partner's, exceed the pooled avai
 
 The survivors carry their predictions, cannibalisation and halo (as if each ran alone, ADR
 0033) and clearance value, as the oracle counts it (ADR 0005, ADR 0017). Minimum margin and
-the budget are plan-level: the optimiser (#34) applies them, not this filter (ADR 0007).
+the budget are plan-level: the optimiser applies them, not this filter (ADR 0007, ADR 0036).
 """
 
 from collections import Counter
@@ -41,8 +41,14 @@ from promopilot.domain import (
     TargetSegment,
 )
 from promopilot.economics import clearance_value, effective_unit_price
+from promopilot.guardrails import SkuFacts
 from promopilot.models.demand import OPTION_COLUMNS, Prediction, PredictionContext
-from promopilot.models.relations import BaselineForecast, RelationLookup, line_effect_totals
+from promopilot.models.relations import (
+    LineForecast,
+    RelationLookup,
+    line_effect_totals,
+    pairwise_cannibalisations,
+)
 
 P90_Z = 1.2816
 """P90 = mean + 1.2816 x std: the normal approximation to the predicted units (ADR 0035)."""
@@ -71,8 +77,9 @@ class PruneReason(StrEnum):
     PARTNER_STOCK = "partner_stock"
 
 
-class OptionForecast(BaselineForecast, Protocol):
-    """What generation needs from the demand model (`promopilot.models.demand.DemandModel`)."""
+class OptionForecast(LineForecast, Protocol):
+    """What generation, and the optimiser's pairwise terms, need from the demand model
+    (`promopilot.models.demand.DemandModel`)."""
 
     def predict(self, options: Sequence[PlanLine], context: PredictionContext) -> Prediction: ...
 
@@ -121,6 +128,39 @@ class PromoOptions:
     """Every option enumerated, kept or pruned."""
     pruned: Mapping[PruneReason, int]
     """Pruned options per reason, every reason present."""
+
+
+class FittedOptionFacts:
+    """What the optimiser reads beyond the options' own numbers (`OptionFacts`, ADR 0036),
+    from the context the options were generated in: each SKU's category, prices and
+    overstock flag, and the pairwise cannibalisation of option pairs on the same models."""
+
+    def __init__(self, context: OptionContext) -> None:
+        self._context = context
+        self._catalogue = _Catalogue.of(context.products)
+        self._stock = _Stock.of(context.stock)
+        products = context.products
+        self._categories = dict(
+            zip(products["sku_id"].astype(str), products["category"].astype(str), strict=True)
+        )
+
+    def sku(self, sku_id: str, region: Region) -> SkuFacts:
+        return SkuFacts(
+            category=self._categories[sku_id],
+            base_price=self._catalogue.base_price[sku_id],
+            unit_cost=self._catalogue.unit_cost[sku_id],
+            overstocked=self._stock.is_overstocked(sku_id, region),
+        )
+
+    def pairwise_cannibalisation(self, pairs: Sequence[tuple[PlanLine, PlanLine]]) -> np.ndarray:
+        context = self._context
+        return pairwise_cannibalisations(
+            pairs,
+            context.relations,
+            context.demand_model,
+            context.products,
+            PredictionContext(policy=context.policy, competitor_prices=context.competitor_prices),
+        )
 
 
 def generate_options(

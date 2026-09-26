@@ -43,3 +43,10 @@ class Settings(BaseSettings):
     # Per-model prices (LLM_PRICES, JSON) and the rupee rate for per-session cost (ADR 0027).
     llm_prices: dict[str, ModelPrice] = Field(default_factory=lambda: dict(DEFAULT_LLM_PRICES))
     usd_inr_rate: float = Field(default=96.0, gt=0)
+
+    # The CP-SAT optimiser (ADR 0036). One worker and a fixed seed give the same plan for the
+    # same input whenever the solver proves optimality within the time limit; more workers
+    # interleave their search deterministically.
+    optimizer_time_limit_seconds: float = Field(default=10.0, gt=0)
+    optimizer_workers: int = Field(default=1, ge=1)
+    optimizer_seed: int = Field(default=0, ge=0)
