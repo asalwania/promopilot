@@ -39,7 +39,7 @@ import pandas as pd
 import statsmodels.api as sm
 from statsmodels.stats.multitest import multipletests
 
-from promopilot.domain import Mechanism, PlanLine, Segment, TargetSegment
+from promopilot.domain import Mechanism, PlanLine, Region, Segment, TargetSegment
 from promopilot.economics import effective_unit_price
 from promopilot.models.demand import DemandHistory, DemandModel, PredictionContext
 
@@ -543,9 +543,42 @@ def pairwise_cannibalisation(
     It is 0 for lines in different regions, with no week or segment in common, or where no
     SKU of one is a detected substitute of a SKU of the other. It can be negative: a deep
     promotion that sells at a loss loses less to its substitute's cut.
+
+    This is the definition, one pair at a time; `pairwise_cannibalisations` computes the same
+    terms for a whole batch at once.
     """
-    pairs = [(line, other)]
-    return float(pairwise_cannibalisations(pairs, relations, demand_model, products, context)[0])
+    if line.region is not other.region or not _substitutes(line, other, relations):
+        return 0.0
+    weeks = sorted(set(_weeks(line)) & set(_weeks(other)))
+    segments = sorted(set(_segments(line)) & set(_segments(other)))
+    if not weeks or not segments:
+        return 0.0
+    economics = _Economics.of(products)
+    moves = _price_shifts(line, relations, economics)
+    other_moves = _price_shifts(other, relations, economics)
+    paths = demand_model.line_paths([line, other], context or PredictionContext())
+    paths = paths[paths["week_id"].isin(weeks) & paths["segment"].isin(segments)]
+
+    interaction = 0.0
+    for option, (own_line, moved_by) in enumerate(((line, other_moves), (other, moves))):
+        for sku_id in own_line.skus:
+            if sku_id not in moved_by:
+                continue
+            rows = paths[(paths["option"] == option) & (paths["sku_id"] == sku_id)]
+            unit_cost = economics.unit_cost[sku_id]
+            promoted = float((rows["units"] * (rows["price"] - unit_cost)).sum())
+            unpromoted = float(rows["baseline_units"].sum()) * (
+                economics.base_price[sku_id] - unit_cost
+            )
+            interaction += float(np.expm1(moved_by[sku_id][1])) * (promoted - unpromoted)
+    both = sorted(set(moves) & set(other_moves) - set(line.skus) - set(other.skus))
+    if both:
+        baseline = demand_model.baseline(weeks, regions=[line.region.value], sku_ids=both)
+        units = _units_by_sku(baseline[baseline["segment"].isin(segments)], both)
+        first = np.expm1([moves[sku_id][1] for sku_id in both])
+        second = np.expm1([other_moves[sku_id][1] for sku_id in both])
+        interaction += float((units * first * second * economics.margins(both)).sum())
+    return -interaction
 
 
 def pairwise_cannibalisations(
@@ -557,78 +590,248 @@ def pairwise_cannibalisations(
 ) -> np.ndarray:
     """`pairwise_cannibalisation` of every pair, in input order, computed as one batch.
 
-    The optimiser prices every pair of promo options it could select together (ADR 0036):
-    the lines' own units come from one `line_paths` call, the baseline is forecast once per
-    region, and each SKU's relations and each line's price shifts are looked up once.
+    The optimiser prices every pair of promo options it could select together (ADR 0036), a
+    few hundred thousand on the demo brief, so the batch is vectorised across pairs (#112):
+
+    - which pairs have a term at all (same region, a common week and segment, a substitute
+      between them) is decided on arrays, per distinct line and per distinct set of SKUs;
+    - the lines' own units come from one `line_paths` call, and the baseline is forecast
+      once per region, both cumulated over the weeks so a pair's overlap is one subtraction;
+    - each SKU's relations, and the price shifts of lines that cut the same SKUs to the
+      same prices, are looked up once.
+
+    Lines are told apart by identity: an equal line passed as two objects is priced twice.
     """
     result = np.zeros(len(pairs))
     lookup = _MemoLookup(relations)
-    live: list[tuple[int, list[int], list[str]]] = []
-    for n, (line, other) in enumerate(pairs):
-        if line.region is not other.region or not _substitutes(line, other, lookup):
-            continue
-        weeks = sorted(set(_weeks(line)) & set(_weeks(other)))
-        segments = sorted(set(_segments(line)) & set(_segments(other)))
-        if weeks and segments:
-            live.append((n, weeks, segments))
-    if not live:
+    lines, first, second = _distinct_lines(pairs)
+    spans = _Spans.of(lines)
+    live = np.flatnonzero(
+        spans.overlap(first, second) & _substitute_pairs(lines, first, second, lookup)
+    )
+    if live.size == 0:
         return result
+    first, second = first[live], second[live]
+    start = np.maximum(spans.start[first], spans.start[second])
+    end = np.minimum(spans.end[first], spans.end[second])
+    everyone = spans.segment[first] == len(SEGMENT_NAMES)
+    segment = np.where(everyone, spans.segment[second], spans.segment[first])
 
     economics = _Economics.of(products)
-    index: dict[PlanLine, int] = {}
-    for n, _, _ in live:
-        for line in pairs[n]:
-            index.setdefault(line, len(index))
-    shifts = [_price_shifts(line, lookup, economics) for line in index]
-    paths = demand_model.line_paths(list(index), context or PredictionContext())
-    own = {key: rows for key, rows in paths.groupby(["option", "sku_id"], sort=False)}
+    predicted = np.unique(np.concatenate([first, second]))
+    moves = dict(
+        zip(
+            predicted.tolist(),
+            _line_shifts([lines[k] for k in predicted], lookup, economics),
+            strict=True,
+        )
+    )
+    own = _Terms()
+    shared = _Terms()
+    for n, (a, b) in enumerate(zip(first.tolist(), second.tolist(), strict=True)):
+        moved_a, moved_b = moves[a], moves[b]
+        for own_line, moved_by in ((a, moved_b), (b, moved_a)):
+            for sku_id in lines[own_line].skus:
+                if sku_id in moved_by:
+                    own.add(n, own_line, sku_id, np.expm1(moved_by[sku_id][1]))
+        for sku_id in moved_a.keys() & moved_b.keys():
+            if sku_id not in lines[a].skus and sku_id not in lines[b].skus:
+                both = np.expm1(moved_a[sku_id][1]) * np.expm1(moved_b[sku_id][1])
+                shared.add(n, a, sku_id, both * economics.margin(sku_id))
 
-    both_of: dict[int, list[str]] = {}
-    wanted: dict[str, tuple[set[int], set[str]]] = {}
-    for n, weeks, _ in live:
-        line, other = pairs[n]
-        moved = set(shifts[index[line]]) & set(shifts[index[other]])
-        both = sorted(moved - set(line.skus) - set(other.skus))
-        if both:
-            both_of[n] = both
-            region_weeks, region_skus = wanted.setdefault(line.region.value, (set(), set()))
-            region_weeks.update(weeks)
-            region_skus.update(both)
-    baselines = {
-        region: demand_model.baseline(sorted(weeks), regions=[region], sku_ids=sorted(skus))
-        for region, (weeks, skus) in wanted.items()
-    }
-
-    for n, weeks, segments in live:
-        line, other = pairs[n]
-        interaction = 0.0
-        for own_line, moved_by in ((line, shifts[index[other]]), (other, shifts[index[line]])):
-            for sku_id in own_line.skus:
-                if sku_id not in moved_by:
-                    continue
-                rows = own.get((index[own_line], sku_id))
-                if rows is None:
-                    continue
-                rows = rows[rows["week_id"].isin(weeks) & rows["segment"].isin(segments)]
-                base_price = economics.base_price[sku_id]
-                unit_cost = economics.unit_cost[sku_id]
-                promoted = float((rows["units"] * (rows["price"] - unit_cost)).sum())
-                unpromoted = float(rows["baseline_units"].sum()) * (base_price - unit_cost)
-                interaction += float(np.expm1(moved_by[sku_id][1])) * (promoted - unpromoted)
-        shared = both_of.get(n)
-        if shared:
-            baseline = baselines[line.region.value]
-            baseline = baseline[
-                baseline["week_id"].isin(weeks)
-                & baseline["segment"].isin(segments)
-                & baseline["sku_id"].isin(shared)
-            ]
-            units = _units_by_sku(baseline, shared)
-            first = np.expm1([shifts[index[line]][sku_id][1] for sku_id in shared])
-            second = np.expm1([shifts[index[other]][sku_id][1] for sku_id in shared])
-            interaction += float((units * first * second * economics.margins(shared)).sum())
-        result[n] = -interaction
+    interaction = np.zeros(live.size)
+    if own.pair:
+        # A line's own SKU: (exp(c) - 1) x (promoted profit - its baseline profit at base).
+        paths = demand_model.line_paths(
+            [lines[k] for k in predicted], context or PredictionContext()
+        )
+        pair = np.asarray(own.pair, dtype=np.intp)
+        first_week = int(start.min())
+        cumulative, cell = _own_profit_change(
+            paths,
+            np.searchsorted(predicted, np.asarray(own.line, dtype=np.intp)),
+            own.sku,
+            range(first_week, int(end.max())),
+            economics,
+        )
+        window = (
+            cumulative[end[pair] - first_week, cell] - cumulative[start[pair] - first_week, cell]
+        )
+        interaction += np.bincount(
+            pair, np.asarray(own.weight) * _in_segment(window, segment[pair]), minlength=live.size
+        )
+    if shared.pair:
+        # A SKU both lines move: the two cuts' overlap on its baseline units, at base margin.
+        pair = np.asarray(shared.pair, dtype=np.intp)
+        region = spans.region[np.asarray(shared.line, dtype=np.intp)]
+        units = np.zeros(pair.size)
+        for code in np.unique(region).tolist():
+            at = np.flatnonzero(region == code)
+            affected = sorted({shared.sku[k] for k in at})
+            column = {sku_id: k for k, sku_id in enumerate(affected)}
+            sku = np.array([column[shared.sku[k]] for k in at], dtype=np.intp)
+            first_week = int(start[pair[at]].min())
+            cumulative = _cumulative_baseline(
+                demand_model,
+                REGIONS[code].value,
+                range(first_week, int(end[pair[at]].max())),
+                affected,
+            )
+            window = (
+                cumulative[end[pair[at]] - first_week, sku]
+                - cumulative[start[pair[at]] - first_week, sku]
+            )
+            units[at] = _in_segment(window, segment[pair[at]])
+        interaction += np.bincount(pair, units * np.asarray(shared.weight), minlength=live.size)
+    result[live] = -interaction
     return result
+
+
+REGIONS = list(Region)
+
+
+class _Terms:
+    """Rows of a batch's pairwise terms: the pair, a line, a SKU and its weight."""
+
+    def __init__(self) -> None:
+        self.pair: list[int] = []
+        self.line: list[int] = []
+        self.sku: list[str] = []
+        self.weight: list[float] = []
+
+    def add(self, pair: int, line: int, sku_id: str, weight: float) -> None:
+        self.pair.append(pair)
+        self.line.append(line)
+        self.sku.append(sku_id)
+        self.weight.append(float(weight))
+
+
+def _distinct_lines(
+    pairs: Sequence[tuple[PlanLine, PlanLine]],
+) -> tuple[list[PlanLine], np.ndarray, np.ndarray]:
+    """The distinct lines, by identity, and each pair's first and second line among them."""
+    index: dict[int, int] = {}
+    lines: list[PlanLine] = []
+    ends = np.empty(2 * len(pairs), dtype=np.intp)
+    n = 0
+    for pair in pairs:
+        for line in pair:
+            k = index.get(id(line))
+            if k is None:
+                k = index[id(line)] = len(lines)
+                lines.append(line)
+            ends[n] = k
+            n += 1
+    return lines, ends[0::2], ends[1::2]
+
+
+@dataclass(frozen=True)
+class _Spans:
+    """Each line's region, promo weeks [start, end) and segment (`_segment`), as arrays."""
+
+    region: np.ndarray
+    start: np.ndarray
+    end: np.ndarray
+    segment: np.ndarray
+
+    @classmethod
+    def of(cls, lines: Sequence[PlanLine]) -> "_Spans":
+        regions = {region: k for k, region in enumerate(REGIONS)}
+        return cls(
+            region=np.array([regions[line.region] for line in lines], dtype=np.intp),
+            start=np.array([line.start_week for line in lines], dtype=np.intp),
+            end=np.array([line.start_week + line.duration_weeks for line in lines], dtype=np.intp),
+            segment=np.array([_segment(line) for line in lines], dtype=np.intp),
+        )
+
+    def overlap(self, first: np.ndarray, second: np.ndarray) -> np.ndarray:
+        """Whether each pair of lines shares its region, a promo week and a segment."""
+        everyone = len(SEGMENT_NAMES)
+        a, b = self.segment[first], self.segment[second]
+        weeks = np.maximum(self.start[first], self.start[second]) < np.minimum(
+            self.end[first], self.end[second]
+        )
+        same_region = self.region[first] == self.region[second]
+        return np.asarray(same_region & weeks & ((a == everyone) | (b == everyone) | (a == b)))
+
+
+def _substitute_pairs(
+    lines: Sequence[PlanLine], first: np.ndarray, second: np.ndarray, relations: RelationLookup
+) -> np.ndarray:
+    """`_substitutes` of each pair of lines, decided once per pair of distinct SKU sets."""
+    groups: dict[tuple[str, ...], int] = {}
+    group = np.array([groups.setdefault(line.skus, len(groups)) for line in lines], dtype=np.intp)
+    partners = [
+        {str(partner) for sku_id in skus for partner in relations.substitutes(sku_id)["sku_id"]}
+        for skus in groups
+    ]
+    matrix = np.array(
+        [[any(sku_id in found for sku_id in skus) for skus in groups] for found in partners],
+        dtype=bool,
+    ).reshape(len(groups), len(groups))
+    return np.asarray(matrix[group[first], group[second]], dtype=bool)
+
+
+def _line_shifts(
+    lines: Sequence[PlanLine], relations: RelationLookup, economics: "_Economics"
+) -> list[dict[str, tuple[str, float]]]:
+    """`_price_shifts` of each line, worked out once per SKU set, mechanism and depth."""
+    known: dict[tuple[tuple[str, ...], Mechanism, int], dict[str, tuple[str, float]]] = {}
+    shifts = []
+    for line in lines:
+        key = (line.skus, line.mechanism, line.depth_pct)
+        if key not in known:
+            known[key] = _price_shifts(line, relations, economics)
+        shifts.append(known[key])
+    return shifts
+
+
+def _own_profit_change(
+    paths: pd.DataFrame,
+    options: np.ndarray,
+    sku_ids: Sequence[str],
+    weeks: range,
+    economics: "_Economics",
+) -> tuple[np.ndarray, np.ndarray]:
+    """Promoted profit minus baseline profit at base price, of options' own SKUs.
+
+    `paths` are `line_paths` rows. Returns that change cumulated over the weeks, indexed
+    [weeks elapsed, cell, segment], and the cell of each asked option and SKU; one with no
+    rows reads zero.
+    """
+    skus = {sku_id: k for k, sku_id in enumerate(economics.base_price)}
+    segments = {segment: k for k, segment in enumerate(SEGMENT_NAMES)}
+    week = paths["week_id"].to_numpy(dtype=np.intp)
+    kept = (week >= weeks.start) & (week < weeks.stop)
+    paths = paths[kept]
+    week = week[kept] - weeks.start
+    sku = np.array([skus[str(sku_id)] for sku_id in paths["sku_id"]], dtype=np.intp)
+    segment = np.array([segments[str(name)] for name in paths["segment"]], dtype=np.intp)
+    base_price = np.array(list(economics.base_price.values()))[sku]
+    unit_cost = np.array(list(economics.unit_cost.values()))[sku]
+    units = paths["units"].to_numpy(dtype=float)
+    price = paths["price"].to_numpy(dtype=float)
+    baseline_units = paths["baseline_units"].to_numpy(dtype=float)
+    change = units * (price - unit_cost) - baseline_units * (base_price - unit_cost)
+
+    codes = paths["option"].to_numpy(dtype=np.intp) * len(skus) + sku
+    keys, cell = np.unique(codes, return_inverse=True)
+    grid = np.zeros((len(weeks), len(keys) + 1, len(SEGMENT_NAMES)))
+    np.add.at(grid, (week, cell, segment), change)
+    cumulative = np.concatenate([np.zeros((1, *grid.shape[1:])), np.cumsum(grid, axis=0)])
+
+    asked = options * len(skus) + np.array([skus[sku_id] for sku_id in sku_ids], dtype=np.intp)
+    at = np.searchsorted(keys, asked)
+    found = at < len(keys)
+    found[found] = keys[at[found]] == asked[found]
+    return cumulative, np.where(found, at, len(keys))
+
+
+def _in_segment(window: np.ndarray, segment: np.ndarray) -> np.ndarray:
+    """Each row's total in its segment, or over every segment for All customers."""
+    everyone = segment == len(SEGMENT_NAMES)
+    one = np.minimum(segment, len(SEGMENT_NAMES) - 1)
+    return np.where(everyone, window.sum(axis=1), window[np.arange(len(segment)), one])
 
 
 def _substitutes(line: PlanLine, other: PlanLine, relations: RelationLookup) -> bool:
@@ -684,6 +887,10 @@ class _Economics:
     def margins(self, sku_ids: list[str]) -> np.ndarray:
         """Base price minus unit cost of each SKU."""
         return np.array([self.base_price[sku] - self.unit_cost[sku] for sku in sku_ids])
+
+    def margin(self, sku_id: str) -> float:
+        """Base price minus unit cost of one SKU."""
+        return self.base_price[sku_id] - self.unit_cost[sku_id]
 
 
 def _weeks(line: PlanLine) -> list[int]:

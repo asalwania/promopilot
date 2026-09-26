@@ -11,6 +11,8 @@ from typing import Any
 import numpy as np
 import pandas as pd
 import pytest
+from hypothesis import HealthCheck, given, settings
+from hypothesis import strategies as st
 
 from promopilot.domain import Mechanism, PlanLine, Region, Segment, TargetSegment
 from promopilot.models.demand import DemandHistory, DemandModel, PredictionContext
@@ -298,6 +300,106 @@ def test_pairwise_cannibalisation_in_a_batch_matches_one_pair_at_a_time() -> Non
 
     assert list(batch) == pytest.approx([pairwise(first, second) for first, second in pairs])
     assert len(pairwise_cannibalisations([], FakeRelations(), FakeDemand(), PRODUCTS)) == 0
+
+
+def varied_units(week: int, store_id: str, sku_id: str, segment: str) -> float:
+    """Baseline units that differ by week, store, SKU and segment, so a misaligned index shows."""
+    code = week * 7 + int(store_id[1:]) * 11 + ord(sku_id) * 3 + SEGMENTS.index(segment) * 5
+    return float(1 + code % 13)
+
+
+class VariedDemand:
+    """Like FakeDemand, but no two cells alike: a line's own units rise with its depth, and
+    dip in the week after it, as a pull-forward would."""
+
+    def baseline(
+        self,
+        weeks: Iterable[int],
+        *,
+        regions: Sequence[str] | None = None,
+        store_ids: Sequence[str] | None = None,
+        sku_ids: Sequence[str] | None = None,
+    ) -> pd.DataFrame:
+        rows = [
+            {
+                "week_id": w,
+                "store_id": s,
+                "sku_id": k,
+                "segment": g,
+                "units": varied_units(w, s, k, g),
+            }
+            for w in weeks
+            for r in regions or STORES
+            for s in STORES[r]
+            for k in sku_ids or PRODUCTS["sku_id"]
+            for g in SEGMENTS
+        ]
+        return pd.DataFrame(rows, columns=["week_id", "store_id", "sku_id", "segment", "units"])
+
+    def line_paths(self, options: Sequence[PlanLine], context: PredictionContext) -> pd.DataFrame:
+        rows = []
+        for n, line in enumerate(options):
+            stores = STORES[line.region.value]
+            end = line.start_week + line.duration_weeks
+            for sku_id in line.skus:
+                base = BASE_PRICES[sku_id]
+                for week in range(line.start_week, end + 1):
+                    for segment in SEGMENTS:
+                        units = sum(varied_units(week, s, sku_id, segment) for s in stores)
+                        promoted = week < end and line.target_segment in (
+                            TargetSegment.ALL_CUSTOMERS,
+                            segment,
+                        )
+                        lift = 1 + line.depth_pct / 40 if promoted else (0.9 if week == end else 1)
+                        rows.append(
+                            {
+                                "option": n,
+                                "week_id": week,
+                                "sku_id": sku_id,
+                                "segment": segment,
+                                "units": units * lift,
+                                "baseline_units": units,
+                                "price": base * (1 - line.depth_pct / 100) if promoted else base,
+                            }
+                        )
+        return pd.DataFrame(rows)
+
+
+@st.composite
+def plan_lines(draw: st.DrawFn) -> PlanLine:
+    sku_id = draw(st.sampled_from(list(PRODUCTS["sku_id"])))
+    mechanism = draw(st.sampled_from(list(Mechanism)))
+    depth = 50 if mechanism is Mechanism.BOGO else draw(st.sampled_from([5, 10, 20, 30, 40, 50]))
+    partner = None
+    if mechanism is Mechanism.BUNDLE:
+        partner = draw(st.sampled_from([k for k in PRODUCTS["sku_id"] if k != sku_id]))
+    return line(
+        sku_id,
+        region=draw(st.sampled_from([Region.NORTH, Region.SOUTH])),
+        mechanism=mechanism,
+        depth_pct=depth,
+        duration_weeks=draw(st.integers(1, 4)),
+        start_week=draw(st.integers(58, 63)),
+        target_segment=draw(st.sampled_from(list(TargetSegment))),
+        bundle_partner_sku_id=partner,
+    )
+
+
+@settings(max_examples=150, deadline=None, suppress_health_check=[HealthCheck.too_slow])
+@given(st.lists(st.tuples(plan_lines(), plan_lines()), max_size=12))
+def test_a_batch_prices_every_pair_as_the_one_pair_function_does_to_the_paisa(
+    pairs: list[tuple[PlanLine, PlanLine]],
+) -> None:
+    demand = VariedDemand()
+
+    batch = pairwise_cannibalisations(pairs, FakeRelations(), demand, PRODUCTS)
+
+    one_at_a_time = [
+        pairwise_cannibalisation(first, second, FakeRelations(), demand, PRODUCTS)
+        for first, second in pairs
+    ]
+    assert len(batch) == len(pairs)
+    assert list(batch) == pytest.approx(one_at_a_time, abs=0.01)
 
 
 # --- on a fitted world -----------------------------------------------------------------
