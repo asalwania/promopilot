@@ -100,6 +100,21 @@ async def test_inventory_for_an_as_of_week_is_the_snapshot_at_the_end_of_the_wee
     assert len(inventory) == len(south) * len(small_dataset.products)
 
 
+async def test_latest_competitor_prices_are_the_last_week_before_the_as_of_week(
+    engine: AsyncEngine, small_dataset: GeneratedDataset
+) -> None:
+    latest = await RetailData(engine).latest_competitor_prices(AS_OF)
+
+    history = small_dataset.competitor_prices
+    expected = history[history["week_id"] == AS_OF - 1]
+    assert len(latest) == len(expected) == len(small_dataset.products) * 2
+    assert set(latest["week_id"]) == {AS_OF - 1}
+    merged = latest.merge(expected, on=["region", "sku_id"], suffixes=("", "_expected"))
+    assert (merged["competitor_price"] == merged["competitor_price_expected"]).all()
+    assert (merged["competitor_on_promo"] == merged["competitor_on_promo_expected"]).all()
+    assert (await RetailData(engine).latest_competitor_prices(0)).empty
+
+
 async def test_queries_narrow_by_region_and_sku(
     engine: AsyncEngine, small_dataset: GeneratedDataset
 ) -> None:

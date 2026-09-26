@@ -9,6 +9,7 @@ from collections.abc import Sequence
 
 import pandas as pd
 from sqlalchemy import Select, func, select
+from sqlalchemy.dialects.postgresql import distinct_on
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from promopilot.data.schema import (
@@ -132,6 +133,20 @@ class RetailData:
             competitor_prices.c.sku_id,
         )
         return await self._frame(query.order_by(*order))
+
+    async def latest_competitor_prices(self, as_of_week: int) -> pd.DataFrame:
+        """Per region and SKU, the competitor's last price before the as-of week."""
+        query = (
+            select(competitor_prices)
+            .where(competitor_prices.c.week_id < as_of_week)
+            .ext(distinct_on(competitor_prices.c.region, competitor_prices.c.sku_id))
+            .order_by(
+                competitor_prices.c.region,
+                competitor_prices.c.sku_id,
+                competitor_prices.c.week_id.desc(),
+            )
+        )
+        return await self._frame(query)
 
     async def baskets(self, as_of_week: int, *, since_week: int | None = None) -> pd.DataFrame:
         query = select(baskets).where(baskets.c.week_id < as_of_week)

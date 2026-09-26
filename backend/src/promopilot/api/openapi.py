@@ -6,10 +6,12 @@ from pathlib import Path
 
 from sqlalchemy.ext.asyncio import create_async_engine
 
+from promopilot.api.competitors import CompetitorService
 from promopilot.api.main import create_app
 from promopilot.api.models import ModelService
 from promopilot.api.sessions import SessionService
 from promopilot.data import RetailData, SessionStore
+from promopilot.domain import CompanyPolicy
 from promopilot.llm import FakeProvider
 from promopilot.models.demand import DemandModel
 from promopilot.models.registry import LatestModel, ModelKind, ModelRegistry
@@ -35,7 +37,13 @@ def main() -> None:
         live=LatestModel(registry, ModelKind.DEMAND, DemandModel),
     )
     probe = _UnusedProbe()
-    app = create_app(database_probe=probe, model_status=probe, sessions=sessions, models=models)
+    app = create_app(
+        database_probe=probe,
+        model_status=probe,
+        sessions=sessions,
+        models=models,
+        competitors=CompetitorService(RetailData(engine), policy=CompanyPolicy()),
+    )
     document = json.dumps(app.openapi(), indent=2, sort_keys=True) + "\n"
     # Write bytes so Windows doesn't emit CRLF; CI diffs this file on Linux.
     sys.stdout.buffer.write(document.encode())
