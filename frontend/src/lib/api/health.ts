@@ -20,12 +20,12 @@ export type Health = z.infer<typeof healthSchema>;
 export type HealthResult =
   { reachable: true; health: Health } | { reachable: false; reason: string };
 
+// Browser-side: goes through the same-origin `/api/*` proxy (ADR 0001).
 export async function getHealth(
-  apiUrl: string,
   fetchImpl: typeof fetch = fetch,
 ): Promise<HealthResult> {
   try {
-    const response = await fetchImpl(`${apiUrl}/health`, { cache: "no-store" });
+    const response = await fetchImpl("/api/health", { cache: "no-store" });
     if (!response.ok) {
       return { reachable: false, reason: `HTTP ${response.status}` };
     }

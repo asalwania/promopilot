@@ -19,7 +19,9 @@ class DatabaseProbe(Protocol):
 def create_app(*, database_probe: DatabaseProbe) -> FastAPI:
     app = FastAPI(title="PromoPilot API", version=__version__)
 
+    # `/health` serves the container healthcheck; `/api/health` is what the web proxy forwards.
     @app.get("/health")
+    @app.get("/api/health")
     async def health() -> HealthResponse:
         try:
             database_ok = await database_probe.is_healthy()

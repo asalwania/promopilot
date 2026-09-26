@@ -15,7 +15,13 @@ make setup   # creates .env from .env.example, installs backend + frontend deps,
 make dev     # Postgres in Docker; API on :8000 and web on :3000 with hot reload
 ```
 
-Open http://localhost:3000. The home page calls the API's `/health` and shows the database status.
+Open http://localhost:3000. The home page fetches `/api/health` from its own origin and shows the database status.
+
+The browser never calls the API directly. Next.js route handlers forward every same-origin `/api/*` request to `API_URL` with the path, query, method, body and status unchanged, and stream the response (ADR 0001, ADR 0018). There is one public URL and no CORS.
+
+| Setting | Default | Meaning |
+|---|---|---|
+| `API_URL` (`.env`) | `http://localhost:8000` | Where the Next.js server forwards `/api/*`. Docker Compose sets it to `http://api:8000` |
 
 To run the full stack in containers with only Docker installed:
 
@@ -56,7 +62,7 @@ For a different world, run `cd backend && uv run python -m promopilot.datagen --
 
 | Method | Path | Response |
 |---|---|---|
-| GET | `/health` | Always `200` while the process runs. `{"status": "ok" \| "degraded", "version", "checks": {"database": "ok" \| "error", "model_registry": "not_initialised"}}` |
+| GET | `/health`, `/api/health` | Always `200` while the process runs. `/health` is for the container healthcheck; the web app uses `/api/health` through its proxy. `{"status": "ok" \| "degraded", "version", "checks": {"database": "ok" \| "error", "model_registry": "not_initialised"}}` |
 
 Interactive docs are at http://localhost:8000/docs. The machine-readable contract is [docs/openapi.json](docs/openapi.json).
 
