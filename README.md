@@ -107,7 +107,7 @@ The thresholds live in `RelationsConfig`. The registry records them with the cou
 
 The API serves the latest relations model only while it was fitted on the live demand model; otherwise `get_relations` answers `model_unavailable` and `GET /api/relations/{sku_id}` answers `503` (ADR 0033). The `get_relations` tool takes 1 to 50 SKU ids and returns each one's substitutes and complements with the model's id and version.
 
-**Cannibalisation and halo** (ADR 0033). `line_effects(lines, relations, demand_model, products)` returns one row per plan line and each SKU it moves in its region, in scope or not (ADR 0005). Each row has the SKU's baseline units, the change in units and in percent, the change in profit at its base margin, and that change as cannibalised or halo profit. A detected relation moves units by baseline × (exp(Σ θ·log(p_eff/base)) − 1) over the promo weeks and targeted segments. `pairwise_cannibalisation(line_i, line_j, ...)` is what two substitute lines in one region lose together beyond their single-line figures, for the optimiser's `y_ij` terms; `pairwise_cannibalisations(pairs, ...)` computes a whole batch at once (ADR 0036). The web app's `CannibalisationCallout` and `HaloCallout` read "Promoting A reduces B's units by N% (−₹X profit)" and "…lifts…", showing effects of 1% or more, the top 3 by profit.
+**Cannibalisation and halo** (ADR 0033). `line_effects(lines, relations, demand_model, products)` returns one row per plan line and each SKU it moves in its region, in scope or not (ADR 0005). Each row has the SKU's baseline units, the change in units and in percent, the change in profit at its base margin, and that change as cannibalised or halo profit. A detected relation moves units by baseline × (exp(Σ θ·log(p_eff/base)) − 1) over the promo weeks and targeted segments. `pairwise_cannibalisation(line_i, line_j, ...)` is what two substitute lines in one region lose together beyond their single-line figures, for the optimiser's `y_ij` terms; `pairwise_cannibalisations(pairs, ...)` computes a whole batch at once, vectorised across pairs (ADR 0036, ADR 0039). The web app's `CannibalisationCallout` and `HaloCallout` read "Promoting A reduces B's units by N% (−₹X profit)" and "…lifts…", showing effects of 1% or more, the top 3 by profit.
 
 ## Promo options
 
@@ -134,7 +134,7 @@ The `run_optimizer` tool takes the `candidate_set_id` from `generate_candidates`
 | `OPTIMIZER_WORKERS` | `1` | CP-SAT workers |
 | `OPTIMIZER_SEED` | `0` | CP-SAT random seed |
 
-On the seed-42 demo brief, 1,935 options are eligible with 3,796 pairwise terms. The optimal plan has 35 lines, 21 of them without clearance, worth ₹172,384 for ₹199,909 of the ₹2 lakh budget. The oracle scores it at +₹66,607 incremental profit and ₹86,654 clearance value (ADR 0037). Solving takes about 18 s, of which about 14 s is computing the pairwise terms.
+On the seed-42 demo brief, 1,935 options are eligible with 3,796 pairwise terms. The optimal plan has 35 lines, 21 of them without clearance, worth ₹172,384 for ₹199,909 of the ₹2 lakh budget. The oracle scores it at +₹66,607 incremental profit and ₹86,654 clearance value (ADR 0037). Solving takes about 6–7 s, within SPEC's 10 s optimiser budget: about 4.5 s is CP-SAT and about 2 s is pricing the 415,524 candidate pairs, which is vectorised (ADR 0039). Generating the candidates first takes another 7–9 s, which is timed separately and tracked in #113. A `model`-marker test asserts that `solve` stays under 10 s on the fitted seed-42 world.
 
 ## LLM providers
 
