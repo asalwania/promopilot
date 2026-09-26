@@ -7,6 +7,13 @@ from promopilot.data import RetailData, SessionStore
 from promopilot.llm import FakeProvider
 
 
+class NoModel:
+    """A model registry with nothing loaded."""
+
+    async def is_loaded(self) -> bool:
+        return False
+
+
 def offline_sessions() -> SessionService:
     # Creating an engine does not connect, and ASGITransport runs no lifespan.
     engine = create_async_engine("postgresql+asyncpg://unused@127.0.0.1:1/unused")

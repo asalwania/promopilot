@@ -13,7 +13,7 @@ function respondWith(body: unknown, status = 200): typeof fetch {
 const healthyBody = {
   status: "ok",
   version: "0.1.0",
-  checks: { database: "ok", model_registry: "not_initialised" },
+  checks: { database: "ok", model_registry: "ok" },
 };
 
 describe("getHealth", () => {

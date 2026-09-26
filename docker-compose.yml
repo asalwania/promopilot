@@ -24,6 +24,10 @@ services:
       # Always the cassettes baked into the image: the stack never needs or reads an API key.
       LLM_PROVIDER: replay
       LLM_CASSETTE_DIR: cassettes
+      # Trained model artifacts; train inside the container so the api sees them (ADR 0023).
+      MODEL_DIR: models
+    volumes:
+      - model-artifacts:/app/models
     ports:
       - "${API_PORT:-8000}:8000"
     depends_on:
@@ -52,3 +56,4 @@ services:
 
 volumes:
   postgres-data:
+  model-artifacts:

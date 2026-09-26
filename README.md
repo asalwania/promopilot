@@ -28,6 +28,7 @@ To run the full stack in containers with only Docker installed:
 ```bash
 docker compose up -d --build --wait   # or: make up
 docker compose exec api python -m promopilot.datagen --out /tmp/data --load   # the seed-42 world, about a minute
+docker compose exec api python -m promopilot.models   # train and register the demand model, about a minute
 ```
 
 The Docker stack needs no API key. Compose runs the api with `LLM_PROVIDER=replay` and the cassettes baked into its image, whatever `.env` says (ADR 0022). CI runs exactly these steps, then Playwright types the brief from `backend/cassettes/briefs.json`, clicks **Plan it** and waits for the plan table.
@@ -47,7 +48,8 @@ The Docker stack needs no API key. Compose runs the api with `LLM_PROVIDER=repla
 | `make api-types` | Export OpenAPI to `docs/openapi.json` and regenerate frontend types |
 | `make data` | Generate the seeded synthetic dataset into `data/generated/` (Parquet) and its hidden ground truth into `data/ground_truth/`, then load the tables into Postgres (starts it if needed) |
 | `make record-cassettes` | Re-record the LLM cassettes with a live OpenAI key (see [LLM providers](#llm-providers)) |
-| `make train`, `make eval`, `make demo` | Arrive in epics E4, E9, E11 |
+| `make train` | Fit the demand model on the loaded data (`make data` first) and register it (see [Demand model](#demand-model)) |
+| `make eval`, `make demo` | Arrive in epics E9, E11 |
 
 ## Synthetic data
 
@@ -61,6 +63,16 @@ The organisers give no data, so `make data` generates a synthetic multi-region I
 | `DATA_DIR` (`.env`) | `../data` | Output directory, relative to `backend/` |
 
 For a different world, run `cd backend && uv run python -m promopilot.datagen --config my.yaml --seed 7 --out ../data --load`. The YAML only needs the keys it overrides. The same seed and config always give byte-identical files. Loading is idempotent: the first Alembic migration creates the tables, and every load replaces their rows in one transaction. The app reads them through `promopilot.data.RetailData`, whose time-dependent queries take an explicit as-of week and never return sales, promotions, baskets or competitor prices at or after it (ADR 0008). Only `promopilot.datagen` and `promopilot.evals` may read `data/ground_truth/`.
+
+## Demand model
+
+`make train` fits the baseline demand forecast on the data in Postgres (SPEC §9.1, ADR 0023). By default it uses the as-of week after the history (`--as-of-week` and `--seed`, default 42, override this) and registers a new version. The baseline is LightGBM. It forecasts no-promotion units per store × SKU × segment × week and learns only from weeks free of promotions and their 4-week pull-forward dip. It never sees history at or after the as-of week (ADR 0008). Before the final fit, it is validated on the last 12 weeks: the registry records holdout WAPE at the model grain (`baseline_wape`) and summed to store × SKU and region × SKU. On the seed-42 world these are 0.44, 0.25 and 0.14. Training takes 30 to 60 seconds.
+
+| Setting | Default | Meaning |
+|---|---|---|
+| `MODEL_DIR` (`.env`) | `../models` | Model artifacts, relative to `backend/` (gitignored). Registry rows in Postgres hold paths relative to it. Docker Compose uses the `model-artifacts` volume at `/app/models` |
+
+The API loads the latest demand model at startup and reports it in `/health`. For the Docker stack, train inside the api container (see the quick start) so the artifact lands on its volume.
 
 ## LLM providers
 
@@ -92,7 +104,7 @@ make up                 # rebuild the api image with the new cassettes
 |---|---|---|
 | POST | `/api/sessions` | Start a planning session from `{"brief": "..."}` (1–2000 characters, not blank; otherwise `422`). Returns `202 {"session_id"}` at once; planning runs in the background |
 | GET | `/api/sessions/{id}` | `{session_id, status, brief, planning_request, plan_revision, error}`; `404` if unknown. `status` is `planning`, then `awaiting_approval` with plan revision 1, or `failed` with an `error` saying why |
-| GET | `/health`, `/api/health` | Always `200` while the process runs. `/health` is for the container healthcheck; the web app uses `/api/health` through its proxy. `{"status": "ok" \| "degraded", "version", "checks": {"database": "ok" \| "error", "model_registry": "not_initialised"}}` |
+| GET | `/health`, `/api/health` | Always `200` while the process runs. `/health` is for the container healthcheck; the web app uses `/api/health` through its proxy. `{"status": "ok" \| "degraded", "version", "checks": {"database": "ok" \| "error", "model_registry": "ok" \| "missing"}}`. `status` is `degraded` if the database is unreachable or no demand model is loaded |
 
 In E3 a planning session is a walking skeleton (ADR 0020). A minimal Context agent reads the brief into a planning request: scope, a promo window chosen from the weeks after the as-of week, and a marketing budget in rupees. If any of these is missing, the session fails and the error names it. A naive greedy planner then offers 20% off to All customers on in-scope SKUs, ranked by base margin, within the budget. It has no uplift model yet, so each line's expected incremental profit is minus its promo cost. E4–E8 replace it. The as-of week is the first week after the loaded sales history.
 
@@ -131,6 +143,7 @@ docs/agents/ Agent workflow config (issue tracker, triage labels, domain docs)
 - [ADR 0020: Walking-skeleton sessions: rupee budgets, a week table for the LLM, a naive planner with no uplift](docs/adr/0020-walking-skeleton-session-decisions.md)
 - [ADR 0021: The session page polls every second, stops on any settled status or failed read, and shows plan numbers in en-IN rupees](docs/adr/0021-session-page-polling-and-plan-display.md)
 - [ADR 0022: The Docker stack always replays cassettes baked into the api image, and `make record-cassettes` replaces them all or none](docs/adr/0022-no-key-skeleton-and-cassette-recording.md)
+- [ADR 0023: The baseline trains on clean weeks with horizon-safe features, and the registry pickles artifacts to a volume the api loads from](docs/adr/0023-baseline-forecast-and-model-registry.md)
 
 The domain glossary is [CONTEXT.md](CONTEXT.md).
 

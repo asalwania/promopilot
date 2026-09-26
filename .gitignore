@@ -26,6 +26,9 @@ test-results/
 data/generated/
 data/ground_truth/
 
+# model artifacts produced by `make train`
+/models/
+
 # evals
 backend/evals/reports/
 

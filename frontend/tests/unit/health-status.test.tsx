@@ -12,7 +12,7 @@ describe("HealthStatus", () => {
           health: {
             status: "ok",
             version: "0.1.0",
-            checks: { database: "ok", model_registry: "not_initialised" },
+            checks: { database: "ok", model_registry: "ok" },
           },
         }}
       />,
@@ -21,7 +21,7 @@ describe("HealthStatus", () => {
     expect(screen.getByRole("status")).toHaveTextContent("API healthy");
     expect(screen.getByText("v0.1.0")).toBeInTheDocument();
     expect(screen.getByText("database")).toBeInTheDocument();
-    expect(screen.getByText("not_initialised")).toBeInTheDocument();
+    expect(screen.getByText("model_registry")).toBeInTheDocument();
   });
 
   it("shows the API as degraded when a dependency check fails", () => {
@@ -32,7 +32,7 @@ describe("HealthStatus", () => {
           health: {
             status: "degraded",
             version: "0.1.0",
-            checks: { database: "error", model_registry: "not_initialised" },
+            checks: { database: "error", model_registry: "missing" },
           },
         }}
       />,
@@ -40,6 +40,7 @@ describe("HealthStatus", () => {
 
     expect(screen.getByRole("status")).toHaveTextContent("API degraded");
     expect(screen.getByText("error")).toBeInTheDocument();
+    expect(screen.getByText("missing")).toBeInTheDocument();
   });
 
   it("shows the API as unreachable with the reason", () => {
