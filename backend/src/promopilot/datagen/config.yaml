@@ -1,0 +1,161 @@
+# Synthetic retail world defaults (SPEC.md §8.1). Every value can be overridden:
+# load_config(path=..., overrides={...}) or `python -m promopilot.datagen --config my.yaml`.
+# Tuning values (ranges) are drawn uniformly unless noted; money is in rupees.
+
+seed: 42
+start_date: 2024-09-30        # Monday of week 0; week 104 (default as-of week) starts 2026-09-28
+history_weeks: 104
+horizon_weeks: 52             # future weeks with calendar, competitor prices and true demand (ADR 0008)
+regions: [North, South, East, West]
+stores_per_region: 5
+baskets: 200000
+complement_pairs: 40
+
+cities:
+  North: [Delhi, Chandigarh, Lucknow, Jaipur, Amritsar]
+  South: [Chennai, Bengaluru, Hyderabad, Kochi, Coimbatore]
+  East: [Kolkata, Bhubaneswar, Patna, Guwahati, Ranchi]
+  West: [Mumbai, Pune, Ahmedabad, Surat, Nagpur]
+
+catalogue:
+  skus_per_category: 25
+  categories_limit: null      # keep only the first N categories (small test worlds)
+  kvi_share: 0.10
+  brand_premium: [0.85, 1.20]
+  categories:
+    - name: Snacks
+      margin: [0.25, 0.40]
+      brands: [Crunchy, Desi Bites, Masala Magic]
+      subcategories:
+        - {name: Namkeen, packs: {150g: 35, 200g: 45, 400g: 85, 1kg: 199}}
+        - {name: Chips, packs: {52g: 20, 90g: 30, 150g: 50, 200g: 65}}
+        - {name: Biscuits, packs: {100g: 20, 250g: 45, 500g: 85}}
+        - {name: Chocolates, packs: {40g: 30, 110g: 90, 150g: 120}}
+    - name: Beverages
+      margin: [0.25, 0.40]
+      brands: [FizzUp, Chai Point, Tropica]
+      subcategories:
+        - {name: Soft Drinks, packs: {600ml: 40, 1.25L: 70, 2.25L: 99}}
+        - {name: Juices, packs: {200ml: 20, 1L: 110, 2L: 199}}
+        - {name: Tea, packs: {250g: 140, 500g: 270, 1kg: 520}}
+        - {name: Coffee, packs: {50g: 160, 100g: 300, 200g: 560}}
+    - name: Dairy
+      margin: [0.12, 0.25]
+      brands: [Gokul Fresh, Amrit, DairyDay]
+      subcategories:
+        - {name: Milk, packs: {500ml: 30, 1L: 60}}
+        - {name: Curd, packs: {400g: 40, 1kg: 90}}
+        - {name: Paneer, packs: {200g: 90, 500g: 210}}
+        - {name: Butter & Cheese, packs: {100g: 60, 200g: 115, 500g: 275}}
+    - name: Personal Care
+      margin: [0.35, 0.50]
+      brands: [Glow, Pure Herbs, Fresh Mint, Aura]
+      subcategories:
+        - {name: Soap, packs: {75g: 35, 125g: 55, 4x125g: 199}}
+        - {name: Shampoo, packs: {180ml: 140, 340ml: 250, 650ml: 450}}
+        - {name: Toothpaste, packs: {100g: 55, 150g: 80, 200g: 105}}
+    - name: Home Care
+      margin: [0.30, 0.45]
+      brands: [Sparkle, CleanPro, Ujala Home]
+      subcategories:
+        - {name: Detergent, packs: {500g: 65, 1kg: 125, 4kg: 460}}
+        - {name: Dishwash, packs: {250ml: 45, 500ml: 99, 1L: 185}}
+        - {name: Floor Cleaner, packs: {500ml: 99, 1L: 185, 2L: 349}}
+    - name: Staples
+      margin: [0.10, 0.22]
+      brands: [Annapurna, Kisan Gold, Desi Harvest]
+      subcategories:
+        - {name: Atta, packs: {1kg: 55, 5kg: 260, 10kg: 499}}
+        - {name: Rice, packs: {1kg: 90, 5kg: 430, 10kg: 840}}
+        - {name: Dal, packs: {500g: 75, 1kg: 145}}
+        - {name: Edible Oil, packs: {1L: 165, 2L: 320, 5L: 780}}
+    - name: Frozen
+      margin: [0.25, 0.40]
+      brands: [Arctic, FrostBite, Snowpeak]
+      subcategories:
+        - {name: Frozen Snacks, packs: {200g: 99, 400g: 185, 1kg: 420}}
+        - {name: Ice Cream, packs: {100ml: 30, 500ml: 150, 1L: 260}}
+        - {name: Frozen Veg, packs: {200g: 60, 500g: 130, 1kg: 240}}
+    - name: Bakery
+      margin: [0.18, 0.32]
+      brands: [Bake House, Golden Crust, Oven Fresh]
+      subcategories:
+        - {name: Bread, packs: {200g: 25, 400g: 45, 700g: 70}}
+        - {name: Cakes, packs: {60g: 20, 250g: 90, 500g: 170}}
+        - {name: Rusk, packs: {200g: 40, 400g: 75, 800g: 140}}
+
+segment_mix:
+  base: {Value Seekers: 0.35, Families: 0.30, Premium: 0.15, Young Urban: 0.20}
+  region_concentration: 40    # Dirichlet concentration around the base mix, per region
+  store_concentration: 60     # ... and around the regional mix, per store
+
+# Festival dates are approximate (the main festival day). Week containing the date gets
+# the full intensity; the week before gets lead_in x intensity (pre-festival shopping).
+holiday_lead_in: 0.5
+holidays:
+  - {name: Diwali, intensity: 1.0, dates: [2024-11-01, 2025-10-20, 2026-11-08, 2027-10-29]}
+  - {name: Holi, intensity: 0.6, dates: [2025-03-14, 2026-03-04, 2027-03-22]}
+  - {name: Eid, intensity: 0.6, dates: [2025-03-31, 2026-03-20, 2027-03-10]}
+  - {name: Christmas, intensity: 0.5, dates: [2024-12-25, 2025-12-25, 2026-12-25]}
+  - {name: New Year, intensity: 0.4, dates: [2025-01-01, 2026-01-01, 2027-01-01]}
+  - {name: Independence Day, intensity: 0.3, dates: [2025-08-15, 2026-08-15, 2027-08-15]}
+  - {name: Pongal, regions: [South], intensity: 0.8, dates: [2025-01-14, 2026-01-14, 2027-01-15]}
+  - {name: Onam, regions: [South], intensity: 0.8, dates: [2025-09-05, 2026-08-26, 2027-09-12]}
+  - {name: Durga Puja, regions: [East], intensity: 0.9, dates: [2024-10-12, 2025-10-02, 2026-10-20, 2027-10-09]}
+  - {name: Lohri, regions: [North], intensity: 0.6, dates: [2025-01-13, 2026-01-13, 2027-01-13]}
+  - {name: Baisakhi, regions: [North], intensity: 0.6, dates: [2025-04-13, 2026-04-14, 2027-04-14]}
+  - {name: Ganesh Chaturthi, regions: [West], intensity: 0.8, dates: [2025-08-27, 2026-09-14, 2027-09-04]}
+
+# True demand function (SPEC §8.3). Drawn once per seed and exported as ground truth.
+demand:
+  base_weekly_units: [4, 40]          # per store and SKU, all segments; log-uniform
+  kvi_volume_multiplier: 1.5
+  store_level_sd: 0.2
+  segment_affinity_sd: 0.25           # category x segment taste
+  season_amplitude: [0.0, 0.25]       # log-units, annual cycle per subcategory
+  holiday_sensitivity: [0.05, 0.6]    # log-units at full festival intensity, per category x festival
+  elasticity_subcategory_mean: [-2.5, -1.0]
+  elasticity_sku_sd: 0.3
+  kvi_elasticity_shift: -0.5
+  elasticity_bounds: [-3.5, -0.5]
+  segment_elasticity_multiplier: {Value Seekers: 1.3, Families: 1.1, Premium: 0.6, Young Urban: 0.9}
+  competitor_sensitivity: [0.2, 1.0]
+  kvi_competitor_multiplier: 1.5
+  substitute_share: 0.15              # of within-subcategory SKU pairs
+  substitute_theta: [0.3, 0.8]
+  complement_theta: [-0.6, -0.2]
+  complement_categories:
+    - [Snacks, Beverages]
+    - [Bakery, Dairy]
+    - [Frozen, Beverages]
+    - [Staples, Dairy]
+    - [Personal Care, Home Care]
+    - [Bakery, Beverages]
+    - [Snacks, Dairy]
+  mechanism_effect:                   # log-units beyond the price effect
+    PCT_OFF: [0.05, 0.15]
+    FIXED_PRICE: [0.08, 0.18]
+    BOGO: [0.15, 0.30]
+    BUNDLE: [0.10, 0.20]
+  pull_forward: [0.1, 0.4]            # phi: log-units lost x share of the last k weeks on promo
+  pull_forward_window_weeks: 4
+  dispersion: [5, 20]                 # negative binomial size
+
+# Historical promotions (region-level, like plan lines).
+promotions:
+  share: 0.15                         # of SKU-region-weeks
+  min_gap_weeks: 2
+  mechanism_weights: {PCT_OFF: 0.40, FIXED_PRICE: 0.25, BOGO: 0.15, BUNDLE: 0.20}
+  depth_levels: [5, 10, 15, 20, 25, 30, 40, 50]
+  bundle_depth_levels: [10, 15, 20, 25]
+  all_customers_share: 0.5
+
+competitors:
+  price_level: [0.95, 1.08]           # competitor price / our base price
+  weekly_noise_sd: 0.01
+  promo_probability: 0.05             # chance a competitor promotion starts in a week
+  promo_depth: [0.10, 0.30]
+  promo_weeks: [1, 2]
+  aggressive_region: North
+  aggressive_promo_probability: 0.12
+  aggressive_kvi_price_level: [0.85, 0.92]
