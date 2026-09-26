@@ -30,8 +30,9 @@ export function RetrainPanel() {
     <div className="flex flex-col gap-2">
       <div className="flex items-center justify-between gap-4">
         <p className="text-muted-foreground text-sm">
-          Retraining fits the demand model on the loaded sales history, as{" "}
-          <code>make train</code> does, and makes the new version live.
+          Retraining fits the demand model, then the relations model, on the
+          loaded sales history, as <code>make train</code> does, and makes the
+          new demand version live.
         </p>
         <Button disabled={retrain.isPending} onClick={start}>
           {retrain.isPending ? "Retraining…" : "Retrain"}
