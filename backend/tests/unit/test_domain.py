@@ -87,10 +87,10 @@ def test_company_policy_defaults_are_the_adr_0007_table() -> None:
     assert policy.overstock_threshold_weeks == 8
     assert policy.write_off_rate == 0.30
     assert policy.fixed_cost_per_line_week == {
-        Mechanism.PCT_OFF: 2000.0,
-        Mechanism.FIXED_PRICE: 2000.0,
-        Mechanism.BOGO: 3000.0,
-        Mechanism.BUNDLE: 4000.0,
+        Mechanism.PCT_OFF: 500.0,
+        Mechanism.FIXED_PRICE: 500.0,
+        Mechanism.BOGO: 750.0,
+        Mechanism.BUNDLE: 1000.0,
     }
     assert policy.max_promoted_skus_per_category_per_region == 10
 

@@ -7,10 +7,10 @@ from promopilot.domain.vocabulary import Mechanism
 
 def _default_fixed_costs() -> dict[Mechanism, float]:
     return {
-        Mechanism.PCT_OFF: 2000.0,
-        Mechanism.FIXED_PRICE: 2000.0,
-        Mechanism.BOGO: 3000.0,
-        Mechanism.BUNDLE: 4000.0,
+        Mechanism.PCT_OFF: 500.0,
+        Mechanism.FIXED_PRICE: 500.0,
+        Mechanism.BOGO: 750.0,
+        Mechanism.BUNDLE: 1000.0,
     }
 
 
