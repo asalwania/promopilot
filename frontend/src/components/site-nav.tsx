@@ -5,10 +5,11 @@ import { usePathname } from "next/navigation";
 
 import { cn } from "@/lib/utils";
 
-// `/evals` and `/data` join this list when they exist (ADR 0030).
+// `/evals` joins this list when it exists (ADR 0030).
 const LINKS = [
   { href: "/", label: "Home" },
   { href: "/models", label: "Models" },
+  { href: "/data", label: "Data" },
 ];
 
 export function SiteNav() {

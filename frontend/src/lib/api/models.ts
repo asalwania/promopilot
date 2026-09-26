@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { responseReason } from "@/lib/api/reason";
 import type { components } from "@/lib/api/schema";
 
 type Schemas = components["schemas"];
@@ -51,22 +52,11 @@ export async function retrainModels(
   fetchImpl: typeof fetch = fetch,
 ): Promise<ModelEntry> {
   const response = await fetchImpl("/api/models/retrain", { method: "POST" });
-  if (!response.ok) throw new ModelsRequestError(await reason(response));
+  if (!response.ok)
+    throw new ModelsRequestError(await responseReason(response));
   const parsed = modelEntrySchema.safeParse(await response.json());
   if (!parsed.success) {
     throw new ModelsRequestError("unexpected retrain response");
   }
   return parsed.data;
-}
-
-const errorDetailSchema = z.object({ detail: z.string() });
-
-async function reason(response: Response): Promise<string> {
-  try {
-    const parsed = errorDetailSchema.safeParse(await response.json());
-    if (parsed.success) return parsed.data.detail;
-  } catch {
-    // Not JSON: fall back to the status.
-  }
-  return `HTTP ${response.status}`;
 }

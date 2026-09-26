@@ -246,6 +246,94 @@
         "title": "HealthResponse",
         "type": "object"
       },
+      "InventoryReport": {
+        "properties": {
+          "as_of_week": {
+            "title": "As Of Week",
+            "type": "integer"
+          },
+          "overstock_threshold_days": {
+            "title": "Overstock Threshold Days",
+            "type": "number"
+          },
+          "snapshot_week": {
+            "title": "Snapshot Week",
+            "type": "integer"
+          },
+          "statuses": {
+            "items": {
+              "$ref": "#/components/schemas/InventoryRow"
+            },
+            "title": "Statuses",
+            "type": "array"
+          }
+        },
+        "required": [
+          "as_of_week",
+          "snapshot_week",
+          "overstock_threshold_days",
+          "statuses"
+        ],
+        "title": "InventoryReport",
+        "type": "object"
+      },
+      "InventoryRow": {
+        "properties": {
+          "available_stock": {
+            "title": "Available Stock",
+            "type": "integer"
+          },
+          "category": {
+            "title": "Category",
+            "type": "string"
+          },
+          "days_of_cover": {
+            "title": "Days Of Cover",
+            "type": "number"
+          },
+          "is_overstock": {
+            "title": "Is Overstock",
+            "type": "boolean"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "on_hand": {
+            "title": "On Hand",
+            "type": "integer"
+          },
+          "on_order": {
+            "title": "On Order",
+            "type": "integer"
+          },
+          "region": {
+            "$ref": "#/components/schemas/Region"
+          },
+          "safety_stock": {
+            "title": "Safety Stock",
+            "type": "integer"
+          },
+          "sku_id": {
+            "title": "Sku Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "sku_id",
+          "region",
+          "on_hand",
+          "safety_stock",
+          "on_order",
+          "available_stock",
+          "days_of_cover",
+          "is_overstock",
+          "name",
+          "category"
+        ],
+        "title": "InventoryRow",
+        "type": "object"
+      },
       "Mechanism": {
         "enum": [
           "PCT_OFF",
@@ -506,6 +594,75 @@
         "title": "PlanningRequest",
         "type": "object"
       },
+      "Product": {
+        "properties": {
+          "base_price": {
+            "title": "Base Price",
+            "type": "number"
+          },
+          "brand": {
+            "title": "Brand",
+            "type": "string"
+          },
+          "category": {
+            "title": "Category",
+            "type": "string"
+          },
+          "is_kvi": {
+            "title": "Is Kvi",
+            "type": "boolean"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "pack_size": {
+            "title": "Pack Size",
+            "type": "string"
+          },
+          "sku_id": {
+            "title": "Sku Id",
+            "type": "string"
+          },
+          "subcategory": {
+            "title": "Subcategory",
+            "type": "string"
+          },
+          "unit_cost": {
+            "title": "Unit Cost",
+            "type": "number"
+          }
+        },
+        "required": [
+          "sku_id",
+          "name",
+          "brand",
+          "category",
+          "subcategory",
+          "pack_size",
+          "base_price",
+          "unit_cost",
+          "is_kvi"
+        ],
+        "title": "Product",
+        "type": "object"
+      },
+      "ProductList": {
+        "properties": {
+          "products": {
+            "items": {
+              "$ref": "#/components/schemas/Product"
+            },
+            "title": "Products",
+            "type": "array"
+          }
+        },
+        "required": [
+          "products"
+        ],
+        "title": "ProductList",
+        "type": "object"
+      },
       "PromoWindow": {
         "description": "The future weeks, inclusive, in which a plan's promotions must start and end.",
         "properties": {
@@ -536,6 +693,42 @@
         ],
         "title": "Region",
         "type": "string"
+      },
+      "RegionList": {
+        "properties": {
+          "regions": {
+            "items": {
+              "$ref": "#/components/schemas/RegionStores"
+            },
+            "title": "Regions",
+            "type": "array"
+          }
+        },
+        "required": [
+          "regions"
+        ],
+        "title": "RegionList",
+        "type": "object"
+      },
+      "RegionStores": {
+        "properties": {
+          "region": {
+            "$ref": "#/components/schemas/Region"
+          },
+          "stores": {
+            "items": {
+              "$ref": "#/components/schemas/Store"
+            },
+            "title": "Stores",
+            "type": "array"
+          }
+        },
+        "required": [
+          "region",
+          "stores"
+        ],
+        "title": "RegionStores",
+        "type": "object"
       },
       "RelationsResponse": {
         "description": "A SKU's substitutes (strongest first) and complements (highest lift first).",
@@ -605,6 +798,17 @@
         ],
         "title": "Scope",
         "type": "object"
+      },
+      "Segment": {
+        "description": "A behavioural customer group; never defined by protected attributes.",
+        "enum": [
+          "Value Seekers",
+          "Families",
+          "Premium",
+          "Young Urban"
+        ],
+        "title": "Segment",
+        "type": "string"
       },
       "SessionCreated": {
         "properties": {
@@ -690,6 +894,35 @@
         ],
         "title": "SessionStatus",
         "type": "string"
+      },
+      "Store": {
+        "properties": {
+          "city": {
+            "title": "City",
+            "type": "string"
+          },
+          "segment_mix": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "propertyNames": {
+              "$ref": "#/components/schemas/Segment"
+            },
+            "title": "Segment Mix",
+            "type": "object"
+          },
+          "store_id": {
+            "title": "Store Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "store_id",
+          "city",
+          "segment_mix"
+        ],
+        "title": "Store",
+        "type": "object"
       },
       "Substitute": {
         "properties": {
@@ -780,6 +1013,88 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/api/catalog/products": {
+      "get": {
+        "description": "Every product in SKU order; an unknown category is 422.",
+        "operationId": "list_products_api_catalog_products_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "category",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Category"
+            }
+          },
+          {
+            "in": "query",
+            "name": "kvi_only",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Kvi Only",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProductList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Products",
+        "tags": [
+          "catalog"
+        ]
+      }
+    },
+    "/api/catalog/regions": {
+      "get": {
+        "description": "Each region's stores with their customer segment mix.",
+        "operationId": "list_regions_api_catalog_regions_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RegionList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Regions",
+        "tags": [
+          "catalog"
+        ]
+      }
+    },
     "/api/competitors/gaps": {
       "get": {
         "description": "Competitor price index, gap and KVI undercut per SKU x region, widest gap first.\n\nAn unknown category is 422.",
@@ -894,6 +1209,104 @@
           }
         },
         "summary": "Health"
+      }
+    },
+    "/api/inventory": {
+      "get": {
+        "description": "Stock per SKU x region pooled over the region's stores, with overstock flags.\n\nAn unknown category, or a region without stores, is 422.",
+        "operationId": "inventory_api_inventory_get",
+        "parameters": [
+          {
+            "description": "Defaults to the data's default as-of week.",
+            "in": "query",
+            "name": "as_of_week",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Defaults to the data's default as-of week.",
+              "title": "As Of Week"
+            }
+          },
+          {
+            "in": "query",
+            "name": "region",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/Region"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Region"
+            }
+          },
+          {
+            "in": "query",
+            "name": "category",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Category"
+            }
+          },
+          {
+            "in": "query",
+            "name": "overstocked_only",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Overstocked Only",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InventoryReport"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "409": {
+            "description": "No data is loaded for the week"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Inventory",
+        "tags": [
+          "catalog"
+        ]
       }
     },
     "/api/models": {

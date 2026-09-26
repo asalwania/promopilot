@@ -16,6 +16,7 @@ from promopilot.agents.tools.get_relations import get_relations_tool
 from promopilot.agents.tools.holidays import get_holidays_tool
 from promopilot.agents.tools.inventory_status import get_inventory_status_tool
 from promopilot.agents.tools.scope_data import get_scope_data_tool
+from promopilot.api.catalog import CatalogService, catalog_router
 from promopilot.api.competitors import CompetitorService, competitors_router
 from promopilot.api.models import ModelService, models_router
 from promopilot.api.relations import RelationsService, relations_router
@@ -50,6 +51,7 @@ def create_app(
     models: ModelService | None = None,
     competitors: CompetitorService | None = None,
     relations: RelationsService | None = None,
+    catalog: CatalogService | None = None,
 ) -> FastAPI:
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
@@ -71,6 +73,8 @@ def create_app(
         app.include_router(competitors_router(competitors))
     if relations is not None:
         app.include_router(relations_router(relations))
+    if catalog is not None:
+        app.include_router(catalog_router(catalog))
 
     # `/health` serves the container healthcheck; `/api/health` is what the web proxy forwards.
     @app.get("/health")
@@ -122,6 +126,7 @@ def build_app() -> FastAPI:
         models=models,
         competitors=CompetitorService(data, policy=policy),
         relations=RelationsService(relations_model, data),
+        catalog=CatalogService(data, policy=policy),
     )
     # The agents' tools (ADR 0025): the model is resolved per call, so a retrain is picked up,
     # and so is the as-of week, so newly loaded data moves the data tools' clock (ADR 0032).
