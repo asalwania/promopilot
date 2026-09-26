@@ -59,6 +59,19 @@ async def test_a_changed_schema_is_a_different_request(tmp_path: Path) -> None:
         await ReplayProvider(tmp_path).complete_structured(WeatherV2, ASK)
 
 
+async def test_a_recorded_cassette_has_lf_line_endings_on_every_platform(
+    tmp_path: Path,
+) -> None:
+    recorder = RecordingProvider(FakeProvider([Weather(city="Pune", celsius=31)]), tmp_path)
+    await recorder.complete_structured(Weather, ASK)
+
+    assert b"\r" not in read_bytes(tmp_path / f"{request_hash(Weather, ASK)}.json")
+
+
+def read_bytes(path: Path) -> bytes:
+    return path.read_bytes()
+
+
 def test_request_hash_is_stable_across_processes() -> None:
     script = (
         "from tests.unit.llm.test_replay_provider import ASK, Weather;"

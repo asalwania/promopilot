@@ -8,6 +8,7 @@ from promopilot.llm.replay import (
     CassetteMissError,
     RecordingProvider,
     ReplayProvider,
+    cassette_paths,
     request_hash,
 )
 
@@ -22,5 +23,6 @@ __all__ = [
     "RecordingProvider",
     "ReplayProvider",
     "build_provider",
+    "cassette_paths",
     "request_hash",
 ]

@@ -8,6 +8,7 @@ response are written; transport details such as request headers never reach a ca
 
 import hashlib
 import json
+import re
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
@@ -39,6 +40,16 @@ def request_hash(schema: type[BaseModel], messages: Sequence[Message]) -> str:
 
 def _cassette_path(cassette_dir: Path, digest: str) -> Path:
     return cassette_dir / f"{digest}.json"
+
+
+_CASSETTE_NAME = re.compile(r"[0-9a-f]{64}\.json")
+
+
+def cassette_paths(cassette_dir: Path) -> list[Path]:
+    """The cassettes in `cassette_dir`, ignoring any other file kept next to them."""
+    if not cassette_dir.is_dir():
+        return []
+    return sorted(p for p in cassette_dir.iterdir() if _CASSETTE_NAME.fullmatch(p.name))
 
 
 class ReplayProvider:
@@ -83,5 +94,6 @@ class RecordingProvider:
         _cassette_path(self._dir, digest).write_text(
             json.dumps(cassette, indent=2, sort_keys=True, ensure_ascii=False) + "\n",
             encoding="utf-8",
+            newline="\n",
         )
         return response

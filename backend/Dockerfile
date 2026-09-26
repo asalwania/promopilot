@@ -15,6 +15,8 @@ FROM python:3.12-slim AS runtime
 RUN useradd --create-home --uid 1000 app
 WORKDIR /app
 COPY --from=builder --chown=app:app /app/.venv /app/.venv
+# Recorded LLM responses: the image plans briefs with LLM_PROVIDER=replay and no key (ADR 0019).
+COPY --chown=app:app cassettes ./cassettes
 ENV PATH="/app/.venv/bin:$PATH" PYTHONUNBUFFERED=1
 USER app
 EXPOSE 8000

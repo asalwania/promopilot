@@ -2,7 +2,7 @@
 
 Agentic retail promotion planner for the ET AI Hackathon (Problem 3, Retail: Autonomous Promotion Planner). A planning brief in plain English becomes a promotion plan that respects inventory, margin and budget constraints, with every number coming from deterministic tools and a human approving the result.
 
-> **Status:** epic E3 (walking skeleton). `make data` generates the synthetic world. A brief typed on the home page becomes a naive plan on the session page (ADR 0020). Real forecasting, optimisation and the full agent arrive in later epics; see [SPEC.md](SPEC.md) §15 for the delivery plan.
+> **Status:** epic E3 (walking skeleton). `make data` generates the synthetic world. A brief typed on the home page becomes a naive plan on the session page (ADR 0020), and the Docker stack does this with no API key (ADR 0022). Real forecasting, optimisation and the full agent arrive in later epics; see [SPEC.md](SPEC.md) §15 for the delivery plan.
 
 ## Quickstart
 
@@ -27,7 +27,10 @@ To run the full stack in containers with only Docker installed:
 
 ```bash
 docker compose up -d --build --wait   # or: make up
+docker compose exec api python -m promopilot.datagen --out /tmp/data --load   # the seed-42 world, about a minute
 ```
+
+The Docker stack needs no API key. Compose runs the api with `LLM_PROVIDER=replay` and the cassettes baked into its image, whatever `.env` says (ADR 0022). CI runs exactly these steps, then Playwright types the brief from `backend/cassettes/briefs.json`, clicks **Plan it** and waits for the plan table.
 
 ## Commands
 
@@ -38,11 +41,12 @@ docker compose up -d --build --wait   # or: make up
 | `make up` / `make down` | Full stack (postgres, api, web) in Docker |
 | `make test` | Backend + frontend unit/API tests (no Docker, no LLM). Fails if line coverage of the core packages (datagen, models, optimizer, simulator, agents, economics, domain) is below 85% |
 | `make test-integration` | Backend tests against a throwaway Postgres (testcontainers) |
-| `make test-e2e` | Playwright against a running stack |
+| `make test-e2e` | Playwright against a running stack with data loaded: health, and brief to plan table |
 | `make lint` / `make format` | ruff, ESLint, Prettier |
 | `make typecheck` | mypy strict, tsc strict |
 | `make api-types` | Export OpenAPI to `docs/openapi.json` and regenerate frontend types |
 | `make data` | Generate the seeded synthetic dataset into `data/generated/` (Parquet) and its hidden ground truth into `data/ground_truth/`, then load the tables into Postgres (starts it if needed) |
+| `make record-cassettes` | Re-record the LLM cassettes with a live OpenAI key (see [LLM providers](#llm-providers)) |
 | `make train`, `make eval`, `make demo` | Arrive in epics E4, E9, E11 |
 
 ## Synthetic data
@@ -66,9 +70,21 @@ Agents reach an LLM only through `promopilot.llm` (ADR 0001, ADR 0019). `LLM_PRO
 |---|---|---|
 | `LLM_PROVIDER` (`.env`) | `replay` | `replay` answers from recorded cassettes and needs no key. `openai` calls OpenAI live |
 | `LLM_CASSETTE_DIR` (`.env`) | `cassettes` | One JSON file per request hash, relative to `backend/` |
-| `OPENAI_API_KEY`, `OPENAI_MODEL` (`.env`) | empty | Needed only for `openai`. Keep the key in `.env`, never commit it |
+| `OPENAI_API_KEY`, `OPENAI_MODEL` (`.env`) | empty | Needed only for `openai` and `make record-cassettes`. The model must accept `temperature=0`: use `gpt-4.1-mini` (the `gpt-5` reasoning models reject it). Keep the key in `.env`, never commit it |
 
 In replay mode, a request with no recorded cassette fails with `CassetteMissError` naming its hash. This usually means a prompt or schema changed and the cassettes need re-recording. Cassettes store only the request content and the parsed response, never headers or keys. Tests use `FakeProvider` or `ReplayProvider` and never call a real LLM.
+
+### Recording cassettes
+
+The committed cassettes in `backend/cassettes/` answer every brief in `backend/cassettes/briefs.json` over the seed-42 world. A unit test checks this, so CI fails when they go stale. To re-record them after changing a prompt, a schema or the default world:
+
+```bash
+make data               # the world the cassettes are recorded against
+make record-cassettes   # needs OPENAI_API_KEY and OPENAI_MODEL in .env; makes one live call per brief
+make up                 # rebuild the api image with the new cassettes
+```
+
+`make record-cassettes` plans each brief through OpenAI and records every LLM request. It replaces the cassettes only if every brief reaches a plan. If one fails, it names the brief, exits non-zero and changes nothing. A full run removes stale cassettes, so commit the whole directory (ADR 0022).
 
 ## API
 
@@ -114,6 +130,7 @@ docs/agents/ Agent workflow config (issue tracker, triage labels, domain docs)
 - [ADR 0019: The LLM layer is async, and cassettes are one JSON file per provider-independent request hash](docs/adr/0019-llm-layer-and-cassettes.md)
 - [ADR 0020: Walking-skeleton sessions: rupee budgets, a week table for the LLM, a naive planner with no uplift](docs/adr/0020-walking-skeleton-session-decisions.md)
 - [ADR 0021: The session page polls every second, stops on any settled status or failed read, and shows plan numbers in en-IN rupees](docs/adr/0021-session-page-polling-and-plan-display.md)
+- [ADR 0022: The Docker stack always replays cassettes baked into the api image, and `make record-cassettes` replaces them all or none](docs/adr/0022-no-key-skeleton-and-cassette-recording.md)
 
 The domain glossary is [CONTEXT.md](CONTEXT.md).
 
