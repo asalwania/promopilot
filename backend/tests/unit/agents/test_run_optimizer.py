@@ -172,8 +172,8 @@ async def test_the_fitted_models_candidates_are_optimised_the_same_way_twice(
     store: CandidateStore,
 ) -> None:
     model, found = small_models
-    # Without fixed marketing costs some of the small world's options pay for themselves.
-    free = CompanyPolicy(margin_floor=0.10, fixed_cost_per_line_week=dict.fromkeys(Mechanism, 0.0))
+    # At the default policy some of the small world's options pay for themselves (ADR 0037).
+    policy = CompanyPolicy()
     tools = ToolRegistry(
         [
             generate_candidates_tool(
@@ -181,10 +181,10 @@ async def test_the_fitted_models_candidates_are_optimised_the_same_way_twice(
                 Fixed((entry(ModelKind.RELATIONS, 1), found)),
                 InMemoryRetailData(small_dataset),
                 fixed_as_of_week(SMALL_AS_OF),
-                policy=free,
+                policy=policy,
                 store=store,
             ),
-            run_optimizer_tool(store, policy=free, settings=SolverSettings(), seed=0),
+            run_optimizer_tool(store, policy=policy, settings=SolverSettings(), seed=0),
         ]
     )
     generated = await tools.call(
@@ -228,7 +228,7 @@ async def test_the_fitted_models_candidates_are_optimised_the_same_way_twice(
             for row in output.lines
         )
     )
-    assert validate_plan(plan, stored.request, free) == ()
+    assert validate_plan(plan, stored.request, policy) == ()
 
 
 def _all_categories(history: DemandHistory) -> dict[str, Any]:

@@ -134,7 +134,7 @@ The `run_optimizer` tool takes the `candidate_set_id` from `generate_candidates`
 | `OPTIMIZER_WORKERS` | `1` | CP-SAT workers |
 | `OPTIMIZER_SEED` | `0` | CP-SAT random seed |
 
-On the demo brief it solves in under 0.1 s.
+On the seed-42 demo brief, 1,935 options are eligible with 3,796 pairwise terms. The optimal plan has 35 lines, 21 of them without clearance, worth ₹172,384 for ₹199,909 of the ₹2 lakh budget. The oracle scores it at +₹66,607 incremental profit and ₹86,654 clearance value (ADR 0037). Solving takes about 18 s, of which about 14 s is computing the pairwise terms.
 
 ## LLM providers
 

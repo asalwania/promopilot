@@ -42,9 +42,12 @@ We rejected:
 - `generate_options` keeps 10,396 of 28,980 options:
   - 1,935 have positive value, 519 of them without clearance;
   - 808 have positive incremental profit.
-- A MILP stand-in for the #34 optimiser selects 35 lines, 21 of them non-clearance. It works on the model's values, with one option per SKU and region, the ₹2 lakh budget, at most 10 SKUs per category and region, no promoted substitute pairs, and the 15% margin floor.
-  - Model objective: ₹171,007. Promo cost: ₹199,993.
-  - Oracle on the same plan, scored jointly: incremental profit +₹64,513, clearance value ₹87,924, blended margin 25.7%.
+- The CP-SAT optimiser (#34, ADR 0036) selects 35 lines, 21 of them without clearance (OPTIMAL).
+  - The mechanisms are 18 FIXED_PRICE and 17 PCT_OFF.
+  - Objective: ₹172,384. Promo cost: ₹199,909. Model incremental profit: +₹86,124.
+  - The oracle, scoring the plan jointly: incremental profit +₹66,607, clearance value ₹86,654, blended margin 26.0%.
+  - This meets #109's acceptance criterion: objective > 0, oracle incremental profit > 0, and at least one line without clearance.
+- **The optimiser is now slower.** With 1,935 eligible options instead of 92, the solve takes about 18 s. About 14 s of that is `pairwise_cannibalisations` for 3,796 pairs, and CP-SAT takes about 4 s. This is above SPEC's 10 s optimiser budget and is left for a follow-up on the pairwise batch.
 - Model quality on the seed-42 world:
   - median elasticity recovery error 8.1% (was 7.6%);
   - fitted μ means match the truth (PCT_OFF 0.292 vs 0.293, BOGO 0.669 vs 0.671; BUNDLE is overstated, 0.51 vs 0.45, as before);
@@ -68,4 +71,5 @@ We rejected:
 
   A unit test only checks the world's economics (`tests/evals/test_oracle.py`): a one-week 5% PCT_OFF pays, net of pull-forward and the default fixed cost, on at least 10 of the demo scope's 100 SKU-regions without clearing stock. It measures 22.
 - **Tests that hand-compute the oracle** pin their own ₹2,000 policy, so they no longer depend on the default.
+- **#34's fitted-world `run_optimizer` test now runs on the default policy.** It had used a zero-fixed-cost policy with a 10% margin floor, because the defaults selected nothing.
 - **Plan-quality evals change.** The rule-based baseline ("20% off top 10 sellers", SPEC §12.2) still loses money in this world, so "beats baseline" is easy. Regret against the optimiser on true parameters is now measured against a real mix of lines.
