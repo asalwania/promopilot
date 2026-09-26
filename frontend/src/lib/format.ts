@@ -37,3 +37,15 @@ const MECHANISM_LABELS: Record<Mechanism, string> = {
 export function formatMechanism(mechanism: Mechanism): string {
   return MECHANISM_LABELS[mechanism];
 }
+
+const priceFormat = new Intl.NumberFormat("en-IN", {
+  style: "currency",
+  currency: "INR",
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+});
+
+// Shelf prices keep their paise: ₹94.90 against ₹95 is the gap a shopper sees.
+export function formatPrice(amount: number): string {
+  return priceFormat.format(amount);
+}

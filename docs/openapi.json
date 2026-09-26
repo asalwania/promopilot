@@ -1,6 +1,121 @@
 {
   "components": {
     "schemas": {
+      "CompetitorGap": {
+        "description": "One SKU in one region against the competitor's latest price before the as-of week.",
+        "properties": {
+          "base_price": {
+            "description": "Our regular shelf price in rupees.",
+            "title": "Base Price",
+            "type": "number"
+          },
+          "category": {
+            "title": "Category",
+            "type": "string"
+          },
+          "competitor_on_promo": {
+            "description": "Whether that price was a competitor promo.",
+            "title": "Competitor On Promo",
+            "type": "boolean"
+          },
+          "competitor_price": {
+            "description": "The competitor's latest price in rupees.",
+            "title": "Competitor Price",
+            "type": "number"
+          },
+          "cpi": {
+            "description": "Competitor price index: competitor price \u00f7 base price.",
+            "title": "Cpi",
+            "type": "number"
+          },
+          "gap": {
+            "description": "1 minus CPI: how much cheaper the competitor is (< 0: dearer).",
+            "title": "Gap",
+            "type": "number"
+          },
+          "is_kvi": {
+            "title": "Is Kvi",
+            "type": "boolean"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "price_week": {
+            "description": "The week of that price, before the as-of week.",
+            "minimum": 0.0,
+            "title": "Price Week",
+            "type": "integer"
+          },
+          "region": {
+            "$ref": "#/components/schemas/Region"
+          },
+          "sku_id": {
+            "title": "Sku Id",
+            "type": "string"
+          },
+          "subcategory": {
+            "title": "Subcategory",
+            "type": "string"
+          },
+          "undercut": {
+            "description": "A KVI whose CPI is below 1 minus the undercut threshold.",
+            "title": "Undercut",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "region",
+          "sku_id",
+          "name",
+          "category",
+          "subcategory",
+          "is_kvi",
+          "base_price",
+          "competitor_price",
+          "competitor_on_promo",
+          "price_week",
+          "cpi",
+          "gap",
+          "undercut"
+        ],
+        "title": "CompetitorGap",
+        "type": "object"
+      },
+      "CompetitorGaps": {
+        "description": "The gaps for a scope, widest first, with the company-policy rules they were judged by.",
+        "properties": {
+          "as_of_week": {
+            "minimum": 0.0,
+            "title": "As Of Week",
+            "type": "integer"
+          },
+          "gaps": {
+            "items": {
+              "$ref": "#/components/schemas/CompetitorGap"
+            },
+            "title": "Gaps",
+            "type": "array"
+          },
+          "kvi_price_tolerance": {
+            "description": "How far above the competitor a KVI promo price may sit, when enabled.",
+            "title": "Kvi Price Tolerance",
+            "type": "number"
+          },
+          "undercut_threshold": {
+            "title": "Undercut Threshold",
+            "type": "number"
+          }
+        },
+        "required": [
+          "as_of_week",
+          "undercut_threshold",
+          "kvi_price_tolerance",
+          "gaps"
+        ],
+        "title": "CompetitorGaps",
+        "type": "object"
+      },
       "CreateSessionRequest": {
         "properties": {
           "brief": {
@@ -527,6 +642,104 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/api/competitors/gaps": {
+      "get": {
+        "description": "Competitor price index, gap and KVI undercut per SKU x region, widest gap first.\n\nAn unknown category is 422.",
+        "operationId": "competitor_gaps_api_competitors_gaps_get",
+        "parameters": [
+          {
+            "description": "Defaults to the data's default as-of week.",
+            "in": "query",
+            "name": "as_of_week",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Defaults to the data's default as-of week.",
+              "title": "As Of Week"
+            }
+          },
+          {
+            "in": "query",
+            "name": "region",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/Region"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Region"
+            }
+          },
+          {
+            "in": "query",
+            "name": "category",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Category"
+            }
+          },
+          {
+            "in": "query",
+            "name": "kvi_only",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Kvi Only",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompetitorGaps"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "409": {
+            "description": "No data is loaded"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Competitor Gaps",
+        "tags": [
+          "competitors"
+        ]
+      }
+    },
     "/api/health": {
       "get": {
         "operationId": "health_api_health_get",

@@ -4,6 +4,28 @@
  */
 
 export interface paths {
+    "/api/competitors/gaps": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Competitor Gaps
+         * @description Competitor price index, gap and KVI undercut per SKU x region, widest gap first.
+         *
+         *     An unknown category is 422.
+         */
+        get: operations["competitor_gaps_api_competitors_gaps_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/health": {
         parameters: {
             query?: never;
@@ -110,6 +132,75 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /**
+         * CompetitorGap
+         * @description One SKU in one region against the competitor's latest price before the as-of week.
+         */
+        CompetitorGap: {
+            /**
+             * Base Price
+             * @description Our regular shelf price in rupees.
+             */
+            base_price: number;
+            /** Category */
+            category: string;
+            /**
+             * Competitor On Promo
+             * @description Whether that price was a competitor promo.
+             */
+            competitor_on_promo: boolean;
+            /**
+             * Competitor Price
+             * @description The competitor's latest price in rupees.
+             */
+            competitor_price: number;
+            /**
+             * Cpi
+             * @description Competitor price index: competitor price ÷ base price.
+             */
+            cpi: number;
+            /**
+             * Gap
+             * @description 1 minus CPI: how much cheaper the competitor is (< 0: dearer).
+             */
+            gap: number;
+            /** Is Kvi */
+            is_kvi: boolean;
+            /** Name */
+            name: string;
+            /**
+             * Price Week
+             * @description The week of that price, before the as-of week.
+             */
+            price_week: number;
+            region: components["schemas"]["Region"];
+            /** Sku Id */
+            sku_id: string;
+            /** Subcategory */
+            subcategory: string;
+            /**
+             * Undercut
+             * @description A KVI whose CPI is below 1 minus the undercut threshold.
+             */
+            undercut: boolean;
+        };
+        /**
+         * CompetitorGaps
+         * @description The gaps for a scope, widest first, with the company-policy rules they were judged by.
+         */
+        CompetitorGaps: {
+            /** As Of Week */
+            as_of_week: number;
+            /** Gaps */
+            gaps: components["schemas"]["CompetitorGap"][];
+            /**
+             * Kvi Price Tolerance
+             * @description How far above the competitor a KVI promo price may sit, when enabled.
+             */
+            kvi_price_tolerance: number;
+            /** Undercut Threshold */
+            undercut_threshold: number;
+        };
         /** CreateSessionRequest */
         CreateSessionRequest: {
             /**
@@ -341,6 +432,48 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    competitor_gaps_api_competitors_gaps_get: {
+        parameters: {
+            query?: {
+                /** @description Defaults to the data's default as-of week. */
+                as_of_week?: number | null;
+                region?: components["schemas"]["Region"] | null;
+                category?: string | null;
+                kvi_only?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CompetitorGaps"];
+                };
+            };
+            /** @description No data is loaded */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     health_api_health_get: {
         parameters: {
             query?: never;

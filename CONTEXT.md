@@ -67,7 +67,10 @@ Units sold during the promo window divided by units available at its start.
 The minimum sell-through required for an overstocked SKU that the brief names for clearance; SKUs flagged only by days of cover get none (ADR 0014).
 
 **Competitor price index (CPI)**:
-Competitor price divided by our price, for a SKU in a region.
+The competitor's latest price before the as-of week divided by our base price, for a SKU in a region (ADR 0031).
+
+**Competitor gap**:
+1 minus the CPI: how much cheaper the competitor is (negative when they are dearer). Any SKU has one; only an undercut KVI's gap breaches the threshold.
 
 **Undercut**:
 A KVI whose CPI is below 1 minus the company-policy undercut threshold; it prompts the planner to consider matching the competitor.
