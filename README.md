@@ -82,6 +82,8 @@ Empirical Bayes shrinks each estimate toward its subcategory. `DemandModel.predi
 
 The API loads the latest demand model at startup and reports it in `/health`. `POST /api/models/retrain` retrains and swaps in the new version without a restart (see [API](#api)). For the Docker stack, train inside the api container (see the quick start) so the artifact lands on its volume.
 
+Agents reach the model only through the tool registry (`promopilot.agents.tools`, ADR 0025). Each tool has a name, a JSON-schema input and output, and an async handler over injected dependencies. `registry.specs()` lists the tools with their schemas. `await registry.call(name, arguments)` returns `ToolOk` or a typed `ToolError` (`unknown_tool`, `invalid_input` or `model_unavailable`) and never raises for a bad call. The first tool is `estimate_demand`. It takes 1 to 200 plan lines and optional competitor price overrides. For each line it returns `predict`'s numbers, unrounded, plus a per-segment table and the id and version of the model that produced them. The API builds the registry at startup (`app.state.tools`) and resolves the latest model on every call, so a newly registered model is used without a restart.
+
 ## LLM providers
 
 Agents reach an LLM only through `promopilot.llm` (ADR 0001, ADR 0019). `LLM_PROVIDER` picks the provider:
@@ -162,6 +164,7 @@ docs/agents/ Agent workflow config (issue tracker, triage labels, domain docs)
 - [ADR 0022: The Docker stack always replays cassettes baked into the api image, and `make record-cassettes` replaces them all or none](docs/adr/0022-no-key-skeleton-and-cassette-recording.md)
 - [ADR 0023: The baseline trains on clean weeks with horizon-safe features, and the registry pickles artifacts to a volume the api loads from](docs/adr/0023-baseline-forecast-and-model-registry.md)
 - [ADR 0024: The promo response is a per-SKU Poisson GLM on a reference-index baseline, shrunk by empirical Bayes](docs/adr/0024-promo-response-glm-with-empirical-bayes.md)
+- [ADR 0025: Tools are typed async handlers that return typed errors, and `estimate_demand` resolves the latest model on every call](docs/adr/0025-tool-registry-and-estimate-demand.md)
 - [ADR 0026: Retrain holds the request until the new model is live, one at a time, on the default as-of week and seed](docs/adr/0026-models-api-synchronous-retrain.md)
 - [ADR 0028: Guardrails validate plan facts and ground numbers at the precision the text shows](docs/adr/0028-guardrails-plan-facts-and-grounding-rules.md)
 
