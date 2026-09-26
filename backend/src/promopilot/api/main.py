@@ -4,20 +4,38 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Protocol
 
+import structlog
 from fastapi import FastAPI
+from sqlalchemy.ext.asyncio import create_async_engine
 
 from promopilot import __version__
 from promopilot.api.schemas import HealthChecks, HealthResponse
+from promopilot.api.sessions import SessionService, sessions_router
 from promopilot.config import Settings
+from promopilot.data import RetailData, SessionStore, migrate
 from promopilot.data.database import PostgresDatabaseProbe
+from promopilot.llm import build_provider
+
+log = structlog.get_logger(__name__)
 
 
 class DatabaseProbe(Protocol):
     async def is_healthy(self) -> bool: ...
 
 
-def create_app(*, database_probe: DatabaseProbe) -> FastAPI:
-    app = FastAPI(title="PromoPilot API", version=__version__)
+def create_app(*, database_probe: DatabaseProbe, sessions: SessionService) -> FastAPI:
+    @asynccontextmanager
+    async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+        try:
+            await sessions.recover_interrupted()
+        except Exception:
+            # Liveness first (ADR 0001): /health reports the database as it recovers.
+            log.exception("sessions.recover_failed")
+        yield
+        await sessions.close()
+
+    app = FastAPI(title="PromoPilot API", version=__version__, lifespan=lifespan)
+    app.include_router(sessions_router(sessions))
 
     # `/health` serves the container healthcheck; `/api/health` is what the web proxy forwards.
     @app.get("/health")
@@ -43,12 +61,25 @@ def build_app() -> FastAPI:
     """Production entry point: `uvicorn --factory promopilot.api.main:build_app`."""
     settings = Settings()
     probe = PostgresDatabaseProbe(settings.database_url)
-    app = create_app(database_probe=probe)
+    engine = create_async_engine(settings.database_url, pool_pre_ping=True)
+    sessions = SessionService(
+        store=SessionStore(engine), data=RetailData(engine), llm=build_provider(settings)
+    )
+    app = create_app(database_probe=probe, sessions=sessions)
+    serve = app.router.lifespan_context
 
     @asynccontextmanager
-    async def lifespan(_: FastAPI) -> AsyncIterator[None]:
-        yield
-        await probe.dispose()
+    async def lifespan(application: FastAPI) -> AsyncIterator[None]:
+        try:
+            await migrate(engine)
+        except Exception:
+            log.exception("database.migrate_failed")
+        try:
+            async with serve(application):
+                yield
+        finally:
+            await engine.dispose()
+            await probe.dispose()
 
     app.router.lifespan_context = lifespan
     return app

@@ -1,6 +1,7 @@
 from httpx import ASGITransport, AsyncClient
 
 from promopilot.api.main import create_app
+from tests.offline import offline_sessions
 
 
 class FakeDatabaseProbe:
@@ -12,7 +13,7 @@ class FakeDatabaseProbe:
 
 
 async def get_health(probe: FakeDatabaseProbe) -> tuple[int, dict[str, object]]:
-    app = create_app(database_probe=probe)
+    app = create_app(database_probe=probe, sessions=offline_sessions())
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         response = await client.get("/health")
     return response.status_code, response.json()
@@ -43,7 +44,7 @@ class ExplodingDatabaseProbe:
 
 
 async def test_health_is_degraded_when_database_probe_raises() -> None:
-    app = create_app(database_probe=ExplodingDatabaseProbe())
+    app = create_app(database_probe=ExplodingDatabaseProbe(), sessions=offline_sessions())
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         response = await client.get("/health")
 
@@ -52,7 +53,7 @@ async def test_health_is_degraded_when_database_probe_raises() -> None:
 
 
 async def test_health_is_also_served_under_the_api_prefix_for_the_web_proxy() -> None:
-    app = create_app(database_probe=FakeDatabaseProbe(healthy=True))
+    app = create_app(database_probe=FakeDatabaseProbe(healthy=True), sessions=offline_sessions())
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         response = await client.get("/api/health")
 

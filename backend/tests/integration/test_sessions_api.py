@@ -1,0 +1,185 @@
+"""The session API over HTTP, with a FakeProvider, against real Postgres (E3 seam 1)."""
+
+import asyncio
+from collections.abc import AsyncIterator, Iterator, Sequence
+from contextlib import asynccontextmanager
+from pathlib import Path
+from typing import Any
+
+import pytest
+from fastapi import FastAPI
+from httpx import ASGITransport, AsyncClient
+from pydantic import BaseModel
+from sqlalchemy.ext.asyncio import create_async_engine
+from testcontainers.community.postgres import PostgresContainer
+
+from promopilot.agents import BriefReading
+from promopilot.api.main import create_app
+from promopilot.api.sessions import SessionService
+from promopilot.data import RetailData, SessionStore, load_dataset
+from promopilot.datagen import GeneratedDataset, write
+from promopilot.domain import Region
+from promopilot.llm import FakeProvider, LLMError, LLMProvider, Message
+
+pytestmark = pytest.mark.integration
+
+HISTORY_WEEKS = 52  # small_config
+BUDGET = 20_000.0
+READING = BriefReading(
+    regions=[Region.NORTH],
+    categories=["Snacks"],
+    sku_ids=None,
+    promo_start_week=HISTORY_WEEKS + 2,
+    promo_end_week=HISTORY_WEEKS + 3,
+    marketing_budget=BUDGET,
+    min_margin=None,
+)
+BRIEF = "Snacks push in the North over the next festival, ₹20k budget"
+
+
+class HealthyProbe:
+    async def is_healthy(self) -> bool:
+        return True
+
+
+class GatedProvider:
+    """Holds every call until the test opens the gate, so `planning` is observable."""
+
+    def __init__(self, inner: LLMProvider) -> None:
+        self.inner = inner
+        self.gate = asyncio.Event()
+
+    async def complete_structured[T: BaseModel](
+        self, schema: type[T], messages: Sequence[Message]
+    ) -> T:
+        await self.gate.wait()
+        return await self.inner.complete_structured(schema, messages)
+
+
+@pytest.fixture(scope="module")
+def postgres_url(
+    small_dataset: GeneratedDataset, tmp_path_factory: pytest.TempPathFactory
+) -> Iterator[str]:
+    data_dir: Path = tmp_path_factory.mktemp("data")
+    write(small_dataset, data_dir)
+    with PostgresContainer("postgres:16-alpine", driver="asyncpg") as postgres:
+        url = postgres.get_connection_url()
+        asyncio.run(load_dataset(data_dir, url))
+        yield url
+
+
+@asynccontextmanager
+async def running_api(url: str, llm: LLMProvider) -> AsyncIterator[AsyncClient]:
+    """One API process: its own engine, startup and shutdown, like a uvicorn worker."""
+    engine = create_async_engine(url)
+    sessions = SessionService(store=SessionStore(engine), data=RetailData(engine), llm=llm)
+    app: FastAPI = create_app(database_probe=HealthyProbe(), sessions=sessions)
+    try:
+        async with app.router.lifespan_context(app):
+            transport = ASGITransport(app=app)
+            async with AsyncClient(transport=transport, base_url="http://test") as client:
+                yield client
+    finally:
+        await engine.dispose()
+
+
+async def settled(client: AsyncClient, session_id: str) -> dict[str, Any]:
+    for _ in range(200):
+        body: dict[str, Any] = (await client.get(f"/api/sessions/{session_id}")).json()
+        if body["status"] != "planning":
+            return body
+        await asyncio.sleep(0.05)
+    raise AssertionError(f"session {session_id} is still planning")
+
+
+async def test_a_session_goes_from_planning_to_awaiting_approval_with_a_plan_in_budget_and_scope(
+    postgres_url: str, small_dataset: GeneratedDataset
+) -> None:
+    llm = GatedProvider(FakeProvider([READING]))
+    async with running_api(postgres_url, llm) as client:
+        created = await client.post("/api/sessions", json={"brief": BRIEF})
+        session_id = created.json()["session_id"]
+        planning = (await client.get(f"/api/sessions/{session_id}")).json()
+        llm.gate.set()
+        done = await settled(client, session_id)
+
+    assert created.status_code == 202
+    assert planning["status"] == "planning"
+    assert planning["brief"] == BRIEF
+    assert planning["plan_revision"] is None
+    assert done["status"] == "awaiting_approval"
+    assert done["error"] is None
+    request = done["planning_request"]
+    assert request["as_of_week"] == HISTORY_WEEKS
+    assert request["marketing_budget"] == BUDGET
+    assert request["scope"]["regions"] == ["North"]
+    assert request["promo_window"] == {"start_week": 54, "end_week": 55}
+    revision = done["plan_revision"]
+    snacks = set(small_dataset.products.query("category == 'Snacks'")["sku_id"])
+    assert revision["number"] == 1
+    assert revision["lines"]
+    assert sum(line["promo_cost"] for line in revision["lines"]) <= BUDGET
+    assert {line["line"]["region"] for line in revision["lines"]} == {"North"}
+    assert {line["line"]["sku_id"] for line in revision["lines"]} <= snacks
+
+
+async def test_an_llm_error_fails_the_session(postgres_url: str) -> None:
+    async with running_api(postgres_url, FakeProvider([LLMError("provider down")])) as client:
+        session_id = (await client.post("/api/sessions", json={"brief": BRIEF})).json()[
+            "session_id"
+        ]
+        done = await settled(client, session_id)
+
+    assert done["status"] == "failed"
+    assert "provider down" in done["error"]
+    assert done["plan_revision"] is None
+
+
+async def test_a_brief_missing_its_budget_fails_the_session_saying_so(postgres_url: str) -> None:
+    unbudgeted = READING.model_copy(update={"marketing_budget": None})
+    async with running_api(postgres_url, FakeProvider([unbudgeted])) as client:
+        session_id = (await client.post("/api/sessions", json={"brief": BRIEF})).json()[
+            "session_id"
+        ]
+        done = await settled(client, session_id)
+
+    assert done["status"] == "failed"
+    assert "marketing budget" in done["error"]
+
+
+async def test_an_unknown_session_is_404(postgres_url: str) -> None:
+    async with running_api(postgres_url, FakeProvider([])) as client:
+        response = await client.get("/api/sessions/00000000-0000-0000-0000-000000000000")
+
+    assert response.status_code == 404
+
+
+@pytest.mark.parametrize("brief", ["", "   \n ", "x" * 2001], ids=["empty", "blank", "oversized"])
+async def test_an_empty_or_oversized_brief_is_422(postgres_url: str, brief: str) -> None:
+    llm = FakeProvider([])
+    async with running_api(postgres_url, llm) as client:
+        response = await client.post("/api/sessions", json={"brief": brief})
+
+    assert response.status_code == 422
+    assert llm.calls == []
+
+
+async def test_finished_sessions_survive_a_restart_and_interrupted_ones_fail(
+    postgres_url: str,
+) -> None:
+    async with running_api(postgres_url, FakeProvider([READING])) as client:
+        finished_id = (await client.post("/api/sessions", json={"brief": BRIEF})).json()[
+            "session_id"
+        ]
+        finished = await settled(client, finished_id)
+    stuck = GatedProvider(FakeProvider([READING]))
+    async with running_api(postgres_url, stuck) as client:
+        stuck_id = (await client.post("/api/sessions", json={"brief": BRIEF})).json()["session_id"]
+
+    async with running_api(postgres_url, FakeProvider([])) as client:
+        after_finished = (await client.get(f"/api/sessions/{finished_id}")).json()
+        after_stuck = (await client.get(f"/api/sessions/{stuck_id}")).json()
+
+    assert after_finished == finished
+    assert after_stuck["status"] == "failed"
+    assert "interrupted" in after_stuck["error"]
