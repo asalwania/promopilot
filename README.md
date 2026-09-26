@@ -2,7 +2,7 @@
 
 Agentic retail promotion planner for the ET AI Hackathon (Problem 3, Retail: Autonomous Promotion Planner). A planning brief in plain English becomes a promotion plan that respects inventory, margin and budget constraints, with every number coming from deterministic tools and a human approving the result.
 
-> **Status:** epic E0 (bootstrap). The API serves `/health` and the web app shows it. Planning features arrive in later epics; see [SPEC.md](SPEC.md) §15 for the delivery plan.
+> **Status:** epic E2 (synthetic data and oracle). `make data` generates the synthetic world; the API serves `/health` and the web app shows it. Planning features arrive in later epics; see [SPEC.md](SPEC.md) §15 for the delivery plan.
 
 ## Quickstart
 
@@ -36,7 +36,21 @@ docker compose up -d --build --wait   # or: make up
 | `make lint` / `make format` | ruff, ESLint, Prettier |
 | `make typecheck` | mypy strict, tsc strict |
 | `make api-types` | Export OpenAPI to `docs/openapi.json` and regenerate frontend types |
-| `make data`, `make train`, `make eval`, `make demo` | Arrive in epics E2, E4, E9, E11 |
+| `make data` | Generate the seeded synthetic dataset into `data/generated/` (Parquet) and its hidden ground truth into `data/ground_truth/` |
+| `make train`, `make eval`, `make demo` | Arrive in epics E4, E9, E11 |
+
+## Synthetic data
+
+The organisers give no data, so `make data` generates a synthetic multi-region Indian retailer whose true demand parameters are known (SPEC §8, ADR 0003). Seed 42 and the defaults in [`backend/src/promopilot/datagen/config.yaml`](backend/src/promopilot/datagen/config.yaml) cover:
+- 200 SKUs in 8 categories, and 4 regions × 5 stores with a segment mix per store.
+- A festival calendar on real dates (week 0 = 2024-09-30), 104 weeks of per-segment sales and promotion history.
+- Competitor prices, weekly inventory, 200,000 baskets, and a 52-week future horizon.
+
+| Setting | Default | Meaning |
+|---|---|---|
+| `DATA_DIR` (`.env`) | `../data` | Output directory, relative to `backend/` |
+
+For a different world, run `cd backend && uv run python -m promopilot.datagen --config my.yaml --seed 7 --out ../data`. The YAML only needs the keys it overrides. The same seed and config always give byte-identical files. Only `promopilot.datagen` and `promopilot.evals` may read `data/ground_truth/`.
 
 ## API
 
@@ -71,6 +85,8 @@ docs/agents/ Agent workflow config (issue tracker, triage labels, domain docs)
 - [ADR 0012: Constraint satisfaction is checked on plan-time values; the oracle breach rate is reported](docs/adr/0012-constraint-satisfaction-on-plan-time-values.md)
 - [ADR 0013: Substitute detection uses FDR control plus an effect-size threshold](docs/adr/0013-substitute-detection-with-fdr-and-effect-size.md)
 - [ADR 0014: Clearance targets apply only to brief-named SKUs; a BUNDLE partner is locked](docs/adr/0014-clearance-targets-and-bundle-partners.md)
+- [ADR 0015: Promo accounting details: charm prices, fixed cost in profit, money as float rupees](docs/adr/0015-promo-accounting-details.md)
+- [ADR 0016: Synthetic world details: real calendar dates, overstock per SKU, hidden future competitor prices](docs/adr/0016-synthetic-world-details.md)
 
 The domain glossary is [CONTEXT.md](CONTEXT.md).
 

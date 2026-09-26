@@ -159,3 +159,23 @@ competitors:
   aggressive_region: North
   aggressive_promo_probability: 0.12
   aggressive_kvi_price_level: [0.85, 0.92]
+
+# Basket transactions for co-occurrence (SPEC §8.1): popular SKUs per segment, and a
+# chance that each item pulls one of its true complements into the basket.
+basket_contents:
+  mean_extra_items: 3                 # basket size = 1 + Poisson(mean)
+  complement_attach: 0.2
+
+# Weekly inventory snapshots (end of week) per store and SKU. Cover is in weeks of
+# trailing average demand; overstock is per SKU in every region (ADR 0016).
+inventory:
+  overstock_share: 0.12               # of SKUs; the flag itself follows the company policy
+  low_stock_share: 0.05
+  force_overstock: [Namkeen 400g]     # the demo brief's overstocked packs
+  normal_cover_weeks: [2, 5]
+  overstock_cover_weeks: [11, 16]
+  low_stock_cover_weeks: [0.3, 0.8]
+  noise_sd: 0.05                      # per store x SKU and per week, log scale
+  safety_stock_weeks: 0.5
+  on_order_weeks: [0.5, 1.5]          # overstocked SKUs have nothing on order
+  demand_window_weeks: 4

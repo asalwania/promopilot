@@ -17,6 +17,7 @@ endif
 
 API_PORT ?= 8000
 WEB_PORT ?= 3000
+DATA_DIR ?= ../data
 
 BACKEND := cd backend &&
 FRONTEND := cd frontend &&
@@ -101,11 +102,13 @@ api-types: ## Export OpenAPI and regenerate frontend API types
 	$(BACKEND) uv run python -m promopilot.api.openapi > ../docs/openapi.json
 	$(FRONTEND) pnpm exec openapi-typescript ../docs/openapi.json -o src/lib/api/schema.d.ts
 
-# ---------------------------------------------------------------- later epics
+# ---------------------------------------------------------------- data + later epics
 
-.PHONY: data train eval demo record-cassettes
-data: ## (E2) Generate synthetic data + ground truth
-	@echo "make data arrives in epic E2 (SPEC.md §15)" >&2; exit 1
+.PHONY: data
+data: ## Generate the synthetic dataset + ground truth into DATA_DIR (seeded)
+	$(BACKEND) uv run python -m promopilot.datagen --out $(DATA_DIR)
+
+.PHONY: train eval demo record-cassettes
 train: ## (E4) Train demand + relations models
 	@echo "make train arrives in epic E4 (SPEC.md §15)" >&2; exit 1
 eval: ## (E9) Run the eval suite

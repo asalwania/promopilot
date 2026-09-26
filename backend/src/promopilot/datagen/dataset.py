@@ -20,4 +20,6 @@ class GeneratedDataset:
     competitor_prices: pd.DataFrame
     promotions_history: pd.DataFrame
     sales_weekly: pd.DataFrame
+    inventory: pd.DataFrame
+    baskets: pd.DataFrame
     ground_truth: GroundTruth
