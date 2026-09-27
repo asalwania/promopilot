@@ -99,6 +99,38 @@ async def test_a_brief_becomes_an_optimised_plan_revision_one_within_budget_and_
     assert all(entry.reasons for entry in revision.not_selected)
 
 
+async def test_every_plan_line_carries_a_comparison_of_mechanisms(
+    data: InMemoryRetailData,
+    planner: OptimisingPlanner,
+    small_models: tuple[DemandModel, Relations],
+) -> None:
+    llm = FakeProvider([reading()])
+
+    result = await plan_session("Snacks push in the North, ₹20k, weeks 54-55", llm, data, planner)
+
+    assert result.revision.lines
+    relations = small_models[1]
+    for planned in result.revision.lines:
+        line = planned.line
+        comparison = planned.mechanism_comparison
+        [chosen] = [outcome for outcome in comparison if outcome.chosen]
+        assert chosen.mechanism is line.mechanism
+        assert chosen.best is not None
+        assert chosen.best.option == line
+        assert chosen.best.promo_cost == pytest.approx(planned.promo_cost)
+        assert chosen.best.incremental_profit == pytest.approx(planned.expected_incremental_profit)
+        mechanisms = [outcome.mechanism for outcome in comparison]
+        assert len(mechanisms) == len(set(mechanisms))
+        has_complement = not relations.complements(line.sku_id).empty
+        assert (Mechanism.BUNDLE in mechanisms) is has_complement
+        for outcome in comparison:
+            if outcome.best is not None:
+                assert (outcome.best.option.sku_id, outcome.best.option.region) == (
+                    line.sku_id,
+                    line.region,
+                )
+
+
 async def test_a_tight_budget_is_reported_as_binding(
     data: InMemoryRetailData, planner: OptimisingPlanner
 ) -> None:

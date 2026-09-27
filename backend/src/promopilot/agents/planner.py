@@ -3,9 +3,10 @@
 For a planning request it generates every promo option of the scope and promo window on the
 latest demand model and the live relations model (ADR 0035), selects the plan with `solve`
 (ADR 0036) and turns the result into plan revision 1: each plan line with its expected
-numbers and why it was chosen, the solver status and objective, the binding constraints and
-the best options left out (ADR 0038). E8's planner agent drives the same work through the
-`generate_candidates` and `run_optimizer` tools instead.
+numbers, why it was chosen and how the other mechanisms compare (ADR 0041), the solver status
+and objective, the binding constraints and the best options left out (ADR 0038). E8's
+planner agent drives the same work through the `generate_candidates`, `run_optimizer` and
+`compare_mechanisms` tools instead.
 """
 
 import asyncio
@@ -17,6 +18,7 @@ from promopilot.agents.tools.estimate_demand import DemandModelSource
 from promopilot.agents.tools.get_relations import RelationsSource
 from promopilot.agents.tools.inventory_status import pooled_stock
 from promopilot.domain import CompanyPolicy, PlanningRequest, PlanRevision, PlanRevisionLine
+from promopilot.mechanisms import ComparisonContext, compare
 from promopilot.optimizer import (
     FittedOptionFacts,
     OptionContext,
@@ -92,18 +94,26 @@ class OptimisingPlanner:
             seed=self._seed,
         )
         table = options.table
-        return PlanRevision(
-            number=1,
-            lines=tuple(
+        # Each line's mechanisms are compared on the same options the optimiser chose from.
+        comparing = ComparisonContext(
+            options=options, relations=context.relations, products=context.products
+        )
+        lines = []
+        for row, why in zip(result.selected, result.why_chosen, strict=True):
+            line = options.lines[row]
+            lines.append(
                 PlanRevisionLine(
-                    line=options.lines[row],
+                    line=line,
                     expected_units=float(table["units"].iloc[row]),
                     promo_cost=float(table["promo_cost"].iloc[row]),
                     expected_incremental_profit=float(table["incremental_profit"].iloc[row]),
                     why_chosen=why,
+                    mechanism_comparison=compare(line.sku_id, line.region, comparing, chosen=line),
                 )
-                for row, why in zip(result.selected, result.why_chosen, strict=True)
-            ),
+            )
+        return PlanRevision(
+            number=1,
+            lines=tuple(lines),
             solver_status=result.status,
             objective=result.objective,
             binding_constraints=result.binding_constraints,

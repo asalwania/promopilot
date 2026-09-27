@@ -413,6 +413,62 @@ export interface components {
          */
         Mechanism: "PCT_OFF" | "BOGO" | "BUNDLE" | "FIXED_PRICE";
         /**
+         * MechanismOption
+         * @description One promo option's expected numbers, as its prediction gave them (rupees, units over
+         *     its promo weeks; a BUNDLE's money fields include its partner).
+         */
+        MechanismOption: {
+            /** Anchor Sku Id */
+            anchor_sku_id: string;
+            /** Basket Lift */
+            basket_lift?: number | null;
+            /** Cannibalised Profit */
+            cannibalised_profit: number;
+            /** Clearance Value */
+            clearance_value: number;
+            /** Effective Price */
+            effective_price: number;
+            /** Gross Profit */
+            gross_profit: number;
+            /** Halo Profit */
+            halo_profit: number;
+            /** Incremental Profit */
+            incremental_profit: number;
+            /** Margin */
+            margin: number;
+            option: components["schemas"]["PlanLine"];
+            /** Partner Effective Price */
+            partner_effective_price?: number | null;
+            /** Partner Sku Id */
+            partner_sku_id?: string | null;
+            /** Promo Cost */
+            promo_cost: number;
+            /** Revenue */
+            revenue: number;
+            /** Units */
+            units: number;
+            /** Value */
+            value: number;
+        };
+        /**
+         * MechanismOutcome
+         * @description One mechanism in a comparison: its best option, or why it has none.
+         */
+        MechanismOutcome: {
+            best: components["schemas"]["MechanismOption"] | null;
+            /**
+             * Chosen
+             * @default false
+             */
+            chosen: boolean;
+            mechanism: components["schemas"]["Mechanism"];
+            /**
+             * Unavailable
+             * @default []
+             */
+            unavailable: components["schemas"]["PruneReason"][];
+        };
+        /**
          * ModelEntry
          * @description One registered model version; `live` marks the one the API is serving.
          */
@@ -544,6 +600,11 @@ export interface components {
             /** Expected Units */
             expected_units: number;
             line: components["schemas"]["PlanLine"];
+            /**
+             * Mechanism Comparison
+             * @default []
+             */
+            mechanism_comparison: components["schemas"]["MechanismOutcome"][];
             /** Promo Cost */
             promo_cost: number;
             why_chosen?: components["schemas"]["WhyChosen"] | null;
@@ -598,6 +659,13 @@ export interface components {
             /** Start Week */
             start_week: number;
         };
+        /**
+         * PruneReason
+         * @description Why option generation dropped an enumerated promo option, in the order the rules are
+         *     applied (ADR 0035).
+         * @enum {string}
+         */
+        PruneReason: "no_charm_price" | "max_discount" | "below_cost" | "duplicate_price" | "stock" | "partner_stock";
         /**
          * Region
          * @enum {string}
