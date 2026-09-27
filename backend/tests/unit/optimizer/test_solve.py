@@ -500,7 +500,9 @@ PROPERTY = settings(max_examples=100, deadline=None, suppress_health_check=[Heal
 def test_every_returned_plan_satisfies_every_hard_constraint(instance: Instance) -> None:
     result = instance.solve()
 
-    assert result.status is SolveStatus.OPTIMAL
+    # A request no plan can reach every clearance target of is infeasible (ADR 0044).
+    missing = bool(result.clearance_shortfalls)
+    assert result.status is (SolveStatus.INFEASIBLE if missing else SolveStatus.OPTIMAL)
     picked = list(result.selected)
     assert [instance.rows[n].line for n in picked] == list(result.plan.lines)
     violations = validate_plan(instance.facts_of(picked), instance.planning(), instance.policy)

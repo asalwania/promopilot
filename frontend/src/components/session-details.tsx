@@ -51,14 +51,23 @@ export function SessionDetails({ session }: { session: Session }) {
           <CardHeader>
             <CardTitle>Plan revision {session.plan_revision.number}</CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className="flex flex-col gap-2">
+            {/* The relaxation itself is shown in E10 (ADR 0044). */}
+            {session.plan_revision.solver_status === "INFEASIBLE" && (
+              <p role="alert" className="text-destructive text-sm">
+                Infeasible: no plan reaches every clearance target within the
+                brief&apos;s constraints.
+              </p>
+            )}
             {session.plan_revision.lines.length > 0 ? (
               <PlanTable lines={session.plan_revision.lines} />
             ) : (
-              <p className="text-muted-foreground text-sm">
-                No promo option pays for itself within the brief&apos;s
-                constraints.
-              </p>
+              session.plan_revision.solver_status !== "INFEASIBLE" && (
+                <p className="text-muted-foreground text-sm">
+                  No promo option pays for itself within the brief&apos;s
+                  constraints.
+                </p>
+              )
             )}
           </CardContent>
         </Card>

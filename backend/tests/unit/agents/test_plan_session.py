@@ -13,6 +13,7 @@ from promopilot.agents import (
 from promopilot.agents.tools.inventory_status import pooled_stock
 from promopilot.datagen import GeneratedDataset
 from promopilot.domain import (
+    BindingEvidence,
     CompanyPolicy,
     ConstraintKind,
     Mechanism,
@@ -275,7 +276,7 @@ def planning(**brief: object) -> PlanningRequest:
     return PlanningRequest.model_validate(fields | brief)
 
 
-async def test_a_clearance_target_is_met_or_its_shortfall_is_recorded_on_the_revision(
+async def test_an_unreachable_clearance_target_is_infeasible_with_a_relaxation_on_the_revision(
     planner: OptimisingPlanner, small_dataset: GeneratedDataset
 ) -> None:
     snapshot = small_dataset.inventory.query(f"snapshot_week == {HISTORY_WEEKS - 1}")
@@ -287,7 +288,7 @@ async def test_a_clearance_target_is_met_or_its_shortfall_is_recorded_on_the_rev
 
     revision = await planner.plan(request)
 
-    assert revision.solver_status in (SolveStatus.OPTIMAL, SolveStatus.FEASIBLE)
+    assert revision.solver_status is SolveStatus.INFEASIBLE
     # Selling all of the SKU with the most cover in two weeks is out of reach: P90 units must
     # stay within stock. The plan comes as close as it can and says by how much it misses.
     shortfalls = revision.clearance_shortfalls
@@ -297,6 +298,21 @@ async def test_a_clearance_target_is_met_or_its_shortfall_is_recorded_on_the_rev
         assert shortfall.shortfall_units > 0
         assert shortfall.expected_sell_through < 1.0
     assert any(line.line.sku_id == sku_id for line in revision.lines)
+    # No budget or margin reaches it: the stock rule binds, so the target must come down.
+    relaxation = revision.relaxation
+    assert relaxation is not None
+    assert relaxation.policy_binds
+    (change,) = relaxation.changes
+    assert (change.kind, change.sku_id, change.current) == (
+        ConstraintKind.CLEARANCE_TARGET,
+        sku_id,
+        1.0,
+    )
+    assert change.relaxed is not None
+    assert change.relaxed <= min(s.expected_sell_through for s in shortfalls) + 1e-4
+    assert {(c.kind, c.evidence) for c in revision.binding_constraints} == {
+        (ConstraintKind.CLEARANCE_TARGET, BindingEvidence.INFEASIBLE)
+    }
 
 
 async def test_regional_caps_hold_and_a_loosening_brief_value_is_recorded(

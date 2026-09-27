@@ -131,9 +131,9 @@ def test_the_budget_and_margin_are_reported_binding_exactly_when_dropping_them_g
     instance: Instance,
 ) -> None:
     result = instance.solve()
-    assert result.status is SolveStatus.OPTIMAL
     # A plan short of a clearance target is the closest one, not the best one (ADR 0040).
     assume(not result.clearance_shortfalls)
+    assert result.status is SolveStatus.OPTIMAL
 
     budget = gains(result, without_budget(instance).solve())
     margin = gains(result, without_margin(instance).solve())

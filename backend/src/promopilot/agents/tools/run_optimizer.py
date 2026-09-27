@@ -20,6 +20,7 @@ from promopilot.domain import (
     NotSelectedOption,
     PlanLine,
     PolicyFinding,
+    Relaxation,
     WhyChosen,
 )
 from promopilot.economics import blended_margin
@@ -37,13 +38,15 @@ DESCRIPTION = (
     "region, and turn on the KVI price tolerance. Only options that pay for themselves alone "
     "are selected, or that sell a SKU the request names for clearance towards its target. "
     "Each clearance target is met when any plan can meet it; otherwise the plan comes as close "
-    "as it can and the shortfall is reported. Returns the solver status (OPTIMAL, FEASIBLE "
-    "when the time limit ran out first, INFEASIBLE), the objective, each selected plan line "
-    "with its numbers and why it was chosen, the plan's totals, the binding constraints (those "
-    "whose removal would raise the objective), the best options left out with the rules they "
-    "break, clearance shortfalls, and any request value that would have loosened company "
-    "policy (policy was kept). A candidate_set_id that is no longer stored must be "
-    "regenerated."
+    "as it can, the shortfall is reported, the status is INFEASIBLE and the smallest "
+    "relaxation of the request's constraints is attached (see relax_constraints). Returns the "
+    "solver status (OPTIMAL, FEASIBLE when the time limit ran out first, INFEASIBLE when no "
+    "plan reaches every clearance target), the objective, each selected plan line with its "
+    "numbers and why it was chosen, the plan's totals, the binding constraints (those whose "
+    "removal would raise the objective; for an infeasible request, those that make it "
+    "infeasible), the best options left out with the rules they break, clearance shortfalls, "
+    "the relaxation, and any request value that would have loosened company policy (policy "
+    "was kept). A candidate_set_id that is no longer stored must be regenerated."
 )
 
 
@@ -111,6 +114,10 @@ class RunOptimizerOutput(BaseModel):
     policy_findings: list[PolicyFinding] = Field(
         description="Request values that would have loosened company policy; policy was kept."
     )
+    relaxation: Relaxation | None = Field(
+        description="When no plan reaches every clearance target, the smallest change to the "
+        "request's constraints that makes it feasible; null otherwise."
+    )
 
 
 _LINE_COLUMNS = [
@@ -168,6 +175,7 @@ def run_optimizer_tool(
             not_selected=list(result.not_selected),
             clearance_shortfalls=list(result.clearance_shortfalls),
             policy_findings=list(result.policy_findings),
+            relaxation=result.relaxation,
         )
 
     return Tool(

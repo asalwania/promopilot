@@ -98,6 +98,7 @@ async def test_the_api_serves_the_data_tools_at_the_loaded_datas_as_of_week(
         assert {
             "generate_candidates",
             "run_optimizer",
+            "relax_constraints",
             "compare_mechanisms",
             "simulate_plan",
         } <= {spec.name for spec in tools.specs()}

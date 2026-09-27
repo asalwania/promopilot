@@ -6,6 +6,8 @@ latest demand model and the live relations model (ADR 0035), selects the plan wi
 numbers, why it was chosen and how the other mechanisms compare (ADR 0041), the solver status
 and objective, the binding constraints and the best options left out (ADR 0038), with any
 clearance shortfall and any brief value that would have loosened company policy (ADR 0040).
+A request no plan can reach every clearance target of is infeasible: the revision keeps the
+closest plan and the smallest relaxation of the brief's constraints (ADR 0044).
 The latest competitor gaps give undercut KVIs their price-match options and the KVI price
 tolerance its competitor prices (ADR 0031). The plan is then simulated with the session's
 simulation settings and the result stored on the revision (ADR 0042). E8's planner agent
@@ -148,4 +150,5 @@ class OptimisingPlanner:
             simulation=simulation,
             clearance_shortfalls=result.clearance_shortfalls,
             policy_findings=result.policy_findings,
+            relaxation=result.relaxation,
         )

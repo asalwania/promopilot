@@ -19,6 +19,7 @@ from promopilot.domain import (
     PlanRevisionLine,
     PlanSimulation,
     PolicyFinding,
+    Relaxation,
     SessionStatus,
     SolveStatus,
     WhyChosen,
@@ -115,6 +116,9 @@ class SessionStore:
                         revision.clearance_shortfalls, mode="json"
                     ),
                     policy_findings=_FINDINGS.dump_python(revision.policy_findings, mode="json"),
+                    relaxation=None
+                    if revision.relaxation is None
+                    else revision.relaxation.model_dump(mode="json"),
                 )
             )
             if revision.lines:
@@ -209,6 +213,9 @@ def _revision(row: object, lines: tuple[PlanRevisionLine, ...]) -> PlanRevision:
         else PlanSimulation.model_validate(values["simulation"]),
         clearance_shortfalls=_SHORTFALLS.validate_python(values["clearance_shortfalls"] or ()),
         policy_findings=_FINDINGS.validate_python(values["policy_findings"] or ()),
+        relaxation=None
+        if values["relaxation"] is None
+        else Relaxation.model_validate(values["relaxation"]),
     )
 
 

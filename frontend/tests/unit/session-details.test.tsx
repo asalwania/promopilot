@@ -6,6 +6,7 @@ import { SessionDetails } from "@/components/session-details";
 import {
   awaitingApprovalSession,
   failedSession,
+  infeasibleSession,
   planLines,
   planningSession,
 } from "./fixtures/sessions";
@@ -53,6 +54,19 @@ describe("SessionDetails", () => {
     );
     expect(screen.queryByRole("progressbar")).not.toBeInTheDocument();
     expect(screen.queryByRole("table")).not.toBeInTheDocument();
+  });
+
+  it("says an infeasible request is infeasible, not that nothing pays", () => {
+    render(<SessionDetails session={infeasibleSession} />);
+
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Infeasible: no plan reaches every clearance target within the brief's constraints.",
+    );
+    expect(
+      screen.queryByText(
+        "No promo option pays for itself within the brief's constraints.",
+      ),
+    ).not.toBeInTheDocument();
   });
 
   it("says so when no promo option is worth a plan line", () => {

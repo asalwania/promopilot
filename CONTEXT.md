@@ -67,7 +67,7 @@ The expected units a SKU sells in a region over the promo window, promotions inc
 The minimum sell-through required, in every region of the scope, for an overstocked SKU that the brief names for clearance; SKUs flagged only by days of cover get none (ADR 0014).
 
 **Clearance shortfall**:
-How far a plan falls short of a clearance target that no plan within the other constraints reaches. The optimiser then returns the plan closest to every target and reports each shortfall; it is never a silent miss (ADR 0040).
+How far a plan falls short of a clearance target that no plan within the other constraints reaches. The optimiser then returns the plan closest to every target and reports each shortfall; it is never a silent miss (ADR 0040). The request is infeasible, and a relaxation says what would fix it (ADR 0044).
 
 **Competitor price index (CPI)**:
 The competitor's latest price before the as-of week divided by our base price, for a SKU in a region (ADR 0031).
@@ -144,11 +144,17 @@ A planning-request field the agent must never guess: marketing budget, scope (ca
 **Clarification**:
 A specific question the agent asks the user, pausing the planning session until it is answered.
 
+**Infeasible**:
+A planning request is infeasible when no plan reaches every clearance target within its other constraints; the empty plan keeps every other constraint, so nothing else can make it so. The optimiser says so only when it has proven it: a timeout is `FEASIBLE`, never `INFEASIBLE`. The closest plan still comes back, with its clearance shortfalls and a relaxation (ADR 0044).
+
 **Relaxation**:
-The smallest change to the brief's constraints (budget, minimum margin down to the policy floor, clearance target, scope) that would make an infeasible planning request feasible. Company policy is never relaxed.
+The smallest change to the brief's constraints that would make an infeasible planning request feasible: a higher marketing budget or regional budget cap, a lower minimum margin (down to the margin floor), a looser brief promoted-SKU cap (up to policy's), a brief-enabled KVI price tolerance turned off, or a lower or dropped clearance target. "Smallest" is the least sum of each change as a share of the brief's value. Company policy is never relaxed, and scope is not relaxed (ADR 0007, ADR 0044).
+
+**Policy binds**:
+Said of a relaxation when no change to the budget, caps, minimum margin or KVI tolerance alone would reach every clearance target, so a target must come down; the relaxation then gives the most sell-through company policy allows (ADR 0044).
 
 **Binding constraint**:
-A plan-level constraint (marketing budget, regional budget cap, minimum margin or margin floor, promoted-SKU cap per category and region, clearance target, KVI price tolerance) whose removal would give the optimiser a strictly better objective. It is unproven when the solver ran out of time before settling it (ADR 0038, ADR 0040).
+A plan-level constraint (marketing budget, regional budget cap, minimum margin or margin floor, promoted-SKU cap per category and region, clearance target, KVI price tolerance) whose removal would give the optimiser a strictly better objective. It is unproven when the solver ran out of time before settling it (ADR 0038, ADR 0040). For an infeasible request, the binding constraints are the clearance targets the plan misses and the constraints the relaxation changes (ADR 0044).
 _Avoid_: active constraint, bottleneck
 
 **Company policy**:

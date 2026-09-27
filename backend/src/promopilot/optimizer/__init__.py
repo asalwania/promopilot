@@ -13,6 +13,7 @@ from promopilot.optimizer.options import (
     PromoOptions,
     generate_options,
 )
+from promopilot.optimizer.relaxation import relaxed_request
 from promopilot.optimizer.solver import (
     OptimisationResult,
     OptionFacts,
@@ -39,5 +40,6 @@ __all__ = [
     "SolveStatus",
     "SolverSettings",
     "generate_options",
+    "relaxed_request",
     "solve",
 ]
