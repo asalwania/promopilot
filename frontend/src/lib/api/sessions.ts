@@ -79,12 +79,49 @@ export const notSelectedOptionSchema = z.object({
   cannibalises: z.array(z.string()),
 }) satisfies z.ZodType<Schemas["NotSelectedOption"]>;
 
+// Each mechanism's best option for a plan line's SKU and region (F-02, ADR 0041).
+export const mechanismOptionSchema = z.object({
+  option: planLineSchema,
+  anchor_sku_id: z.string(),
+  partner_sku_id: z.string().nullable().optional(),
+  basket_lift: z.number().nullable().optional(),
+  effective_price: z.number(),
+  partner_effective_price: z.number().nullable().optional(),
+  units: z.number(),
+  revenue: z.number(),
+  gross_profit: z.number(),
+  margin: z.number(),
+  promo_cost: z.number(),
+  incremental_profit: z.number(),
+  cannibalised_profit: z.number(),
+  halo_profit: z.number(),
+  clearance_value: z.number(),
+  value: z.number(),
+}) satisfies z.ZodType<Schemas["MechanismOption"]>;
+
+export const mechanismOutcomeSchema = z.object({
+  mechanism: planLineSchema.shape.mechanism,
+  best: mechanismOptionSchema.nullable(),
+  chosen: z.boolean(),
+  unavailable: z.array(
+    z.enum([
+      "no_charm_price",
+      "max_discount",
+      "below_cost",
+      "duplicate_price",
+      "stock",
+      "partner_stock",
+    ]),
+  ),
+}) satisfies z.ZodType<Schemas["MechanismOutcome"]>;
+
 export const planRevisionLineSchema = z.object({
   line: planLineSchema,
   expected_units: z.number(),
   promo_cost: z.number(),
   expected_incremental_profit: z.number(),
   why_chosen: whyChosenSchema.nullable().optional(),
+  mechanism_comparison: z.array(mechanismOutcomeSchema),
 }) satisfies z.ZodType<Schemas["PlanRevisionLine"]>;
 
 export const planRevisionSchema = z.object({

@@ -179,6 +179,7 @@ plan_lines = Table(
     Column("promo_cost", Float, nullable=False),
     Column("expected_incremental_profit", Float, nullable=False),
     Column("why_chosen", JSONB),
+    Column("mechanism_comparison", JSONB),
     ForeignKeyConstraint(
         ["session_id", "revision_number"],
         ["plan_revisions.session_id", "plan_revisions.number"],

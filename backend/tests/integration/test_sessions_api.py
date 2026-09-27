@@ -165,6 +165,13 @@ async def test_a_session_goes_from_planning_to_awaiting_approval_with_an_optimis
     assert revision["solver_status"] == "OPTIMAL"
     assert revision["objective"] > 0
     assert all(line["why_chosen"]["reasons"] for line in revision["lines"])
+    # Each line compares the mechanisms, its own shown with the line itself (F-02, ADR 0041).
+    for line in revision["lines"]:
+        [chosen] = [outcome for outcome in line["mechanism_comparison"] if outcome["chosen"]]
+        assert chosen["mechanism"] == line["line"]["mechanism"]
+        assert chosen["best"]["option"] == line["line"]
+        mechanisms = [outcome["mechanism"] for outcome in line["mechanism_comparison"]]
+        assert {"PCT_OFF", "FIXED_PRICE"} <= set(mechanisms)
     assert len(revision["not_selected"]) <= 5
     assert all(entry["reasons"] for entry in revision["not_selected"])
 

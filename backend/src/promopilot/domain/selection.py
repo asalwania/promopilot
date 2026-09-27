@@ -125,3 +125,16 @@ class NotSelectedOption(BaseModel):
     reasons: tuple[NotSelectedReason, ...]
     cannibalises: tuple[str, ...] = ()
     """The plan lines' SKUs it loses too much with, for CANNIBALISES."""
+
+
+class PruneReason(StrEnum):
+    """Why option generation dropped an enumerated promo option, in the order the rules are
+    applied (ADR 0035)."""
+
+    NO_CHARM_PRICE = "no_charm_price"
+    """A FIXED_PRICE depth whose price is below ₹9: there is no charm price to sell at."""
+    MAX_DISCOUNT = "max_discount"
+    BELOW_COST = "below_cost"
+    DUPLICATE_PRICE = "duplicate_price"
+    STOCK = "stock"
+    PARTNER_STOCK = "partner_stock"

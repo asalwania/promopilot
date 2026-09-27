@@ -433,6 +433,149 @@
         "title": "Mechanism",
         "type": "string"
       },
+      "MechanismOption": {
+        "description": "One promo option's expected numbers, as its prediction gave them (rupees, units over\nits promo weeks; a BUNDLE's money fields include its partner).",
+        "properties": {
+          "anchor_sku_id": {
+            "title": "Anchor Sku Id",
+            "type": "string"
+          },
+          "basket_lift": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Basket Lift"
+          },
+          "cannibalised_profit": {
+            "title": "Cannibalised Profit",
+            "type": "number"
+          },
+          "clearance_value": {
+            "title": "Clearance Value",
+            "type": "number"
+          },
+          "effective_price": {
+            "title": "Effective Price",
+            "type": "number"
+          },
+          "gross_profit": {
+            "title": "Gross Profit",
+            "type": "number"
+          },
+          "halo_profit": {
+            "title": "Halo Profit",
+            "type": "number"
+          },
+          "incremental_profit": {
+            "title": "Incremental Profit",
+            "type": "number"
+          },
+          "margin": {
+            "title": "Margin",
+            "type": "number"
+          },
+          "option": {
+            "$ref": "#/components/schemas/PlanLine"
+          },
+          "partner_effective_price": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Partner Effective Price"
+          },
+          "partner_sku_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Partner Sku Id"
+          },
+          "promo_cost": {
+            "title": "Promo Cost",
+            "type": "number"
+          },
+          "revenue": {
+            "title": "Revenue",
+            "type": "number"
+          },
+          "units": {
+            "title": "Units",
+            "type": "number"
+          },
+          "value": {
+            "title": "Value",
+            "type": "number"
+          }
+        },
+        "required": [
+          "option",
+          "anchor_sku_id",
+          "effective_price",
+          "units",
+          "revenue",
+          "gross_profit",
+          "margin",
+          "promo_cost",
+          "incremental_profit",
+          "cannibalised_profit",
+          "halo_profit",
+          "clearance_value",
+          "value"
+        ],
+        "title": "MechanismOption",
+        "type": "object"
+      },
+      "MechanismOutcome": {
+        "description": "One mechanism in a comparison: its best option, or why it has none.",
+        "properties": {
+          "best": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MechanismOption"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "chosen": {
+            "default": false,
+            "title": "Chosen",
+            "type": "boolean"
+          },
+          "mechanism": {
+            "$ref": "#/components/schemas/Mechanism"
+          },
+          "unavailable": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/PruneReason"
+            },
+            "title": "Unavailable",
+            "type": "array"
+          }
+        },
+        "required": [
+          "mechanism",
+          "best"
+        ],
+        "title": "MechanismOutcome",
+        "type": "object"
+      },
       "ModelEntry": {
         "description": "One registered model version; `live` marks the one the API is serving.",
         "properties": {
@@ -712,6 +855,14 @@
           "line": {
             "$ref": "#/components/schemas/PlanLine"
           },
+          "mechanism_comparison": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/MechanismOutcome"
+            },
+            "title": "Mechanism Comparison",
+            "type": "array"
+          },
           "promo_cost": {
             "minimum": 0.0,
             "title": "Promo Cost",
@@ -868,6 +1019,19 @@
         ],
         "title": "PromoWindow",
         "type": "object"
+      },
+      "PruneReason": {
+        "description": "Why option generation dropped an enumerated promo option, in the order the rules are\napplied (ADR 0035).",
+        "enum": [
+          "no_charm_price",
+          "max_discount",
+          "below_cost",
+          "duplicate_price",
+          "stock",
+          "partner_stock"
+        ],
+        "title": "PruneReason",
+        "type": "string"
       },
       "Region": {
         "enum": [

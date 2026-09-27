@@ -22,10 +22,9 @@ The survivors carry their predictions, cannibalisation and halo (as if each ran 
 the budget are plan-level: the optimiser applies them, not this filter (ADR 0007, ADR 0036).
 """
 
-from collections import Counter
+from collections import Counter, defaultdict
 from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
-from enum import StrEnum
 from typing import Protocol
 
 import numpy as np
@@ -37,6 +36,7 @@ from promopilot.domain import (
     PlanLine,
     PlanningRequest,
     PromoWindow,
+    PruneReason,
     Region,
     TargetSegment,
 )
@@ -63,18 +63,6 @@ DEPTHS: Mapping[Mechanism, tuple[int, ...]] = {
 """Mechanism-appropriate depth levels (ADR 0005), as the promo history uses them."""
 
 _EPSILON = 1e-9
-
-
-class PruneReason(StrEnum):
-    """Why an enumerated option was dropped, in the order the rules are applied."""
-
-    NO_CHARM_PRICE = "no_charm_price"
-    """A FIXED_PRICE depth whose price is below ₹9: there is no charm price to sell at."""
-    MAX_DISCOUNT = "max_discount"
-    BELOW_COST = "below_cost"
-    DUPLICATE_PRICE = "duplicate_price"
-    STOCK = "stock"
-    PARTNER_STOCK = "partner_stock"
 
 
 class OptionForecast(LineForecast, Protocol):
@@ -128,6 +116,12 @@ class PromoOptions:
     """Every option enumerated, kept or pruned."""
     pruned: Mapping[PruneReason, int]
     """Pruned options per reason, every reason present."""
+    pruned_by_mechanism: Mapping[tuple[str, Region, Mechanism], frozenset[PruneReason]] = field(
+        default_factory=dict
+    )
+    """Per anchor SKU, region and mechanism, every reason any of its options was pruned for;
+    absent where none was. The mechanism comparator explains an unavailable mechanism with it
+    (ADR 0041)."""
 
 
 class FittedOptionFacts:
@@ -187,6 +181,7 @@ def generate_options(
     per_price = len(timings) * len(targets)
 
     pruned: Counter[PruneReason] = Counter()
+    pruned_by: defaultdict[tuple[str, Region, Mechanism], set[PruneReason]] = defaultdict(set)
     enumerated = 0
     lines: list[PlanLine] = []
     for sku_id in _in_scope(context.products, request, sku_ids):
@@ -205,6 +200,7 @@ def generate_options(
                     charm_prices.add(price)
                 if reason is not None:
                     pruned[reason] += per_price
+                    pruned_by[sku_id, region, mechanism].add(reason)
                     continue
                 lines += [
                     PlanLine(
@@ -222,7 +218,13 @@ def generate_options(
                 ]
 
     if not lines:
-        return PromoOptions((), pd.DataFrame(columns=TABLE_COLUMNS), enumerated, _counts(pruned))
+        return PromoOptions(
+            (),
+            pd.DataFrame(columns=TABLE_COLUMNS),
+            enumerated,
+            _counts(pruned),
+            _frozen(pruned_by),
+        )
     prediction = context.demand_model.predict(
         lines, PredictionContext(policy=context.policy, competitor_prices=context.competitor_prices)
     )
@@ -240,6 +242,10 @@ def generate_options(
     )
     pruned[PruneReason.STOCK] += int(over.sum())
     pruned[PruneReason.PARTNER_STOCK] += int(partner_over.sum())
+    for n in np.flatnonzero(over | partner_over):
+        line = lines[n]
+        reason = PruneReason.STOCK if over[n] else PruneReason.PARTNER_STOCK
+        pruned_by[line.sku_id, line.region, line.mechanism].add(reason)
     keep = ~(over | partner_over)
     kept = [line for line, fits in zip(lines, keep, strict=True) if fits]
     table = table[keep].reset_index(drop=True)
@@ -254,7 +260,9 @@ def generate_options(
         + table["halo_profit"]
         + table["clearance_value"]
     )
-    return PromoOptions(tuple(kept), table[TABLE_COLUMNS], enumerated, _counts(pruned))
+    return PromoOptions(
+        tuple(kept), table[TABLE_COLUMNS], enumerated, _counts(pruned), _frozen(pruned_by)
+    )
 
 
 @dataclass(frozen=True)
@@ -405,3 +413,9 @@ def _clearance(
 
 def _counts(pruned: Counter[PruneReason]) -> dict[PruneReason, int]:
     return {reason: pruned[reason] for reason in PruneReason}
+
+
+def _frozen(
+    pruned_by: Mapping[tuple[str, Region, Mechanism], set[PruneReason]],
+) -> dict[tuple[str, Region, Mechanism], frozenset[PruneReason]]:
+    return {key: frozenset(reasons) for key, reasons in pruned_by.items()}

@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 from promopilot.data.schema import plan_lines, plan_revisions, planning_sessions
 from promopilot.domain import (
     BindingConstraint,
+    MechanismOutcome,
     NotSelectedOption,
     PlanLine,
     PlanningRequest,
@@ -22,6 +23,7 @@ from promopilot.domain import (
 
 _BINDING = TypeAdapter(tuple[BindingConstraint, ...])
 _NOT_SELECTED = TypeAdapter(tuple[NotSelectedOption, ...])
+_COMPARISON = TypeAdapter(tuple[MechanismOutcome, ...])
 
 INTERRUPTED = "planning was interrupted by an API restart; start a new session"
 
@@ -162,6 +164,7 @@ def _line_row(
         "why_chosen": None
         if planned.why_chosen is None
         else planned.why_chosen.model_dump(mode="json"),
+        "mechanism_comparison": _COMPARISON.dump_python(planned.mechanism_comparison, mode="json"),
     }
 
 
@@ -189,4 +192,5 @@ def _revision_line(row: object) -> PlanRevisionLine:
         why_chosen=None
         if values["why_chosen"] is None
         else WhyChosen.model_validate(values["why_chosen"]),
+        mechanism_comparison=_COMPARISON.validate_python(values["mechanism_comparison"] or ()),
     )

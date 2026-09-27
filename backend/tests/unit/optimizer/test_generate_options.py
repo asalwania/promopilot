@@ -491,3 +491,20 @@ def test_the_optimisers_facts_name_each_skus_category_prices_and_overstock() -> 
     assert (d.category, d.base_price, d.unit_cost, d.overstocked) == ("Snacks", 60.0, 20.0, True)
     assert facts.sku("D", Region.NORTH).overstocked is False
     assert facts.sku("C", Region.NORTH).category == "Beverages"
+
+
+def test_the_reasons_each_mechanism_lost_options_for_are_recorded() -> None:
+    options = generate_options(request(), context(inventory=stock(D_North=(1.0, False))))
+
+    pruned_by = options.pruned_by_mechanism
+    # B costs ₹85: BOGO's ₹50 and PCT_OFF from 20% off sell below it (ADR 0007).
+    assert pruned_by["B", Region.NORTH, Mechanism.BOGO] == {PruneReason.BELOW_COST}
+    assert pruned_by["B", Region.NORTH, Mechanism.PCT_OFF] == {PruneReason.BELOW_COST}
+    # D has no stock in North: whatever passed the price rules went for stock.
+    assert pruned_by["D", Region.NORTH, Mechanism.PCT_OFF] == {PruneReason.STOCK}
+    assert pruned_by["D", Region.NORTH, Mechanism.FIXED_PRICE] == {
+        PruneReason.MAX_DISCOUNT,
+        PruneReason.DUPLICATE_PRICE,
+        PruneReason.STOCK,
+    }
+    assert ("A", Region.NORTH, Mechanism.PCT_OFF) not in pruned_by
