@@ -10,12 +10,16 @@ from promopilot.agents import (
     plan_session,
     read_planning_request,
 )
+from promopilot.agents.tools.inventory_status import pooled_stock
 from promopilot.datagen import GeneratedDataset
 from promopilot.domain import (
     CompanyPolicy,
     ConstraintKind,
     Mechanism,
+    PlanningRequest,
+    PromoWindow,
     Region,
+    Scope,
     SolveStatus,
 )
 from promopilot.llm import FakeProvider, LLMError
@@ -256,3 +260,63 @@ async def test_an_llm_failure_propagates(data: InMemoryRetailData) -> None:
 
     with pytest.raises(LLMError, match="provider down"):
         await read_planning_request("Plan something nice", llm, data)
+
+
+# --- the brief's optional constraints (ADR 0040) ----------------------------------------------
+
+
+def planning(**brief: object) -> PlanningRequest:
+    fields: dict[str, object] = {
+        "as_of_week": HISTORY_WEEKS,
+        "scope": Scope(regions=(Region.NORTH, Region.SOUTH), categories=("Snacks",)),
+        "promo_window": PromoWindow(start_week=HISTORY_WEEKS + 2, end_week=HISTORY_WEEKS + 3),
+        "marketing_budget": 20_000.0,
+    }
+    return PlanningRequest.model_validate(fields | brief)
+
+
+async def test_a_clearance_target_is_met_or_its_shortfall_is_recorded_on_the_revision(
+    planner: OptimisingPlanner, small_dataset: GeneratedDataset
+) -> None:
+    snapshot = small_dataset.inventory.query(f"snapshot_week == {HISTORY_WEEKS - 1}")
+    pooled = pooled_stock(snapshot, small_dataset.stores, FREE)
+    snacks = set(small_dataset.products.query("category == 'Snacks'")["sku_id"])
+    covered = pooled[pooled["sku_id"].isin(snacks)].sort_values("days_of_cover")
+    sku_id = str(covered["sku_id"].iloc[-1])
+    request = planning(clearance_targets=[{"sku_id": sku_id, "sell_through": 1.0}])
+
+    revision = await planner.plan(request)
+
+    assert revision.solver_status in (SolveStatus.OPTIMAL, SolveStatus.FEASIBLE)
+    # Selling all of the SKU with the most cover in two weeks is out of reach: P90 units must
+    # stay within stock. The plan comes as close as it can and says by how much it misses.
+    shortfalls = revision.clearance_shortfalls
+    assert shortfalls
+    assert {(s.sku_id, s.target) for s in shortfalls} == {(sku_id, 1.0)}
+    for shortfall in shortfalls:
+        assert shortfall.shortfall_units > 0
+        assert shortfall.expected_sell_through < 1.0
+    assert any(line.line.sku_id == sku_id for line in revision.lines)
+
+
+async def test_regional_caps_hold_and_a_loosening_brief_value_is_recorded(
+    planner: OptimisingPlanner,
+) -> None:
+    request = planning(regional_budget_caps={"North": 1_000.0}, min_margin=0.05)
+
+    revision = await planner.plan(request)
+
+    north = [line for line in revision.lines if line.line.region is Region.NORTH]
+    assert sum(line.promo_cost for line in north) <= 1_000.0
+    assert [(f.field, f.requested, f.applied) for f in revision.policy_findings] == [
+        ("min_margin", 0.05, FREE.margin_floor)
+    ]
+
+
+async def test_a_clearance_target_outside_the_scope_cannot_be_planned(
+    planner: OptimisingPlanner, small_dataset: GeneratedDataset
+) -> None:
+    other = sorted(small_dataset.products.query("category != 'Snacks'")["sku_id"])[0]
+
+    with pytest.raises(PlanningError, match="outside the planning request's scope"):
+        await planner.plan(planning(clearance_targets=[{"sku_id": other, "sell_through": 0.5}]))

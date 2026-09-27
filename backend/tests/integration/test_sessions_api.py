@@ -19,7 +19,18 @@ from promopilot.api.main import create_app
 from promopilot.api.sessions import SessionService
 from promopilot.data import RetailData, SessionStore, load_dataset
 from promopilot.datagen import GeneratedDataset, write
-from promopilot.domain import CompanyPolicy, Mechanism, Region
+from promopilot.domain import (
+    ClearanceShortfall,
+    ClearanceTarget,
+    CompanyPolicy,
+    Mechanism,
+    PlanningRequest,
+    PlanRevision,
+    PromoWindow,
+    Region,
+    Scope,
+    SolveStatus,
+)
 from promopilot.llm import FakeProvider, LLMError, LLMProvider, Message, ToolSpec, ToolTurn
 from promopilot.models.demand import DemandModel
 from promopilot.models.registry import ModelKind
@@ -283,3 +294,59 @@ async def test_finished_sessions_survive_a_restart_and_interrupted_ones_fail(
     assert after_finished == finished
     assert after_stuck["status"] == "failed"
     assert "interrupted" in after_stuck["error"]
+
+
+async def test_a_brief_that_would_loosen_policy_is_flagged_on_the_plan_revision(
+    postgres_url: str, running_api: Api
+) -> None:
+    loose = READING.model_copy(update={"min_margin": 0.05})
+    async with running_api(postgres_url, FakeProvider([loose])) as client:
+        session_id = (await client.post("/api/sessions", json={"brief": BRIEF})).json()[
+            "session_id"
+        ]
+        done = await settled(client, session_id)
+
+    revision = done["plan_revision"]
+    assert done["planning_request"]["min_margin"] == 0.05
+    assert [
+        (finding["field"], finding["requested"], finding["applied"])
+        for finding in revision["policy_findings"]
+    ] == [("min_margin", 0.05, FREE.margin_floor)]
+    assert revision["clearance_shortfalls"] == []
+
+
+async def test_a_plan_revision_keeps_its_clearance_shortfalls_and_the_briefs_constraints(
+    postgres_url: str,
+) -> None:
+    engine = create_async_engine(postgres_url)
+    store = SessionStore(engine)
+    request = PlanningRequest(
+        as_of_week=HISTORY_WEEKS,
+        scope=Scope(regions=(Region.NORTH,), categories=("Snacks",)),
+        promo_window=PromoWindow(start_week=HISTORY_WEEKS + 2, end_week=HISTORY_WEEKS + 3),
+        marketing_budget=BUDGET,
+        clearance_targets=(ClearanceTarget(sku_id="SKU0005", sell_through=0.9),),
+        regional_budget_caps={Region.NORTH: 5_000.0},
+        kvi_price_tolerance=0.01,
+        max_promoted_skus_per_category_per_region=4,
+    )
+    shortfall = ClearanceShortfall(
+        sku_id="SKU0005",
+        region=Region.NORTH,
+        target=0.9,
+        expected_sell_through=0.6,
+        shortfall_units=64.8,
+    )
+    revision = PlanRevision(
+        number=1, solver_status=SolveStatus.OPTIMAL, clearance_shortfalls=(shortfall,)
+    )
+    try:
+        session_id = await store.create(BRIEF)
+        await store.save_plan(session_id, request, revision)
+        saved = await store.get(session_id)
+    finally:
+        await engine.dispose()
+
+    assert saved is not None
+    assert saved.planning_request == request
+    assert saved.latest_revision == revision

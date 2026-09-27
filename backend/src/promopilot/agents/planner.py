@@ -4,10 +4,13 @@ For a planning request it generates every promo option of the scope and promo wi
 latest demand model and the live relations model (ADR 0035), selects the plan with `solve`
 (ADR 0036) and turns the result into plan revision 1: each plan line with its expected
 numbers, why it was chosen and how the other mechanisms compare (ADR 0041), the solver status
-and objective, the binding constraints and the best options left out (ADR 0038). The plan is
-then simulated with the session's simulation settings and the result stored on the revision
-(ADR 0042). E8's planner agent drives the same work through the `generate_candidates`,
-`run_optimizer`, `compare_mechanisms` and `simulate_plan` tools instead.
+and objective, the binding constraints and the best options left out (ADR 0038), with any
+clearance shortfall and any brief value that would have loosened company policy (ADR 0040).
+The latest competitor gaps give undercut KVIs their price-match options and the KVI price
+tolerance its competitor prices (ADR 0031). The plan is then simulated with the session's
+simulation settings and the result stored on the revision (ADR 0042). E8's planner agent
+drives the same work through the `generate_candidates`, `run_optimizer`,
+`compare_mechanisms` and `simulate_plan` tools instead.
 """
 
 import asyncio
@@ -18,6 +21,7 @@ import pandas as pd
 from promopilot.agents.tools.estimate_demand import DemandModelSource
 from promopilot.agents.tools.get_relations import RelationsSource
 from promopilot.agents.tools.inventory_status import pooled_stock
+from promopilot.competitors import read_competitor_gaps
 from promopilot.domain import CompanyPolicy, PlanningRequest, PlanRevision, PlanRevisionLine
 from promopilot.mechanisms import ComparisonContext, compare
 from promopilot.optimizer import (
@@ -40,6 +44,7 @@ class PlannerData(Protocol):
     async def products(self) -> pd.DataFrame: ...
     async def stores(self) -> pd.DataFrame: ...
     async def inventory(self, as_of_week: int) -> pd.DataFrame: ...
+    async def latest_competitor_prices(self, as_of_week: int) -> pd.DataFrame: ...
 
 
 class OptimisingPlanner:
@@ -65,8 +70,9 @@ class OptimisingPlanner:
         self._simulation = simulation
 
     async def plan(self, request: PlanningRequest) -> PlanRevision:
-        """Plan revision 1 for the request. Raises `PlanningError` when no model is trained
-        or the as-of week has no inventory snapshot."""
+        """Plan revision 1 for the request. Raises `PlanningError` when no model is trained,
+        the as-of week has no inventory snapshot, or the request names a clearance target
+        outside its scope."""
         demand = await self._demand_models.get()
         relations = await self._relations_models.get()
         if demand is None or relations is None:
@@ -85,9 +91,18 @@ class OptimisingPlanner:
             products=await self._data.products(),
             stock=pooled_stock(snapshot, stores, self._policy),
             policy=self._policy,
+            competitor_gaps=await read_competitor_gaps(
+                self._data,
+                as_of_week=request.as_of_week,
+                policy=self._policy,
+                regions=request.scope.regions,
+            ),
         )
         # Generation and solving are CPU-bound: keep the event loop free (ADR 0025).
-        options = await asyncio.to_thread(generate_options, request, context)
+        try:
+            options = await asyncio.to_thread(generate_options, request, context)
+        except ValueError as error:
+            raise PlanningError(str(error)) from error
         result = await asyncio.to_thread(
             solve,
             request,
@@ -131,4 +146,6 @@ class OptimisingPlanner:
             binding_constraints=result.binding_constraints,
             not_selected=result.not_selected,
             simulation=simulation,
+            clearance_shortfalls=result.clearance_shortfalls,
+            policy_findings=result.policy_findings,
         )

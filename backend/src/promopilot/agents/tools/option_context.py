@@ -2,8 +2,9 @@
 options (`generate_candidates`, `compare_mechanisms`).
 
 The request must be for the tool's bound as-of week (ADR 0032). The latest demand model and
-the live relations model are resolved on every call (ADR 0025, ADR 0033), and stock is
-pooled from the as-of week's inventory (ADR 0004).
+the live relations model are resolved on every call (ADR 0025, ADR 0033), stock is
+pooled from the as-of week's inventory (ADR 0004), and the competitor gaps at that week give
+undercut KVIs their price-match options and the KVI price tolerance its prices (ADR 0040).
 """
 
 from dataclasses import dataclass
@@ -17,6 +18,7 @@ from promopilot.agents.tools.estimate_demand import DemandModelSource, ModelVers
 from promopilot.agents.tools.get_relations import RelationsSource
 from promopilot.agents.tools.inventory_status import pooled_stock
 from promopilot.agents.tools.registry import ToolCallError
+from promopilot.competitors import read_competitor_gaps
 from promopilot.domain import CompanyPolicy, PlanningRequest
 from promopilot.models.registry import RegisteredModel
 from promopilot.optimizer import OptionContext
@@ -28,6 +30,7 @@ class OptionDataSource(Protocol):
     async def products(self) -> pd.DataFrame: ...
     async def stores(self) -> pd.DataFrame: ...
     async def inventory(self, as_of_week: int) -> pd.DataFrame: ...
+    async def latest_competitor_prices(self, as_of_week: int) -> pd.DataFrame: ...
 
 
 @dataclass(frozen=True)
@@ -81,6 +84,9 @@ async def load_option_context(
             products=products,
             stock=pooled_stock(snapshot, stores, policy),
             policy=policy,
+            competitor_gaps=await read_competitor_gaps(
+                data, as_of_week=week, policy=policy, regions=request.scope.regions
+            ),
         ),
         as_of_week=week,
         demand_model=_version(demand[0]),

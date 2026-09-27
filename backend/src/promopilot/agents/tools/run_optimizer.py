@@ -15,12 +15,15 @@ from pydantic import BaseModel, ConfigDict, Field
 from promopilot.agents.tools.registry import Tool, ToolCallError
 from promopilot.domain import (
     BindingConstraint,
+    ClearanceShortfall,
     CompanyPolicy,
     NotSelectedOption,
     PlanLine,
+    PolicyFinding,
     WhyChosen,
 )
 from promopilot.economics import blended_margin
+from promopilot.guardrails import plan_limits
 from promopilot.optimizer import CandidateStore, SolverSettings, SolveStatus, solve
 
 DESCRIPTION = (
@@ -30,12 +33,17 @@ DESCRIPTION = (
     "together) plus halo and clearance value. The plan keeps total promo cost within the "
     "marketing budget, the blended margin at or above the minimum margin (never below the "
     "company-policy margin floor), and at most the company-policy number of promoted SKUs "
-    "per category per region. Only options that pay for themselves alone are selected. "
-    "Returns the solver status (OPTIMAL, FEASIBLE when the time limit ran out first, "
-    "INFEASIBLE), the objective, each selected plan line with its numbers and why it was "
-    "chosen, the plan's totals, the binding constraints (those whose removal would raise the "
-    "objective) and the best options left out with the rules they break. A "
-    "candidate_set_id that is no longer stored must be regenerated."
+    "per category per region; the request may tighten that cap, cap the promo cost per "
+    "region, and turn on the KVI price tolerance. Only options that pay for themselves alone "
+    "are selected, or that sell a SKU the request names for clearance towards its target. "
+    "Each clearance target is met when any plan can meet it; otherwise the plan comes as close "
+    "as it can and the shortfall is reported. Returns the solver status (OPTIMAL, FEASIBLE "
+    "when the time limit ran out first, INFEASIBLE), the objective, each selected plan line "
+    "with its numbers and why it was chosen, the plan's totals, the binding constraints (those "
+    "whose removal would raise the objective), the best options left out with the rules they "
+    "break, clearance shortfalls, and any request value that would have loosened company "
+    "policy (policy was kept). A candidate_set_id that is no longer stored must be "
+    "regenerated."
 )
 
 
@@ -97,6 +105,12 @@ class RunOptimizerOutput(BaseModel):
     not_selected: list[NotSelectedOption] = Field(
         description="The best option of up to 5 SKUs and regions with no plan line, best first."
     )
+    clearance_shortfalls: list[ClearanceShortfall] = Field(
+        description="Clearance targets no plan reaches, and by how much this plan misses them."
+    )
+    policy_findings: list[PolicyFinding] = Field(
+        description="Request values that would have loosened company policy; policy was kept."
+    )
 
 
 _LINE_COLUMNS = [
@@ -145,13 +159,15 @@ def run_optimizer_tool(
             blended_margin=blended_margin(
                 [line.revenue for line in lines], [line.gross_profit for line in lines]
             ),
-            min_margin=max(request.min_margin or 0.0, policy.margin_floor),
+            min_margin=plan_limits(request, policy).min_margin,
             pairwise_cannibalisation=result.pairwise_cannibalisation,
             candidate_options=len(options.lines),
             eligible_options=result.eligible,
             pairs=result.pairs,
             binding_constraints=list(result.binding_constraints),
             not_selected=list(result.not_selected),
+            clearance_shortfalls=list(result.clearance_shortfalls),
+            policy_findings=list(result.policy_findings),
         )
 
     return Tool(

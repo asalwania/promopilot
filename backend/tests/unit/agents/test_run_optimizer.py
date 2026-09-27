@@ -2,6 +2,7 @@
 (ADR 0036)."""
 
 from collections.abc import Sequence
+from dataclasses import replace
 from typing import Any
 from uuid import uuid4
 
@@ -21,6 +22,7 @@ from promopilot.agents.tools.run_optimizer import (
 )
 from promopilot.datagen import GeneratedDataset
 from promopilot.domain import (
+    ClearanceTarget,
     CompanyPolicy,
     ConstraintKind,
     ConstraintSource,
@@ -43,6 +45,7 @@ from promopilot.models.relations import Relations
 from promopilot.optimizer import (
     TABLE_COLUMNS,
     CandidateStore,
+    ClearanceBaseline,
     PromoOptions,
     PruneReason,
     SolverSettings,
@@ -273,3 +276,36 @@ def _all_categories(history: DemandHistory) -> dict[str, Any]:
         "scope": {"regions": ["North", "South"], "categories": categories},
         "marketing_budget": 50_000.0,
     }
+
+
+async def test_clearance_shortfalls_and_policy_findings_are_reported(store: CandidateStore) -> None:
+    options = hand_built()
+    options.table.loc[2, "window_uplift"] = 50.0
+    options = replace(
+        options,
+        clearance=(
+            ClearanceBaseline(
+                sku_id="C", region=Region.NORTH, available_stock=1_000.0, baseline_units=100.0
+            ),
+        ),
+    )
+    named = REQUEST.model_copy(
+        update={"clearance_targets": (ClearanceTarget(sku_id="C", sell_through=0.5),)}
+    )
+    stored = store.put(named, options, Facts())
+
+    result = await registry(store).call(
+        "run_optimizer", {"candidate_set_id": str(stored.candidate_set_id)}
+    )
+
+    assert isinstance(result, ToolOk), result
+    output = result.output
+    assert isinstance(output, RunOptimizerOutput)
+    # C loses money alone but sells towards its clearance target; 500 of 1,000 is out of reach.
+    assert line("C") in [row.option for row in output.lines]
+    [shortfall] = output.clearance_shortfalls
+    assert shortfall.sku_id == "C"
+    assert shortfall.shortfall_units == pytest.approx(350.0)
+    assert [(f.field, f.requested, f.applied) for f in output.policy_findings] == [
+        ("min_margin", 0.05, 0.10)
+    ]

@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 from promopilot.data.schema import plan_lines, plan_revisions, planning_sessions
 from promopilot.domain import (
     BindingConstraint,
+    ClearanceShortfall,
     MechanismOutcome,
     NotSelectedOption,
     PlanLine,
@@ -17,6 +18,7 @@ from promopilot.domain import (
     PlanRevision,
     PlanRevisionLine,
     PlanSimulation,
+    PolicyFinding,
     SessionStatus,
     SolveStatus,
     WhyChosen,
@@ -25,6 +27,8 @@ from promopilot.domain import (
 _BINDING = TypeAdapter(tuple[BindingConstraint, ...])
 _NOT_SELECTED = TypeAdapter(tuple[NotSelectedOption, ...])
 _COMPARISON = TypeAdapter(tuple[MechanismOutcome, ...])
+_SHORTFALLS = TypeAdapter(tuple[ClearanceShortfall, ...])
+_FINDINGS = TypeAdapter(tuple[PolicyFinding, ...])
 
 INTERRUPTED = "planning was interrupted by an API restart; start a new session"
 
@@ -107,6 +111,10 @@ class SessionStore:
                     simulation=None
                     if revision.simulation is None
                     else revision.simulation.model_dump(mode="json"),
+                    clearance_shortfalls=_SHORTFALLS.dump_python(
+                        revision.clearance_shortfalls, mode="json"
+                    ),
+                    policy_findings=_FINDINGS.dump_python(revision.policy_findings, mode="json"),
                 )
             )
             if revision.lines:
@@ -185,6 +193,8 @@ def _revision(row: object, lines: tuple[PlanRevisionLine, ...]) -> PlanRevision:
         simulation=None
         if values["simulation"] is None
         else PlanSimulation.model_validate(values["simulation"]),
+        clearance_shortfalls=_SHORTFALLS.validate_python(values["clearance_shortfalls"] or ()),
+        policy_findings=_FINDINGS.validate_python(values["policy_findings"] or ()),
     )
 
 
