@@ -79,11 +79,14 @@ class BindingConstraint(BaseModel):
 
 
 class SelectionReasonCode(StrEnum):
-    """A positive part of a plan line's value (ADR 0005, ADR 0035)."""
+    """A positive part of a plan line's value (ADR 0005, ADR 0035), or the clearance target it
+    helps meet (ADR 0040)."""
 
     INCREMENTAL_PROFIT = "incremental_profit"
     CLEARANCE_VALUE = "clearance_value"
     HALO = "halo"
+    CLEARANCE_TARGET = "clearance_target"
+    """It sells more of a SKU the brief names for clearance over the promo window."""
 
 
 class SelectionReason(BaseModel):
@@ -91,7 +94,8 @@ class SelectionReason(BaseModel):
 
     code: SelectionReasonCode
     amount: float
-    """Rupees, always positive."""
+    """Rupees, always positive; for clearance_target, the extra units it sells over the promo
+    window."""
 
 
 class WhyChosen(BaseModel):
