@@ -68,6 +68,18 @@ It also adds price-match options for undercut KVIs, and the tighten-only check o
   - Matches are always generated; #47 may add a switch.
   - We rejected a FIXED_PRICE match, which often lands several percent below the competitor. We also rejected an exact paisa match, which needs a non-integer depth on `PlanLine`.
 
+## Result on the seed-42 demo brief
+
+- The demo brief sets no optional constraint. It gains the price matches of the three KVIs undercut in the North: SKU0002 at 14%, SKU0036 at 13% and SKU0037 at 14%.
+  - Generation enumerates 29,025 options (45 more) and keeps 10,435.
+  - 1,947 options are eligible, with the same 3,796 pairwise terms.
+  - The plan is unchanged: `OPTIMAL`, 35 lines, ₹172,384 for ₹199,909 of promo cost. No price match pays its way.
+  - Timed back to back on the same candidate set, `solve` takes 7.1–7.2 s against main's 7.3–7.6 s.
+- With a 50% clearance target on SKU0029 (overstocked in both regions), a ₹90,000 North cap and a 2% KVI tolerance:
+  - The plan is `OPTIMAL`, with 37 lines worth ₹170,982 for ₹199,953 of promo cost. It meets the target in both regions, so there is no shortfall.
+  - 2,186 options are eligible, with 5,719 pairwise terms. `solve` takes about 8 s, within the 10 s budget.
+  - With the default 8 s binding limit, the budget, both Beverages caps and the North cap are proven binding (`lower_bound`). The clearance targets, the KVI tolerance, the margin floor and the Snacks caps stay `unproven`.
+
 ## Consequences
 
 - Sessions and `generate_candidates` read the latest competitor gaps at the as-of week for the scope's regions (`read_competitor_gaps`). `FittedOptionFacts.sku` now also returns each SKU's KVI flag and competitor price.
