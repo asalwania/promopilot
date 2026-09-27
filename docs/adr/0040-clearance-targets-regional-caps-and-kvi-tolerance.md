@@ -22,7 +22,7 @@ It also adds price-match options for undercut KVIs, and the tighten-only check o
   - a promoted-SKU cap above policy's;
   - a KVI tolerance wider than policy's. The rule is still turned on, at policy's tolerance.
 
-  Each finding keeps the brief's value and the value applied. The request itself keeps what the brief said. `solve`, `run_optimizer`, plan validation and the plan revision all read these rules from `plan_limits`, so they cannot disagree. Findings are on `OptimisationResult`, the `run_optimizer` output and the plan revision (migration 0005, JSONB). #46 turns them into flagged assumptions.
+  Each finding keeps the brief's value and the value applied. The request itself keeps what the brief said. `solve`, `run_optimizer`, plan validation and the plan revision all read these rules from `plan_limits`, so they cannot disagree. Findings are on `OptimisationResult`, the `run_optimizer` output and the plan revision (migration 0006, JSONB). #46 turns them into flagged assumptions.
 - **Sell-through is measured over the promo window, per SKU and region.** It is the expected units sold over the whole promo window ÷ available stock at the as-of week (on hand minus safety stock, the stock the P90 rule uses).
   - Without a plan line, the units are the demand model's own no-promotion forecast over the window. That is `predict`'s `baseline_units` for lines covering the window, so it matches the uplift below.
   - Each option adds its `window_uplift`: its units less baseline in the weeks of the window, from `line_paths`. That nets off the pull-forward dip where it falls inside the window.
@@ -83,7 +83,7 @@ It also adds price-match options for undercut KVIs, and the tighten-only check o
 ## Consequences
 
 - Sessions and `generate_candidates` read the latest competitor gaps at the as-of week for the scope's regions (`read_competitor_gaps`). `FittedOptionFacts.sku` now also returns each SKU's KVI flag and competitor price.
-- Migration 0005 adds nullable `clearance_shortfalls` and `policy_findings` columns to `plan_revisions`. The OpenAPI types and the web app's zod schemas follow; E10 displays them. #38 and #39 also add a migration 0005. Whichever merges second renumbers.
+- Migration 0006 adds nullable `clearance_shortfalls` and `policy_findings` columns to `plan_revisions`, on top of #38's 0005. The OpenAPI types and the web app's zod schemas follow; E10 displays them. #39 also adds a migration and renumbers if this merges first.
 - The hypothesis properties now draw clearance targets, regional caps, KVI tolerances and brief caps.
   - Every plan passes `validate_plan` except for its reported clearance shortfalls.
   - A brute force confirms that the shortfall is the least any plan can leave, and that the objective is optimal when every target is reachable.
