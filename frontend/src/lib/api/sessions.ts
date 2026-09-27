@@ -165,6 +165,37 @@ export const policyFindingSchema = z.object({
   message: z.string(),
 }) satisfies z.ZodType<Schemas["PolicyFinding"]>;
 
+// A violation the Critic left open on the plan revision (ADR 0046).
+export const violationSchema = z.object({
+  code: z.enum([
+    "BUDGET",
+    "REGIONAL_BUDGET",
+    "MIN_MARGIN",
+    "MARGIN_FLOOR",
+    "STOCK",
+    "MAX_DISCOUNT",
+    "BELOW_COST",
+    "WINDOW",
+    "MAX_SKUS",
+    "DUPLICATE_LINE",
+    "CLEARANCE_TARGET",
+    "KVI_TOLERANCE",
+  ]),
+  message: z.string(),
+  sku_id: z.string().nullable().optional(),
+  region: regionSchema.nullable().optional(),
+  actual: z.number().nullable().optional(),
+  limit: z.number().nullable().optional(),
+}) satisfies z.ZodType<Schemas["Violation"]>;
+
+// One approval or rejection of a plan revision: the session's audit trail (ADR 0046).
+export const planDecisionSchema = z.object({
+  decision: z.enum(["approved", "rejected"]),
+  revision_number: z.number(),
+  reason: z.string().nullable().optional(),
+  decided_at: z.string(),
+}) satisfies z.ZodType<Schemas["PlanDecision"]>;
+
 export const planRevisionLineSchema = z.object({
   line: planLineSchema,
   expected_units: z.number(),
@@ -226,6 +257,7 @@ export const planRevisionSchema = z.object({
   clearance_shortfalls: z.array(clearanceShortfallSchema),
   policy_findings: z.array(policyFindingSchema),
   relaxation: relaxationSchema.nullable().optional(),
+  open_issues: z.array(violationSchema),
 }) satisfies z.ZodType<Schemas["PlanRevision"]>;
 
 export const planningRequestSchema = z.object({
@@ -260,12 +292,14 @@ export const sessionSchema = z.object({
   planning_request: planningRequestSchema.nullable(),
   plan_revision: planRevisionSchema.nullable(),
   error: z.string().nullable(),
+  decisions: z.array(planDecisionSchema),
 }) satisfies z.ZodType<Schemas["SessionResponse"]>;
 
 export type Session = z.infer<typeof sessionSchema>;
 export type SessionStatus = Session["status"];
 export type PlanRevisionLine = z.infer<typeof planRevisionLineSchema>;
 export type PlanningRequest = z.infer<typeof planningRequestSchema>;
+export type PlanDecision = z.infer<typeof planDecisionSchema>;
 
 export type CreateSessionResult =
   { ok: true; sessionId: string } | { ok: false; reason: string };

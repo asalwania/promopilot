@@ -247,6 +247,18 @@ The human decision that makes one specific plan revision final; it ends the plan
 **Rejection**:
 A human decision, with a reason, that a plan revision is not acceptable. The session stays open for amendments.
 
+**Decision**:
+An approval or a rejection of one named plan revision, with when it was made (and, for a rejection, why). Every decision of a planning session is kept in order as its audit trail.
+_Avoid_: vote, sign-off
+
+**Open issue**:
+A violation (and, from the critic's risk review, a finding) that a plan revision still has when it goes for approval. It is listed on the revision; it does not block approval, but an infeasible revision cannot be approved.
+_Avoid_: error, warning
+
+**Checkpoint**:
+The saved state of a planning session's agent graph after a step. A session paused at an interrupt (approval, clarification) resumes from its checkpoint, even after an API restart.
+_Avoid_: snapshot, save point
+
 **Violation**:
 One hard constraint a plan breaks on its own plan-time numbers (e.g. total promo cost over the marketing budget, a plan line below unit cost), found by plan validation and sent back to the planner.
 _Avoid_: error, failure, issue (which the critic's risk review raises)

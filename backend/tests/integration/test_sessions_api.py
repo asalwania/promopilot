@@ -1,5 +1,6 @@
 """The session API over HTTP, with a FakeProvider and the optimising planner on the small
-world's fitted models, against real Postgres (E3 seam 1, E6 seam 5)."""
+world's fitted models, against real Postgres and the agent graph's Postgres checkpoints (E3
+seam 1, E6 seam 5, E8 #44)."""
 
 import asyncio
 from collections.abc import AsyncIterator, Callable, Iterator, Sequence
@@ -14,19 +15,29 @@ from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import create_async_engine
 from testcontainers.community.postgres import PostgresContainer
 
-from promopilot.agents import BriefReading, OptimisingPlanner
-from promopilot.agents.session import Planner
+from promopilot.agents import (
+    BriefReading,
+    GraphTools,
+    MemoryCheckpoints,
+    OptimisingPlanner,
+    PlannedRevision,
+    Planner,
+    PostgresCheckpoints,
+    build_graph,
+    graph_state,
+)
 from promopilot.agents.tools.inventory_status import pooled_stock
 from promopilot.api.main import create_app
 from promopilot.api.plans import PlanService
 from promopilot.api.sessions import SessionService
-from promopilot.data import RetailData, SessionStore, load_dataset
+from promopilot.data import RetailData, SessionConflictError, SessionStore, load_dataset
 from promopilot.datagen import GeneratedDataset, write
 from promopilot.domain import (
     ClearanceShortfall,
     ClearanceTarget,
     CompanyPolicy,
     ConstraintKind,
+    DecisionKind,
     Mechanism,
     PlanningRequest,
     PlanRevision,
@@ -36,6 +47,8 @@ from promopilot.domain import (
     RelaxedConstraint,
     Scope,
     SolveStatus,
+    Violation,
+    ViolationCode,
 )
 from promopilot.llm import FakeProvider, LLMError, LLMProvider, Message, ToolSpec, ToolTurn
 from promopilot.models.demand import DemandModel
@@ -140,7 +153,15 @@ async def api_process(
     )
     store = SessionStore(engine)
     sessions = SessionService(
-        store=store, data=data, llm=llm, planner=planning(planner) if planning else planner
+        store=store,
+        tools=GraphTools(
+            brief_data=data,
+            planner=planning(planner) if planning else planner,
+            sessions=store,
+            policy=FREE,
+        ),
+        llm=llm,
+        checkpoints=PostgresCheckpoints(url),
     )
     plans = PlanService(
         revisions=store, demand_models=demand, data=data, policy=FREE, defaults=simulation
@@ -342,7 +363,7 @@ class Clearing:
         self.inner = inner
         self.target = target
 
-    async def plan(self, request: PlanningRequest) -> PlanRevision:
+    async def plan(self, request: PlanningRequest) -> PlannedRevision:
         return await self.inner.plan(
             request.model_copy(update={"clearance_targets": (self.target,)})
         )
@@ -436,16 +457,28 @@ async def test_a_plan_revision_keeps_its_clearance_shortfalls_and_the_briefs_con
         clearance_shortfalls=(shortfall,),
         relaxation=relaxation,
     )
+    issue = Violation(
+        code=ViolationCode.CLEARANCE_TARGET,
+        message="short",
+        sku_id="SKU0005",
+        region=Region.NORTH,
+        actual=0.6,
+        limit=0.9,
+    )
     try:
         session_id = await store.create(BRIEF)
-        await store.save_plan(session_id, request, revision)
+        await store.save_revision(session_id, request, revision)
+        await store.save_open_issues(session_id, 1, (issue,))
+        await store.await_approval(session_id)
         saved = await store.get(session_id)
     finally:
         await engine.dispose()
 
     assert saved is not None
+    assert saved.status == "awaiting_approval"
+    assert saved.thread_id == str(session_id)
     assert saved.planning_request == request
-    assert saved.latest_revision == revision
+    assert saved.latest_revision == revision.model_copy(update={"open_issues": (issue,)})
 
 
 async def test_a_resimulation_replaces_the_stored_simulation_in_the_session_read_model(
@@ -479,3 +512,339 @@ async def test_resimulating_an_unknown_plan_is_404(postgres_url: str, running_ap
         )
 
     assert response.status_code == 404
+
+
+# --- approval and rejection (E8 #44, ADR 0046) -------------------------------------------------
+
+
+async def planned_session(client: AsyncClient) -> str:
+    session_id: str = (await client.post("/api/sessions", json={"brief": BRIEF})).json()[
+        "session_id"
+    ]
+    done = await settled(client, session_id)
+    assert done["status"] == "awaiting_approval", done
+    return session_id
+
+
+async def test_approval_after_a_restart_resumes_the_graph_from_its_checkpoint(
+    postgres_url: str, running_api: Api, small_models: tuple[DemandModel, Relations]
+) -> None:
+    async with running_api(postgres_url, FakeProvider([READING])) as client:
+        session_id = await planned_session(client)
+        planned = (await client.get(f"/api/sessions/{session_id}")).json()
+
+    # A new API process: its own engine, checkpointer pool and agent graph, and an LLM with
+    # nothing to say. Approving must resume the graph from the Postgres checkpoint.
+    async with running_api(postgres_url, FakeProvider([])) as client:
+        approved = await client.post(
+            f"/api/sessions/{session_id}/approve", json={"revision_number": 1}
+        )
+        after = (await client.get(f"/api/sessions/{session_id}")).json()
+
+    assert approved.status_code == 200, approved.text
+    body = approved.json()
+    assert body["status"] == "approved"
+    assert body["plan_revision"] == planned["plan_revision"]
+    [decision] = body["decisions"]
+    assert (decision["decision"], decision["revision_number"], decision["reason"]) == (
+        "approved",
+        1,
+        None,
+    )
+    assert decision["decided_at"]
+    assert after == body
+    # The graph itself went from the Approval interrupt to Done.
+    checkpoints = PostgresCheckpoints(postgres_url)
+    try:
+        graph = build_graph(
+            GraphTools(
+                brief_data=NeverRead(),
+                planner=NeverPlans(),
+                sessions=NeverRecords(),
+                policy=FREE,
+            ),
+            FakeProvider([]),
+            await checkpoints.open(),
+        )
+        state = await graph_state(graph, session_id)
+    finally:
+        await checkpoints.close()
+    assert state is not None
+    assert state.paused_at == ()
+    assert state.values.approval is not None
+    assert state.values.approval.decision is DecisionKind.APPROVED
+
+
+async def test_a_rejection_keeps_the_session_open_with_its_reason(
+    postgres_url: str, running_api: Api
+) -> None:
+    async with running_api(postgres_url, FakeProvider([READING])) as client:
+        session_id = await planned_session(client)
+        rejected = await client.post(
+            f"/api/sessions/{session_id}/reject",
+            json={"revision_number": 1, "reason": "Too much on Beverages"},
+        )
+        again = await client.post(
+            f"/api/sessions/{session_id}/reject",
+            json={"revision_number": 1, "reason": "Still no"},
+        )
+        approve = await client.post(
+            f"/api/sessions/{session_id}/approve", json={"revision_number": 1}
+        )
+    async with running_api(postgres_url, FakeProvider([])) as client:
+        after = (await client.get(f"/api/sessions/{session_id}")).json()
+
+    assert rejected.status_code == 200, rejected.text
+    body = rejected.json()
+    assert body["status"] == "rejected"
+    assert [(d["decision"], d["revision_number"], d["reason"]) for d in body["decisions"]] == [
+        ("rejected", 1, "Too much on Beverages")
+    ]
+    # A rejected revision waits for an amendment (#50): it can be neither rejected again nor
+    # approved.
+    assert again.status_code == 409
+    assert approve.status_code == 409
+    assert after == body
+
+
+async def test_approving_twice_is_409_and_keeps_one_approval(
+    postgres_url: str, running_api: Api
+) -> None:
+    async with running_api(postgres_url, FakeProvider([READING])) as client:
+        session_id = await planned_session(client)
+        first = await client.post(
+            f"/api/sessions/{session_id}/approve", json={"revision_number": 1}
+        )
+        second = await client.post(
+            f"/api/sessions/{session_id}/approve", json={"revision_number": 1}
+        )
+        reject = await client.post(
+            f"/api/sessions/{session_id}/reject",
+            json={"revision_number": 1, "reason": "changed my mind"},
+        )
+        after = (await client.get(f"/api/sessions/{session_id}")).json()
+
+    assert first.status_code == 200
+    assert second.status_code == 409
+    assert "approved" in second.json()["detail"]
+    assert reject.status_code == 409
+    assert [d["decision"] for d in after["decisions"]] == ["approved"]
+
+
+async def test_deciding_while_planning_is_409(postgres_url: str, running_api: Api) -> None:
+    llm = GatedProvider(FakeProvider([READING]))
+    async with running_api(postgres_url, llm) as client:
+        session_id = (await client.post("/api/sessions", json={"brief": BRIEF})).json()[
+            "session_id"
+        ]
+        approve = await client.post(
+            f"/api/sessions/{session_id}/approve", json={"revision_number": 1}
+        )
+        reject = await client.post(
+            f"/api/sessions/{session_id}/reject", json={"revision_number": 1, "reason": "no"}
+        )
+        llm.gate.set()
+        done = await settled(client, session_id)
+
+    assert approve.status_code == 409
+    assert "planning" in approve.json()["detail"]
+    assert reject.status_code == 409
+    assert done["status"] == "awaiting_approval"
+    assert done["decisions"] == []
+
+
+async def test_deciding_on_a_revision_that_is_not_the_latest_is_409(
+    postgres_url: str, running_api: Api
+) -> None:
+    async with running_api(postgres_url, FakeProvider([READING])) as client:
+        session_id = await planned_session(client)
+        response = await client.post(
+            f"/api/sessions/{session_id}/approve", json={"revision_number": 2}
+        )
+        after = (await client.get(f"/api/sessions/{session_id}")).json()
+
+    assert response.status_code == 409
+    assert after["status"] == "awaiting_approval"
+
+
+async def test_an_infeasible_revision_cannot_be_approved_but_can_be_rejected(
+    postgres_url: str, running_api: Api, small_dataset: GeneratedDataset
+) -> None:
+    snapshot = small_dataset.inventory.query(f"snapshot_week == {HISTORY_WEEKS - 1}")
+    pooled = pooled_stock(snapshot, small_dataset.stores, FREE).query("region == 'North'")
+    snacks = set(small_dataset.products.query("category == 'Snacks'")["sku_id"])
+    covered = pooled[pooled["sku_id"].isin(snacks)].sort_values("days_of_cover")
+    target = ClearanceTarget(sku_id=str(covered["sku_id"].iloc[-1]), sell_through=1.0)
+    async with running_api(
+        postgres_url, FakeProvider([READING]), lambda inner: Clearing(inner, target)
+    ) as client:
+        session_id = await planned_session(client)
+        approve = await client.post(
+            f"/api/sessions/{session_id}/approve", json={"revision_number": 1}
+        )
+        reject = await client.post(
+            f"/api/sessions/{session_id}/reject",
+            json={"revision_number": 1, "reason": "Lower the target"},
+        )
+
+    assert approve.status_code == 409
+    assert "infeasible" in approve.json()["detail"]
+    assert reject.status_code == 200
+    assert reject.json()["status"] == "rejected"
+
+
+class Overspending:
+    """Plans as usual, but reports plan facts whose first line costs more than the budget."""
+
+    def __init__(self, inner: Planner) -> None:
+        self.inner = inner
+
+    async def plan(self, request: PlanningRequest) -> PlannedRevision:
+        planned = await self.inner.plan(request)
+        first, *rest = planned.facts.lines
+        costly = first.model_copy(update={"promo_cost": request.marketing_budget + 1.0})
+        facts = planned.facts.model_copy(update={"lines": (costly, *rest)})
+        return PlannedRevision(planned.revision, facts)
+
+
+async def test_violations_the_critic_finds_are_open_issues_on_the_revision(
+    postgres_url: str, running_api: Api
+) -> None:
+    async with running_api(postgres_url, FakeProvider([READING]), Overspending) as client:
+        session_id = await planned_session(client)
+        body = (await client.get(f"/api/sessions/{session_id}")).json()
+
+    issues = body["plan_revision"]["open_issues"]
+    assert [issue["code"] for issue in issues] == ["BUDGET"]
+    assert issues[0]["limit"] == BUDGET
+
+
+async def test_deciding_on_an_unknown_session_is_404(postgres_url: str, running_api: Api) -> None:
+    unknown = "00000000-0000-0000-0000-000000000000"
+    async with running_api(postgres_url, FakeProvider([])) as client:
+        approve = await client.post(f"/api/sessions/{unknown}/approve", json={"revision_number": 1})
+        reject = await client.post(
+            f"/api/sessions/{unknown}/reject", json={"revision_number": 1, "reason": "no"}
+        )
+
+    assert (approve.status_code, reject.status_code) == (404, 404)
+
+
+@pytest.mark.parametrize(
+    ("path", "body"),
+    [
+        ("approve", {}),
+        ("approve", {"revision_number": 0}),
+        ("approve", {"revision_number": 1, "reason": "unexpected"}),
+        ("reject", {"revision_number": 1}),
+        ("reject", {"revision_number": 1, "reason": "   "}),
+        ("reject", {"revision_number": 1, "reason": "x" * 2001}),
+    ],
+    ids=["no-revision", "revision-zero", "approve-reason", "no-reason", "blank", "oversized"],
+)
+async def test_an_invalid_decision_body_is_422(
+    postgres_url: str, running_api: Api, path: str, body: dict[str, object]
+) -> None:
+    async with running_api(postgres_url, FakeProvider([READING])) as client:
+        session_id = await planned_session(client)
+        response = await client.post(f"/api/sessions/{session_id}/{path}", json=body)
+        after = (await client.get(f"/api/sessions/{session_id}")).json()
+
+    assert response.status_code == 422
+    assert after["status"] == "awaiting_approval"
+
+
+async def test_an_approved_plan_cannot_be_resimulated(postgres_url: str, running_api: Api) -> None:
+    async with running_api(postgres_url, FakeProvider([READING])) as client:
+        session_id = await planned_session(client)
+        await client.post(f"/api/sessions/{session_id}/approve", json={"revision_number": 1})
+        response = await client.post(f"/api/plans/{session_id}/simulate", json={"n_runs": 300})
+
+    assert response.status_code == 409
+    assert "approved" in response.json()["detail"]
+
+
+async def test_the_store_refuses_a_decision_the_session_cannot_take(postgres_url: str) -> None:
+    engine = create_async_engine(postgres_url)
+    store = SessionStore(engine)
+    request = PlanningRequest(
+        as_of_week=HISTORY_WEEKS,
+        scope=Scope(regions=(Region.NORTH,), categories=("Snacks",)),
+        promo_window=PromoWindow(start_week=HISTORY_WEEKS + 2, end_week=HISTORY_WEEKS + 3),
+        marketing_budget=BUDGET,
+    )
+    try:
+        session_id = await store.create(BRIEF)
+        await store.save_revision(session_id, request, PlanRevision(number=1))
+        with pytest.raises(SessionConflictError):  # still planning
+            await store.record_decision(session_id, DecisionKind.APPROVED, 1, None)
+        await store.await_approval(session_id)
+        with pytest.raises(SessionConflictError):  # not the latest revision
+            await store.record_decision(session_id, DecisionKind.APPROVED, 2, None)
+        decided = await store.record_decision(session_id, DecisionKind.REJECTED, 1, "no")
+        await store.await_approval(session_id)  # a rejected session is not reopened
+        saved = await store.get(session_id)
+    finally:
+        await engine.dispose()
+
+    assert saved is not None
+    assert saved.status == "rejected"
+    assert saved.decisions == (decided,)
+
+
+async def test_without_checkpoints_a_new_session_is_503(postgres_url: str) -> None:
+    engine = create_async_engine(postgres_url)
+    store = SessionStore(engine)
+    sessions = SessionService(
+        store=store,
+        tools=GraphTools(
+            brief_data=RetailData(engine), planner=NeverPlans(), sessions=store, policy=FREE
+        ),
+        llm=FakeProvider([]),
+        checkpoints=BrokenCheckpoints(),
+    )
+    app = create_app(database_probe=HealthyProbe(), model_status=NoModel(), sessions=sessions)
+    try:
+        async with app.router.lifespan_context(app):
+            transport = ASGITransport(app=app)
+            async with AsyncClient(transport=transport, base_url="http://test") as client:
+                response = await client.post("/api/sessions", json={"brief": BRIEF})
+    finally:
+        await engine.dispose()
+
+    assert response.status_code == 503
+
+
+class BrokenCheckpoints(MemoryCheckpoints):
+    async def open(self) -> Any:
+        raise OSError("checkpoint database unreachable")
+
+
+class NeverPlans:
+    async def plan(self, request: PlanningRequest) -> PlannedRevision:
+        raise AssertionError("never plans")
+
+
+class NeverRead:
+    async def products(self) -> Any:
+        raise AssertionError("never read")
+
+    async def calendar(self) -> Any:
+        raise AssertionError("never read")
+
+    async def default_as_of_week(self) -> int:
+        raise AssertionError("never read")
+
+
+class NeverRecords:
+    async def save_revision(self, *args: object) -> None:
+        raise AssertionError("never records")
+
+    async def save_open_issues(self, *args: object) -> None:
+        raise AssertionError("never records")
+
+    async def await_approval(self, session_id: object) -> None:
+        raise AssertionError("never records")
+
+    async def record_decision(self, *args: object) -> Any:
+        raise AssertionError("never records")

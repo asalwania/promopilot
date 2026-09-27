@@ -5,6 +5,7 @@
 `check_numeric_grounding` checks that every number in a text comes from tool outputs.
 """
 
+from promopilot.domain import Violation, ViolationCode
 from promopilot.guardrails.grounding import GroundingReport, check_numeric_grounding
 from promopilot.guardrails.limits import PlanLimits, plan_limits
 from promopilot.guardrails.validation import (
@@ -12,8 +13,6 @@ from promopilot.guardrails.validation import (
     LineFacts,
     PlanFacts,
     SkuFacts,
-    Violation,
-    ViolationCode,
     validate_plan,
 )
 

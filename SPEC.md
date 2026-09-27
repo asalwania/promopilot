@@ -344,7 +344,7 @@ flowchart LR
 | `optimizer` | `solve(request, candidates, relations) -> OptimizationResult(plan, status, binding_constraints)` | OR-Tools CP-SAT |
 | `simulator` | `simulate(plan, models, n, seed) -> SimulationResult` | numpy |
 | `mechanisms` | `compare(sku, region, context) -> list[MechanismOutcome]` | demand, simulator |
-| `agents` | `build_graph(tools, llm) -> CompiledGraph`; nodes: context, planner, critic, explainer, approval | LangGraph, llm |
+| `agents` | `build_graph(tools, llm, checkpointer) -> CompiledGraph`; nodes: context, planner, critic, explainer, approval | LangGraph, llm |
 | `llm` | `LLMProvider` protocol; `OpenAIProvider`, `AnthropicProvider`, `ReplayProvider`, `FakeProvider` | provider SDKs |
 | `guardrails` | `check_numeric_grounding(text, tool_outputs)`, `validate_plan(plan, request)` | — |
 | `evals` | `run(scenarios, provider) -> EvalReport`; `oracle.evaluate(plan)` | ground truth (only module allowed) |
@@ -548,13 +548,16 @@ stateDiagram-v2
   Clarify --> Context: user answers (interrupt/resume)
   Context --> Planner
   Planner --> Critic
-  Critic --> Planner: violations and iteration < 3
+  Critic --> Planner: violations and iteration < 3 (#48)
   Critic --> Explainer: pass, or cap reached (issues listed)
   Explainer --> Approval
   Approval --> Planner: amend
-  Approval --> Done: approve / reject
+  Approval --> Approval: reject (reason stored; session open for amend)
+  Approval --> Done: approve
   Done --> [*]
 ```
+
+A rejection keeps the session open: the graph waits at Approval again until an amendment (ADR 0046). Until #48 the Critic does not loop: its violations go to the Explainer and Approval as open issues.
 
 **Nodes:**
 - **Context agent (LLM):** parses brief + amendments into `PlanningRequest` via structured output. Fills gaps from data tools (holiday windows, overstock list, current competitor gaps). Emits assumptions with source and confidence.
@@ -581,8 +584,8 @@ stateDiagram-v2
 | GET | `/api/sessions/{id}/events` | SSE stream of trace events |
 | POST | `/api/sessions/{id}/clarify` | Answer clarification questions |
 | POST | `/api/sessions/{id}/amend` | Amend the request `{text}` → re-plan with diff |
-| POST | `/api/sessions/{id}/approve` | Approve the plan |
-| POST | `/api/sessions/{id}/reject` | Reject `{reason}` |
+| POST | `/api/sessions/{id}/approve` | Approve plan revision `{revision_number}` (ADR 0046) |
+| POST | `/api/sessions/{id}/reject` | Reject plan revision `{revision_number, reason}` (ADR 0046) |
 | POST | `/api/plans/{id}/simulate` | Re-simulate `{n_runs, competitor_reaction}` |
 | GET | `/api/catalog/products` | Products with filters |
 | GET | `/api/catalog/regions` | Regions, stores, segment mix |

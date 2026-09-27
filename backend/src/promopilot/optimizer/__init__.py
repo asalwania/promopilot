@@ -1,6 +1,7 @@
 """The optimiser (SPEC §9.3-9.4): promo option generation, then CP-SAT selection."""
 
 from promopilot.domain import PruneReason, SolveStatus
+from promopilot.optimizer.facts import plan_facts
 from promopilot.optimizer.options import (
     DEPTHS,
     P90_Z,
@@ -40,6 +41,7 @@ __all__ = [
     "SolveStatus",
     "SolverSettings",
     "generate_options",
+    "plan_facts",
     "relaxed_request",
     "solve",
 ]

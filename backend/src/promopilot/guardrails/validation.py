@@ -1,12 +1,19 @@
 """Deterministic plan validation: every hard constraint on plan-time values (ADR 0012, 0028)."""
 
 from collections import Counter, defaultdict
-from enum import StrEnum
 from typing import Self
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from promopilot.domain import CompanyPolicy, Mechanism, PlanLine, PlanningRequest, Region
+from promopilot.domain import (
+    CompanyPolicy,
+    Mechanism,
+    PlanLine,
+    PlanningRequest,
+    Region,
+    Violation,
+    ViolationCode,
+)
 from promopilot.economics import blended_margin, effective_unit_price
 from promopilot.guardrails.limits import plan_limits
 
@@ -79,34 +86,6 @@ class PlanFacts(BaseModel):
     lines: tuple[LineFacts, ...]
     clearance: tuple[ClearanceFacts, ...] = ()
     """One per SKU with a clearance target and region with available stock."""
-
-
-class ViolationCode(StrEnum):
-    BUDGET = "BUDGET"
-    REGIONAL_BUDGET = "REGIONAL_BUDGET"
-    MIN_MARGIN = "MIN_MARGIN"
-    MARGIN_FLOOR = "MARGIN_FLOOR"
-    STOCK = "STOCK"
-    MAX_DISCOUNT = "MAX_DISCOUNT"
-    BELOW_COST = "BELOW_COST"
-    WINDOW = "WINDOW"
-    MAX_SKUS = "MAX_SKUS"
-    DUPLICATE_LINE = "DUPLICATE_LINE"
-    CLEARANCE_TARGET = "CLEARANCE_TARGET"
-    KVI_TOLERANCE = "KVI_TOLERANCE"
-
-
-class Violation(BaseModel):
-    """One broken hard constraint, specific enough for the planner to fix."""
-
-    model_config = ConfigDict(frozen=True)
-
-    code: ViolationCode
-    message: str
-    sku_id: str | None = None
-    region: Region | None = None
-    actual: float | None = None
-    limit: float | None = None
 
 
 def validate_plan(

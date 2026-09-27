@@ -1,4 +1,5 @@
 import json
+from dataclasses import dataclass
 
 import pytest
 
@@ -7,9 +8,9 @@ from promopilot.agents import (
     BriefReading,
     OptimisingPlanner,
     PlanningError,
-    plan_session,
     read_planning_request,
 )
+from promopilot.agents.session import BriefData
 from promopilot.agents.tools.inventory_status import pooled_stock
 from promopilot.datagen import GeneratedDataset
 from promopilot.domain import (
@@ -18,12 +19,14 @@ from promopilot.domain import (
     ConstraintKind,
     Mechanism,
     PlanningRequest,
+    PlanRevision,
     PromoWindow,
     Region,
     Scope,
     SolveStatus,
 )
-from promopilot.llm import FakeProvider, LLMError
+from promopilot.guardrails import validate_plan
+from promopilot.llm import FakeProvider, LLMError, LLMProvider
 from promopilot.models.demand import DemandModel
 from promopilot.models.registry import ModelKind
 from promopilot.models.relations import Relations
@@ -66,6 +69,20 @@ def planner_of(
     )
 
 
+@dataclass(frozen=True)
+class Planned:
+    request: PlanningRequest
+    revision: PlanRevision
+
+
+async def plan_session(
+    brief: str, llm: LLMProvider, data: BriefData, planner: OptimisingPlanner
+) -> Planned:
+    """What the agent graph's Context and Planner nodes do in turn (ADR 0046)."""
+    request = await read_planning_request(brief, llm, data)
+    return Planned(request, (await planner.plan(request)).revision)
+
+
 def reading(**overrides: object) -> BriefReading:
     fields: dict[str, object] = {
         "regions": [Region.NORTH],
@@ -105,6 +122,23 @@ async def test_a_brief_becomes_an_optimised_plan_revision_one_within_budget_and_
         assert planned.why_chosen.reasons
     assert len(revision.not_selected) <= 5
     assert all(entry.reasons for entry in revision.not_selected)
+
+
+async def test_the_plan_facts_of_an_optimised_plan_pass_plan_validation(
+    data: InMemoryRetailData, planner: OptimisingPlanner
+) -> None:
+    request = await read_planning_request("Snacks push", FakeProvider([reading()]), data)
+
+    planned = await planner.plan(request)
+
+    assert planned.revision.solver_status is SolveStatus.OPTIMAL
+    assert [fact.line for fact in planned.facts.lines] == [
+        line.line for line in planned.revision.lines
+    ]
+    for fact, line in zip(planned.facts.lines, planned.revision.lines, strict=True):
+        assert fact.promo_cost == pytest.approx(line.promo_cost)
+        assert fact.expected_units == pytest.approx(line.expected_units)
+    assert validate_plan(planned.facts, request, FREE) == ()
 
 
 async def test_every_plan_line_carries_a_comparison_of_mechanisms(
@@ -286,7 +320,7 @@ async def test_an_unreachable_clearance_target_is_infeasible_with_a_relaxation_o
     sku_id = str(covered["sku_id"].iloc[-1])
     request = planning(clearance_targets=[{"sku_id": sku_id, "sell_through": 1.0}])
 
-    revision = await planner.plan(request)
+    revision = (await planner.plan(request)).revision
 
     assert revision.solver_status is SolveStatus.INFEASIBLE
     # Selling all of the SKU with the most cover in two weeks is out of reach: P90 units must
@@ -320,7 +354,7 @@ async def test_regional_caps_hold_and_a_loosening_brief_value_is_recorded(
 ) -> None:
     request = planning(regional_budget_caps={"North": 1_000.0}, min_margin=0.05)
 
-    revision = await planner.plan(request)
+    revision = (await planner.plan(request)).revision
 
     north = [line for line in revision.lines if line.line.region is Region.NORTH]
     assert sum(line.promo_cost for line in north) <= 1_000.0

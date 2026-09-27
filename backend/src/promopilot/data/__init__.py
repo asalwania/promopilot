@@ -2,6 +2,6 @@
 
 from promopilot.data.loader import load_dataset, migrate
 from promopilot.data.retail import RetailData
-from promopilot.data.sessions import SessionStore
+from promopilot.data.sessions import SessionConflictError, SessionStore
 
-__all__ = ["RetailData", "SessionStore", "load_dataset", "migrate"]
+__all__ = ["RetailData", "SessionConflictError", "SessionStore", "load_dataset", "migrate"]

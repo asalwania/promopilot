@@ -12,10 +12,12 @@ The latest competitor gaps give undercut KVIs their price-match options and the 
 tolerance its competitor prices (ADR 0031). The plan is then simulated with the session's
 simulation settings and the result stored on the revision (ADR 0042). E8's planner agent
 drives the same work through the `generate_candidates`, `run_optimizer`,
-`compare_mechanisms` and `simulate_plan` tools instead.
+`compare_mechanisms` and `simulate_plan` tools instead; until then this is the agent graph's
+Planner node (ADR 0046), and it also returns the revision's plan facts for the Critic.
 """
 
 import asyncio
+from dataclasses import dataclass
 from typing import Protocol
 
 import pandas as pd
@@ -25,12 +27,14 @@ from promopilot.agents.tools.get_relations import RelationsSource
 from promopilot.agents.tools.inventory_status import pooled_stock
 from promopilot.competitors import read_competitor_gaps
 from promopilot.domain import CompanyPolicy, PlanningRequest, PlanRevision, PlanRevisionLine
+from promopilot.guardrails import PlanFacts
 from promopilot.mechanisms import ComparisonContext, compare
 from promopilot.optimizer import (
     FittedOptionFacts,
     OptionContext,
     SolverSettings,
     generate_options,
+    plan_facts,
     solve,
 )
 from promopilot.simulator import SimulationInputs, SimulationSettings, simulate
@@ -38,6 +42,15 @@ from promopilot.simulator import SimulationInputs, SimulationSettings, simulate
 
 class PlanningError(Exception):
     """The planning request cannot be planned now (no trained model, or no data)."""
+
+
+@dataclass(frozen=True)
+class PlannedRevision:
+    """A plan revision and the plan-time numbers its plan was chosen on, which plan
+    validation reads (ADR 0028)."""
+
+    revision: PlanRevision
+    facts: PlanFacts
 
 
 class PlannerData(Protocol):
@@ -71,10 +84,10 @@ class OptimisingPlanner:
         self._seed = seed
         self._simulation = simulation
 
-    async def plan(self, request: PlanningRequest) -> PlanRevision:
-        """Plan revision 1 for the request. Raises `PlanningError` when no model is trained,
-        the as-of week has no inventory snapshot, or the request names a clearance target
-        outside its scope."""
+    async def plan(self, request: PlanningRequest) -> PlannedRevision:
+        """Plan revision 1 for the request, with its plan facts. Raises `PlanningError` when
+        no model is trained, the as-of week has no inventory snapshot, or the request names a
+        clearance target outside its scope."""
         demand = await self._demand_models.get()
         relations = await self._relations_models.get()
         if demand is None or relations is None:
@@ -105,11 +118,12 @@ class OptimisingPlanner:
             options = await asyncio.to_thread(generate_options, request, context)
         except ValueError as error:
             raise PlanningError(str(error)) from error
+        facts = FittedOptionFacts(context)
         result = await asyncio.to_thread(
             solve,
             request,
             options,
-            FittedOptionFacts(context),
+            facts,
             self._policy,
             settings=self._settings,
             seed=self._seed,
@@ -140,7 +154,7 @@ class OptimisingPlanner:
                     mechanism_comparison=compare(line.sku_id, line.region, comparing, chosen=line),
                 )
             )
-        return PlanRevision(
+        revision = PlanRevision(
             number=1,
             lines=tuple(lines),
             solver_status=result.status,
@@ -152,3 +166,4 @@ class OptimisingPlanner:
             policy_findings=result.policy_findings,
             relaxation=result.relaxation,
         )
+        return PlannedRevision(revision, plan_facts(options, result.selected, facts))

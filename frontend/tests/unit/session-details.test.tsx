@@ -4,11 +4,13 @@ import { describe, expect, it } from "vitest";
 import { SessionDetails } from "@/components/session-details";
 
 import {
+  approvedSession,
   awaitingApprovalSession,
   failedSession,
   infeasibleSession,
   planLines,
   planningSession,
+  rejectedSession,
 } from "./fixtures/sessions";
 
 describe("SessionDetails", () => {
@@ -83,6 +85,7 @@ describe("SessionDetails", () => {
             not_selected: [],
             clearance_shortfalls: [],
             policy_findings: [],
+            open_issues: [],
           },
         }}
       />,
@@ -94,6 +97,35 @@ describe("SessionDetails", () => {
       ),
     ).toBeInTheDocument();
     expect(screen.queryByRole("table")).not.toBeInTheDocument();
+  });
+
+  it("shows which plan revision an approved session approved", () => {
+    render(<SessionDetails session={approvedSession} />);
+
+    expect(screen.getByRole("status")).toHaveTextContent("Approved");
+    expect(
+      screen.getByText("Plan revision 1 was approved."),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("progressbar")).not.toBeInTheDocument();
+  });
+
+  it("shows why a rejected session's plan revision was rejected", () => {
+    render(<SessionDetails session={rejectedSession} />);
+
+    expect(screen.getByRole("status")).toHaveTextContent("Rejected");
+    expect(
+      screen.getByText(
+        "Plan revision 1 was rejected: Too deep on Beverages in West.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("shows no decision before one is made", () => {
+    render(<SessionDetails session={awaitingApprovalSession} />);
+
+    expect(
+      screen.queryByText(/was (approved|rejected)/),
+    ).not.toBeInTheDocument();
   });
 });
 

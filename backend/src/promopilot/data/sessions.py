@@ -1,4 +1,5 @@
-"""Persistence for planning sessions and their plan revisions (E3; E8 adds trace and approvals)."""
+"""Persistence for planning sessions, their plan revisions and every decision on them (E3,
+E8: ADR 0046)."""
 
 from uuid import UUID, uuid4
 
@@ -6,12 +7,14 @@ from pydantic import TypeAdapter
 from sqlalchemy import func, insert, select, update
 from sqlalchemy.ext.asyncio import AsyncEngine
 
-from promopilot.data.schema import plan_lines, plan_revisions, planning_sessions
+from promopilot.data.schema import approvals, plan_lines, plan_revisions, planning_sessions
 from promopilot.domain import (
     BindingConstraint,
     ClearanceShortfall,
+    DecisionKind,
     MechanismOutcome,
     NotSelectedOption,
+    PlanDecision,
     PlanLine,
     PlanningRequest,
     PlanningSession,
@@ -22,6 +25,7 @@ from promopilot.domain import (
     Relaxation,
     SessionStatus,
     SolveStatus,
+    Violation,
     WhyChosen,
 )
 
@@ -30,8 +34,13 @@ _NOT_SELECTED = TypeAdapter(tuple[NotSelectedOption, ...])
 _COMPARISON = TypeAdapter(tuple[MechanismOutcome, ...])
 _SHORTFALLS = TypeAdapter(tuple[ClearanceShortfall, ...])
 _FINDINGS = TypeAdapter(tuple[PolicyFinding, ...])
+_ISSUES = TypeAdapter(tuple[Violation, ...])
 
 INTERRUPTED = "planning was interrupted by an API restart; start a new session"
+
+
+class SessionConflictError(Exception):
+    """The session is not in a state that allows the change (ADR 0046): the API's 409."""
 
 
 class SessionStore:
@@ -43,7 +52,11 @@ class SessionStore:
         async with self._engine.begin() as connection:
             await connection.execute(
                 insert(planning_sessions).values(
-                    id=session_id, brief=brief, status=SessionStatus.PLANNING.value
+                    id=session_id,
+                    brief=brief,
+                    status=SessionStatus.PLANNING.value,
+                    # The agent graph's thread is the session itself (ADR 0046).
+                    thread_id=str(session_id),
                 )
             )
         return session_id
@@ -80,6 +93,13 @@ class SessionStore:
                         )
                     ).mappings()
                 )
+            decisions = (
+                await connection.execute(
+                    select(approvals)
+                    .where(approvals.c.session_id == session_id)
+                    .order_by(approvals.c.id)
+                )
+            ).all()
         request = session.planning_request
         return PlanningSession(
             id=session.id,
@@ -90,12 +110,22 @@ class SessionStore:
             if revision is None
             else _revision(revision, tuple(_revision_line(row) for row in lines)),
             error=session.error,
+            thread_id=session.thread_id,
+            decisions=tuple(
+                PlanDecision(
+                    decision=DecisionKind(row.decision),
+                    revision_number=row.revision_number,
+                    reason=row.reason,
+                    decided_at=row.decided_at,
+                )
+                for row in decisions
+            ),
         )
 
-    async def save_plan(
+    async def save_revision(
         self, session_id: UUID, request: PlanningRequest, revision: PlanRevision
     ) -> None:
-        """Store the planning request and the plan revision; the session awaits approval."""
+        """Store the planning request and a plan revision; the status is unchanged."""
         async with self._engine.begin() as connection:
             await connection.execute(
                 insert(plan_revisions).values(
@@ -119,6 +149,7 @@ class SessionStore:
                     relaxation=None
                     if revision.relaxation is None
                     else revision.relaxation.model_dump(mode="json"),
+                    open_issues=_ISSUES.dump_python(revision.open_issues, mode="json"),
                 )
             )
             if revision.lines:
@@ -132,12 +163,84 @@ class SessionStore:
             await connection.execute(
                 update(planning_sessions)
                 .where(planning_sessions.c.id == session_id)
-                .values(
-                    status=SessionStatus.AWAITING_APPROVAL.value,
-                    planning_request=request.model_dump(mode="json"),
-                    updated_at=func.now(),
-                )
+                .values(planning_request=request.model_dump(mode="json"), updated_at=func.now())
             )
+
+    async def save_open_issues(
+        self, session_id: UUID, revision_number: int, issues: tuple[Violation, ...]
+    ) -> None:
+        """Store the violations the Critic left open on a plan revision."""
+        async with self._engine.begin() as connection:
+            await connection.execute(
+                update(plan_revisions)
+                .where(
+                    plan_revisions.c.session_id == session_id,
+                    plan_revisions.c.number == revision_number,
+                )
+                .values(open_issues=_ISSUES.dump_python(issues, mode="json"))
+            )
+
+    async def await_approval(self, session_id: UUID) -> None:
+        """A `planning` session now awaits approval; any other status is kept, so the agent
+        graph can call this again when it resumes (ADR 0046)."""
+        async with self._engine.begin() as connection:
+            await connection.execute(
+                update(planning_sessions)
+                .where(
+                    planning_sessions.c.id == session_id,
+                    planning_sessions.c.status == SessionStatus.PLANNING.value,
+                )
+                .values(status=SessionStatus.AWAITING_APPROVAL.value, updated_at=func.now())
+            )
+
+    async def record_decision(
+        self,
+        session_id: UUID,
+        decision: DecisionKind,
+        revision_number: int,
+        reason: str | None,
+    ) -> PlanDecision:
+        """Approve or reject the latest plan revision of a session awaiting approval, and keep
+        the decision in its audit trail. Raises `SessionConflictError`, changing nothing, when the
+        session is not awaiting approval or the revision is not its latest."""
+        latest = (
+            select(func.max(plan_revisions.c.number))
+            .where(plan_revisions.c.session_id == session_id)
+            .scalar_subquery()
+        )
+        async with self._engine.begin() as connection:
+            moved = await connection.execute(
+                update(planning_sessions)
+                .where(
+                    planning_sessions.c.id == session_id,
+                    planning_sessions.c.status == SessionStatus.AWAITING_APPROVAL.value,
+                    latest == revision_number,
+                )
+                .values(status=decision.value, updated_at=func.now())
+            )
+            if moved.rowcount != 1:
+                raise SessionConflictError(
+                    f"plan revision {revision_number} of session {session_id} is not awaiting "
+                    "approval"
+                )
+            decided_at = (
+                await connection.execute(
+                    insert(approvals)
+                    .values(
+                        session_id=session_id,
+                        revision_number=revision_number,
+                        decision=decision.value,
+                        reason=reason,
+                    )
+                    .returning(approvals.c.decided_at)
+                )
+            ).scalar_one()
+        return PlanDecision(
+            decision=decision,
+            revision_number=revision_number,
+            reason=reason,
+            decided_at=decided_at,
+        )
 
     async def save_simulation(
         self, session_id: UUID, revision_number: int, simulation: PlanSimulation
@@ -216,6 +319,7 @@ def _revision(row: object, lines: tuple[PlanRevisionLine, ...]) -> PlanRevision:
         relaxation=None
         if values["relaxation"] is None
         else Relaxation.model_validate(values["relaxation"]),
+        open_issues=_ISSUES.validate_python(values["open_issues"] or ()),
     )
 
 

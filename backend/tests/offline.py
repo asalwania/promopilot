@@ -2,9 +2,10 @@
 
 from sqlalchemy.ext.asyncio import create_async_engine
 
+from promopilot.agents import GraphTools, MemoryCheckpoints, PlannedRevision
 from promopilot.api.sessions import SessionService
 from promopilot.data import RetailData, SessionStore
-from promopilot.domain import PlanningRequest, PlanRevision
+from promopilot.domain import CompanyPolicy, PlanningRequest
 from promopilot.llm import FakeProvider
 
 
@@ -18,16 +19,22 @@ class NoModel:
 class NoPlanner:
     """A planner that must never be asked to plan."""
 
-    async def plan(self, request: PlanningRequest) -> PlanRevision:
+    async def plan(self, request: PlanningRequest) -> PlannedRevision:
         raise AssertionError("an offline app never plans")
 
 
 def offline_sessions() -> SessionService:
     # Creating an engine does not connect, and ASGITransport runs no lifespan.
     engine = create_async_engine("postgresql+asyncpg://unused@127.0.0.1:1/unused")
+    store = SessionStore(engine)
     return SessionService(
-        store=SessionStore(engine),
-        data=RetailData(engine),
+        store=store,
+        tools=GraphTools(
+            brief_data=RetailData(engine),
+            planner=NoPlanner(),
+            sessions=store,
+            policy=CompanyPolicy(),
+        ),
         llm=FakeProvider([]),
-        planner=NoPlanner(),
+        checkpoints=MemoryCheckpoints(),
     )

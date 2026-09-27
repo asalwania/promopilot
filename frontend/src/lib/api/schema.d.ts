@@ -210,6 +210,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/sessions/{session_id}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Approve Session
+         * @description Approve the session's latest plan revision, which makes it final (SF-04).
+         */
+        post: operations["approve_session_api_sessions__session_id__approve_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sessions/{session_id}/reject": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reject Session
+         * @description Reject the session's latest plan revision with a reason; the session stays open.
+         */
+        post: operations["reject_session_api_sessions__session_id__reject_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/health": {
         parameters: {
             query?: never;
@@ -231,6 +271,17 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /**
+         * ApproveRequest
+         * @description Approve a plan revision: it must be the session's latest (ADR 0046).
+         */
+        ApproveRequest: {
+            /**
+             * Revision Number
+             * @description The plan revision being approved.
+             */
+            revision_number: number;
+        };
         /**
          * BindingConstraint
          * @description A constraint that limits the plan: dropping it gives a strictly better objective, or,
@@ -407,6 +458,11 @@ export interface components {
              */
             brief: string;
         };
+        /**
+         * DecisionKind
+         * @enum {string}
+         */
+        DecisionKind: "approved" | "rejected";
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
@@ -637,6 +693,23 @@ export interface components {
             p90: number;
         };
         /**
+         * PlanDecision
+         * @description One human decision on one plan revision: an approval or a rejection with its reason.
+         *     Every decision is kept, in order, as the session's audit trail (SF-04, ADR 0046).
+         */
+        PlanDecision: {
+            /**
+             * Decided At
+             * Format: date-time
+             */
+            decided_at: string;
+            decision: components["schemas"]["DecisionKind"];
+            /** Reason */
+            reason?: string | null;
+            /** Revision Number */
+            revision_number: number;
+        };
+        /**
          * PlanLine
          * @description A promo option selected into a promo plan: one (SKU, region) decision (ADR 0004).
          */
@@ -684,6 +757,11 @@ export interface components {
             number: number;
             /** Objective */
             objective?: number | null;
+            /**
+             * Open Issues
+             * @default []
+             */
+            open_issues: components["schemas"]["Violation"][];
             /**
              * Policy Findings
              * @default []
@@ -861,6 +939,22 @@ export interface components {
             stores: components["schemas"]["Store"][];
         };
         /**
+         * RejectRequest
+         * @description Reject a plan revision, the session's latest, with the reason (ADR 0046).
+         */
+        RejectRequest: {
+            /**
+             * Reason
+             * @description Why, in plain English.
+             */
+            reason: string;
+            /**
+             * Revision Number
+             * @description The plan revision being rejected.
+             */
+            revision_number: number;
+        };
+        /**
          * RelationsResponse
          * @description A SKU's substitutes (strongest first) and complements (highest lift first).
          */
@@ -955,6 +1049,11 @@ export interface components {
         SessionResponse: {
             /** Brief */
             brief: string;
+            /**
+             * Decisions
+             * @description Every approval and rejection, oldest first: the session's audit trail.
+             */
+            decisions: components["schemas"]["PlanDecision"][];
             /** Error */
             error: string | null;
             plan_revision: components["schemas"]["PlanRevision"] | null;
@@ -968,7 +1067,11 @@ export interface components {
         };
         /**
          * SessionStatus
-         * @description Every status a planning session can have. E3 uses planning, awaiting_approval, failed.
+         * @description Every status a planning session can have (ADR 0046).
+         *
+         *     planning -> awaiting_approval -> approved (final) or rejected (open for amendments); any
+         *     failure while planning -> failed. awaiting_clarification arrives with the Context agent
+         *     (#46).
          * @enum {string}
          */
         SessionStatus: "planning" | "awaiting_clarification" | "awaiting_approval" | "approved" | "rejected" | "failed";
@@ -1051,6 +1154,27 @@ export interface components {
             /** Error Type */
             type: string;
         };
+        /**
+         * Violation
+         * @description One broken hard constraint, specific enough for the planner to fix.
+         */
+        Violation: {
+            /** Actual */
+            actual?: number | null;
+            code: components["schemas"]["ViolationCode"];
+            /** Limit */
+            limit?: number | null;
+            /** Message */
+            message: string;
+            region?: components["schemas"]["Region"] | null;
+            /** Sku Id */
+            sku_id?: string | null;
+        };
+        /**
+         * ViolationCode
+         * @enum {string}
+         */
+        ViolationCode: "BUDGET" | "REGIONAL_BUDGET" | "MIN_MARGIN" | "MARGIN_FLOOR" | "STOCK" | "MAX_DISCOUNT" | "BELOW_COST" | "WINDOW" | "MAX_SKUS" | "DUPLICATE_LINE" | "CLEARANCE_TARGET" | "KVI_TOLERANCE";
         /**
          * WhyChosen
          * @description Why a plan line was chosen: the positive parts of its value, what it is worth alone,
@@ -1307,7 +1431,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description The latest demand model cannot simulate the stored plan */
+            /** @description The session is approved, so its plan is final, or the latest demand model cannot simulate the stored plan */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -1408,6 +1532,13 @@ export interface operations {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
+            /** @description Planning is unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
         };
     };
     get_session_api_sessions__session_id__get: {
@@ -1445,6 +1576,118 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
+            };
+        };
+    };
+    approve_session_api_sessions__session_id__approve_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ApproveRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SessionResponse"];
+                };
+            };
+            /** @description Unknown session */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The session is not awaiting approval, the revision is not its latest, or (approve) the revision is infeasible */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Planning is unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    reject_session_api_sessions__session_id__reject_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RejectRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SessionResponse"];
+                };
+            };
+            /** @description Unknown session */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The session is not awaiting approval, the revision is not its latest, or (approve) the revision is infeasible */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Planning is unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

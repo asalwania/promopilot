@@ -23,10 +23,16 @@ from promopilot.domain import (
     PlanningSession,
     PlanSimulation,
     PromoPlan,
+    SessionStatus,
 )
 from promopilot.simulator import SimulationSettings
 
 UNAVAILABLE = {"model_unavailable", "data_unavailable"}
+
+
+class ApprovedPlanError(Exception):
+    """An approved plan revision is final: its stored simulation is part of what was approved
+    (ADR 0046)."""
 
 
 class PlanRevisions(Protocol):
@@ -61,10 +67,15 @@ class PlanService:
         competitor_reaction: CompetitorReaction | None = None,
     ) -> PlanSimulationResponse | None:
         """None when the session is unknown or has no plan revision yet. Raises
-        `ToolCallError` when the revision cannot be simulated now (`simulate_on_latest_model`)."""
+        `ToolCallError` when the revision cannot be simulated now (`simulate_on_latest_model`),
+        and `ApprovedPlanError` when the session is approved."""
         session = await self._revisions.get(session_id)
         if session is None or session.latest_revision is None or session.planning_request is None:
             return None
+        if session.status is SessionStatus.APPROVED:
+            raise ApprovedPlanError(
+                f"plan revision {session.latest_revision.number} is approved and final"
+            )
         revision = session.latest_revision
         week = session.planning_request.as_of_week
         simulated = await simulate_on_latest_model(
@@ -97,7 +108,8 @@ def plans_router(plans: PlanService) -> APIRouter:
                 "description": "Unknown session, or a session without a plan revision yet"
             },
             status.HTTP_409_CONFLICT: {
-                "description": "The latest demand model cannot simulate the stored plan"
+                "description": "The session is approved, so its plan is final, or the latest "
+                "demand model cannot simulate the stored plan"
             },
             status.HTTP_503_SERVICE_UNAVAILABLE: {
                 "description": "No trained demand model, or no inventory snapshot for the "
@@ -116,6 +128,8 @@ def plans_router(plans: PlanService) -> APIRouter:
                 else status.HTTP_409_CONFLICT
             )
             raise HTTPException(code, failure.error.message) from failure
+        except ApprovedPlanError as error:
+            raise HTTPException(status.HTTP_409_CONFLICT, str(error)) from error
         if found is None:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "Unknown plan")
         return found

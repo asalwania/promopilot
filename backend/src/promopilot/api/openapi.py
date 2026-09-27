@@ -6,7 +6,7 @@ from pathlib import Path
 
 from sqlalchemy.ext.asyncio import create_async_engine
 
-from promopilot.agents import OptimisingPlanner
+from promopilot.agents import GraphTools, MemoryCheckpoints, OptimisingPlanner
 from promopilot.api.catalog import CatalogService
 from promopilot.api.competitors import CompetitorService
 from promopilot.api.main import create_app
@@ -40,17 +40,22 @@ def main() -> None:
     relations = LiveRelations(LatestModel(registry, ModelKind.RELATIONS, Relations), demand)
     sessions = SessionService(
         store=SessionStore(engine),
-        data=RetailData(engine),
-        llm=FakeProvider([]),
-        planner=OptimisingPlanner(
-            demand,
-            relations,
-            RetailData(engine),
+        tools=GraphTools(
+            brief_data=RetailData(engine),
+            planner=OptimisingPlanner(
+                demand,
+                relations,
+                RetailData(engine),
+                policy=CompanyPolicy(),
+                settings=SolverSettings(),
+                seed=0,
+                simulation=SimulationSettings(n_runs=DEFAULT_RUNS, seed=0),
+            ),
+            sessions=SessionStore(engine),
             policy=CompanyPolicy(),
-            settings=SolverSettings(),
-            seed=0,
-            simulation=SimulationSettings(n_runs=DEFAULT_RUNS, seed=0),
         ),
+        llm=FakeProvider([]),
+        checkpoints=MemoryCheckpoints(),
     )
     models = ModelService(
         registry=registry, data=RetailData(engine), live=demand, live_relations=relations
