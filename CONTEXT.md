@@ -176,6 +176,10 @@ How a promotion gives value to the shopper. Every mechanism reduces to an effect
 - **BUNDLE**: a SKU sold together with a complement at a percentage off the pair's price.
 _Avoid_: promo type, offer type
 
+**Mechanism comparison**:
+For a SKU in a region, each mechanism's best promo option by value, on the demand model's expected numbers. A plan line's own mechanism is shown as the plan line itself. A mechanism whose every option breaks a per-line rule is listed with the rules it breaks. BUNDLE appears only when the SKU has a detected complement (ADR 0041).
+_Avoid_: mechanism drawer (the UI that shows it), mechanism table
+
 **Target segment**:
 Who a promotion is offered to: either one segment, as a segment-exclusive offer that other segments don't receive, or **All customers**, an open shelf promotion.
 _Avoid_: target audience, targeting
