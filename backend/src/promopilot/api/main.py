@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import create_async_engine
 from promopilot import __version__
 from promopilot.agents import OptimisingPlanner
 from promopilot.agents.tools import ToolRegistry
+from promopilot.agents.tools.compare_mechanisms import compare_mechanisms_tool
 from promopilot.agents.tools.estimate_demand import estimate_demand_tool
 from promopilot.agents.tools.generate_candidates import generate_candidates_tool
 from promopilot.agents.tools.get_competitor_gaps import get_competitor_gaps_tool
@@ -173,6 +174,13 @@ def build_app() -> FastAPI:
                 policy=policy,
                 settings=solver_settings,
                 seed=settings.optimizer_seed,
+            ),
+            compare_mechanisms_tool(
+                demand_model,
+                relations_model,
+                data,
+                data.default_as_of_week,
+                policy=policy,
             ),
         ]
     )

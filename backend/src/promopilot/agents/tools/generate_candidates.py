@@ -9,17 +9,19 @@ ADR 0032); the planning request must be for that week.
 """
 
 import asyncio
-from typing import Protocol
 from uuid import UUID
 
 import pandas as pd
 from pydantic import BaseModel, ConfigDict, Field
 
-from promopilot.agents.tools.as_of import AsOfWeekSource, current_as_of_week
-from promopilot.agents.tools.catalogue_filter import in_scope
+from promopilot.agents.tools.as_of import AsOfWeekSource
 from promopilot.agents.tools.estimate_demand import DemandModelSource, ModelVersion
 from promopilot.agents.tools.get_relations import RelationsSource
-from promopilot.agents.tools.inventory_status import pooled_stock
+from promopilot.agents.tools.option_context import (
+    LoadedOptionContext,
+    OptionDataSource,
+    load_option_context,
+)
 from promopilot.agents.tools.registry import Tool, ToolCallError
 from promopilot.domain import (
     CompanyPolicy,
@@ -29,11 +31,9 @@ from promopilot.domain import (
     Region,
     TargetSegment,
 )
-from promopilot.models.registry import RegisteredModel
 from promopilot.optimizer import (
     CandidateStore,
     FittedOptionFacts,
-    OptionContext,
     PromoOptions,
     PruneReason,
     generate_options,
@@ -52,14 +52,6 @@ DESCRIPTION = (
     "candidate_set_id to pass to the optimiser. Narrow by mechanisms, target segments or "
     "SKU ids to generate fewer."
 )
-
-
-class CandidateDataSource(Protocol):
-    """The reads this tool makes (`promopilot.data.RetailData`)."""
-
-    async def products(self) -> pd.DataFrame: ...
-    async def stores(self) -> pd.DataFrame: ...
-    async def inventory(self, as_of_week: int) -> pd.DataFrame: ...
 
 
 class GenerateCandidatesInput(BaseModel):
@@ -126,7 +118,7 @@ class GenerateCandidatesOutput(BaseModel):
 def generate_candidates_tool(
     demand_models: DemandModelSource,
     relations_models: RelationsSource,
-    data: CandidateDataSource,
+    data: OptionDataSource,
     as_of_week: AsOfWeekSource,
     *,
     policy: CompanyPolicy,
@@ -134,39 +126,10 @@ def generate_candidates_tool(
 ) -> Tool[GenerateCandidatesInput, GenerateCandidatesOutput]:
     async def generate_candidates(arguments: GenerateCandidatesInput) -> GenerateCandidatesOutput:
         request = arguments.request
-        week = await current_as_of_week(as_of_week)
-        if request.as_of_week != week:
-            raise ToolCallError(
-                "invalid_input",
-                f"the planning request is for as-of week {request.as_of_week}, "
-                f"but planning is at as-of week {week}",
-            )
-        demand = await demand_models.get()
-        relations = await relations_models.get()
-        if demand is None or relations is None:
-            raise ToolCallError(
-                "model_unavailable", "no demand model, or no relations model fitted on it, yet"
-            )
-        stores = await data.stores()
-        products = await data.products()
-        in_scope(
-            products,
-            sorted(stores["region"].unique()),
-            regions=request.scope.regions,
-            categories=request.scope.categories,
-            sku_ids=request.scope.sku_ids or None,
+        loaded = await load_option_context(
+            request, demand_models, relations_models, data, as_of_week, policy
         )
-        try:
-            snapshot = await data.inventory(week)
-        except LookupError as error:
-            raise ToolCallError("data_unavailable", str(error)) from error
-        context = OptionContext(
-            demand_model=demand[1],
-            relations=relations[1],
-            products=products,
-            stock=pooled_stock(snapshot, stores, policy),
-            policy=policy,
-        )
+        context = loaded.context
         try:
             # Prediction is CPU-bound: keep the event loop free (ADR 0025).
             options = await asyncio.to_thread(
@@ -180,7 +143,7 @@ def generate_candidates_tool(
         except ValueError as error:
             raise ToolCallError("invalid_input", str(error)) from error
         stored = store.put(request, options, FittedOptionFacts(context))
-        return _summary(stored.candidate_set_id, options, week, demand[0], relations[0])
+        return _summary(stored.candidate_set_id, options, loaded)
 
     return Tool(
         name="generate_candidates",
@@ -192,11 +155,7 @@ def generate_candidates_tool(
 
 
 def _summary(
-    candidate_set_id: UUID,
-    options: PromoOptions,
-    as_of_week: int,
-    demand: RegisteredModel,
-    relations: RegisteredModel,
+    candidate_set_id: UUID, options: PromoOptions, loaded: LoadedOptionContext
 ) -> GenerateCandidatesOutput:
     table = options.table
     counts = pd.Series(
@@ -210,9 +169,9 @@ def _summary(
     best = table["value"].sort_values(ascending=False, kind="stable").index[:MAX_TOP]
     return GenerateCandidatesOutput(
         candidate_set_id=candidate_set_id,
-        demand_model=_version(demand),
-        relations_model=_version(relations),
-        as_of_week=as_of_week,
+        demand_model=loaded.demand_model,
+        relations_model=loaded.relations_model,
+        as_of_week=loaded.as_of_week,
         enumerated=options.enumerated,
         kept=len(options.lines),
         pruned=[
@@ -232,7 +191,3 @@ def _summary(
 
 
 _TOP_COLUMNS = [name for name in CandidateOption.model_fields if name != "option"]
-
-
-def _version(entry: RegisteredModel) -> ModelVersion:
-    return ModelVersion(model_id=entry.model_id, version=entry.version, as_of_week=entry.as_of_week)
