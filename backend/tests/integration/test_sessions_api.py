@@ -38,7 +38,10 @@ from promopilot.domain import (
     CompanyPolicy,
     ConstraintKind,
     DecisionKind,
+    ExplanationSource,
+    FallbackReason,
     Mechanism,
+    PlanExplanation,
     PlanningRequest,
     PlanRevision,
     PromoWindow,
@@ -57,6 +60,7 @@ from promopilot.models.relations import Relations
 from promopilot.optimizer import SolverSettings
 from promopilot.simulator import SimulationSettings
 from tests.offline import NoModel
+from tests.unit.agents.fakes import explainer_down
 from tests.unit.agents.test_generate_candidates import Fixed, entry
 
 pytestmark = pytest.mark.integration
@@ -190,7 +194,7 @@ async def settled(client: AsyncClient, session_id: str) -> dict[str, Any]:
 async def test_a_session_goes_from_planning_to_awaiting_approval_with_an_optimised_plan(
     postgres_url: str, running_api: Api, small_dataset: GeneratedDataset
 ) -> None:
-    llm = GatedProvider(FakeProvider([READING]))
+    llm = GatedProvider(FakeProvider([READING, explainer_down()]))
     async with running_api(postgres_url, llm) as client:
         created = await client.post("/api/sessions", json={"brief": BRIEF})
         session_id = created.json()["session_id"]
@@ -238,13 +242,19 @@ async def test_a_session_goes_from_planning_to_awaiting_approval_with_an_optimis
         units = simulated["units"]
         assert units["p10"] <= units["p50"] <= units["p90"]
     assert [r["region"] for r in simulation["regions"]] == ["North"]
+    # The Explainer's LLM was down, so the template explains the revision (ADR 0050).
+    explanation = revision["explanation"]
+    assert explanation["source"] == "template"
+    assert explanation["fallback_reason"] == "llm_unavailable"
+    assert explanation["summary"].startswith("Plan revision 1.")
+    assert len(explanation["rationales"]) == len(revision["lines"])
 
 
 async def test_a_session_reports_the_constraints_that_bind_its_plan(
     postgres_url: str, running_api: Api
 ) -> None:
     tight = READING.model_copy(update={"marketing_budget": 300.0})
-    async with running_api(postgres_url, FakeProvider([tight])) as client:
+    async with running_api(postgres_url, FakeProvider([tight, explainer_down()])) as client:
         session_id = (await client.post("/api/sessions", json={"brief": BRIEF})).json()[
             "session_id"
         ]
@@ -262,7 +272,7 @@ async def test_a_session_reports_the_constraints_that_bind_its_plan(
 async def test_a_session_without_trained_models_fails_saying_how_to_train(
     postgres_url: str,
 ) -> None:
-    async with api_process(postgres_url, FakeProvider([READING]), None) as client:
+    async with api_process(postgres_url, FakeProvider([READING, explainer_down()]), None) as client:
         session_id = (await client.post("/api/sessions", json={"brief": BRIEF})).json()[
             "session_id"
         ]
@@ -319,12 +329,12 @@ async def test_finished_sessions_survive_a_restart_and_interrupted_ones_fail(
     postgres_url: str,
     running_api: Api,
 ) -> None:
-    async with running_api(postgres_url, FakeProvider([READING])) as client:
+    async with running_api(postgres_url, FakeProvider([READING, explainer_down()])) as client:
         finished_id = (await client.post("/api/sessions", json={"brief": BRIEF})).json()[
             "session_id"
         ]
         finished = await settled(client, finished_id)
-    stuck = GatedProvider(FakeProvider([READING]))
+    stuck = GatedProvider(FakeProvider([READING, explainer_down()]))
     async with running_api(postgres_url, stuck) as client:
         stuck_id = (await client.post("/api/sessions", json={"brief": BRIEF})).json()["session_id"]
 
@@ -341,7 +351,7 @@ async def test_a_brief_that_would_loosen_policy_is_flagged_on_the_plan_revision(
     postgres_url: str, running_api: Api
 ) -> None:
     loose = READING.model_copy(update={"min_margin": 0.05})
-    async with running_api(postgres_url, FakeProvider([loose])) as client:
+    async with running_api(postgres_url, FakeProvider([loose, explainer_down()])) as client:
         session_id = (await client.post("/api/sessions", json={"brief": BRIEF})).json()[
             "session_id"
         ]
@@ -381,7 +391,9 @@ async def test_an_infeasible_session_exposes_its_binding_constraints_and_relaxat
     # P90 units must stay within stock, so no brief change helps and company policy binds.
     target = ClearanceTarget(sku_id=sku_id, sell_through=1.0)
     async with running_api(
-        postgres_url, FakeProvider([READING]), lambda inner: Clearing(inner, target)
+        postgres_url,
+        FakeProvider([READING, explainer_down()]),
+        lambda inner: Clearing(inner, target),
     ) as client:
         session_id = (await client.post("/api/sessions", json={"brief": BRIEF})).json()[
             "session_id"
@@ -465,10 +477,16 @@ async def test_a_plan_revision_keeps_its_clearance_shortfalls_and_the_briefs_con
         actual=0.6,
         limit=0.9,
     )
+    explanation = PlanExplanation(
+        summary="Infeasible: SKU0005 reaches 60% of a 90% target.",
+        source=ExplanationSource.TEMPLATE,
+        fallback_reason=FallbackReason.UNGROUNDED,
+    )
     try:
         session_id = await store.create(BRIEF)
         await store.save_revision(session_id, request, revision)
         await store.save_open_issues(session_id, 1, (issue,))
+        await store.save_explanation(session_id, 1, explanation)
         await store.await_approval(session_id)
         saved = await store.get(session_id)
     finally:
@@ -478,13 +496,15 @@ async def test_a_plan_revision_keeps_its_clearance_shortfalls_and_the_briefs_con
     assert saved.status == "awaiting_approval"
     assert saved.thread_id == str(session_id)
     assert saved.planning_request == request
-    assert saved.latest_revision == revision.model_copy(update={"open_issues": (issue,)})
+    assert saved.latest_revision == revision.model_copy(
+        update={"open_issues": (issue,), "explanation": explanation}
+    )
 
 
 async def test_a_resimulation_replaces_the_stored_simulation_in_the_session_read_model(
     postgres_url: str, running_api: Api
 ) -> None:
-    async with running_api(postgres_url, FakeProvider([READING])) as client:
+    async with running_api(postgres_url, FakeProvider([READING, explainer_down()])) as client:
         session_id = (await client.post("/api/sessions", json={"brief": BRIEF})).json()[
             "session_id"
         ]
@@ -529,7 +549,7 @@ async def planned_session(client: AsyncClient) -> str:
 async def test_approval_after_a_restart_resumes_the_graph_from_its_checkpoint(
     postgres_url: str, running_api: Api, small_models: tuple[DemandModel, Relations]
 ) -> None:
-    async with running_api(postgres_url, FakeProvider([READING])) as client:
+    async with running_api(postgres_url, FakeProvider([READING, explainer_down()])) as client:
         session_id = await planned_session(client)
         planned = (await client.get(f"/api/sessions/{session_id}")).json()
 
@@ -578,7 +598,7 @@ async def test_approval_after_a_restart_resumes_the_graph_from_its_checkpoint(
 async def test_a_rejection_keeps_the_session_open_with_its_reason(
     postgres_url: str, running_api: Api
 ) -> None:
-    async with running_api(postgres_url, FakeProvider([READING])) as client:
+    async with running_api(postgres_url, FakeProvider([READING, explainer_down()])) as client:
         session_id = await planned_session(client)
         rejected = await client.post(
             f"/api/sessions/{session_id}/reject",
@@ -610,7 +630,7 @@ async def test_a_rejection_keeps_the_session_open_with_its_reason(
 async def test_approving_twice_is_409_and_keeps_one_approval(
     postgres_url: str, running_api: Api
 ) -> None:
-    async with running_api(postgres_url, FakeProvider([READING])) as client:
+    async with running_api(postgres_url, FakeProvider([READING, explainer_down()])) as client:
         session_id = await planned_session(client)
         first = await client.post(
             f"/api/sessions/{session_id}/approve", json={"revision_number": 1}
@@ -632,7 +652,7 @@ async def test_approving_twice_is_409_and_keeps_one_approval(
 
 
 async def test_deciding_while_planning_is_409(postgres_url: str, running_api: Api) -> None:
-    llm = GatedProvider(FakeProvider([READING]))
+    llm = GatedProvider(FakeProvider([READING, explainer_down()]))
     async with running_api(postgres_url, llm) as client:
         session_id = (await client.post("/api/sessions", json={"brief": BRIEF})).json()[
             "session_id"
@@ -656,7 +676,7 @@ async def test_deciding_while_planning_is_409(postgres_url: str, running_api: Ap
 async def test_deciding_on_a_revision_that_is_not_the_latest_is_409(
     postgres_url: str, running_api: Api
 ) -> None:
-    async with running_api(postgres_url, FakeProvider([READING])) as client:
+    async with running_api(postgres_url, FakeProvider([READING, explainer_down()])) as client:
         session_id = await planned_session(client)
         response = await client.post(
             f"/api/sessions/{session_id}/approve", json={"revision_number": 2}
@@ -676,7 +696,9 @@ async def test_an_infeasible_revision_cannot_be_approved_but_can_be_rejected(
     covered = pooled[pooled["sku_id"].isin(snacks)].sort_values("days_of_cover")
     target = ClearanceTarget(sku_id=str(covered["sku_id"].iloc[-1]), sell_through=1.0)
     async with running_api(
-        postgres_url, FakeProvider([READING]), lambda inner: Clearing(inner, target)
+        postgres_url,
+        FakeProvider([READING, explainer_down()]),
+        lambda inner: Clearing(inner, target),
     ) as client:
         session_id = await planned_session(client)
         approve = await client.post(
@@ -710,7 +732,9 @@ class Overspending:
 async def test_violations_the_critic_finds_are_open_issues_on_the_revision(
     postgres_url: str, running_api: Api
 ) -> None:
-    async with running_api(postgres_url, FakeProvider([READING]), Overspending) as client:
+    async with running_api(
+        postgres_url, FakeProvider([READING, explainer_down()]), Overspending
+    ) as client:
         session_id = await planned_session(client)
         body = (await client.get(f"/api/sessions/{session_id}")).json()
 
@@ -745,7 +769,7 @@ async def test_deciding_on_an_unknown_session_is_404(postgres_url: str, running_
 async def test_an_invalid_decision_body_is_422(
     postgres_url: str, running_api: Api, path: str, body: dict[str, object]
 ) -> None:
-    async with running_api(postgres_url, FakeProvider([READING])) as client:
+    async with running_api(postgres_url, FakeProvider([READING, explainer_down()])) as client:
         session_id = await planned_session(client)
         response = await client.post(f"/api/sessions/{session_id}/{path}", json=body)
         after = (await client.get(f"/api/sessions/{session_id}")).json()
@@ -755,7 +779,7 @@ async def test_an_invalid_decision_body_is_422(
 
 
 async def test_an_approved_plan_cannot_be_resimulated(postgres_url: str, running_api: Api) -> None:
-    async with running_api(postgres_url, FakeProvider([READING])) as client:
+    async with running_api(postgres_url, FakeProvider([READING, explainer_down()])) as client:
         session_id = await planned_session(client)
         await client.post(f"/api/sessions/{session_id}/approve", json={"revision_number": 1})
         response = await client.post(f"/api/plans/{session_id}/simulate", json={"n_runs": 300})
@@ -841,6 +865,9 @@ class NeverRecords:
         raise AssertionError("never records")
 
     async def save_open_issues(self, *args: object) -> None:
+        raise AssertionError("never records")
+
+    async def save_explanation(self, *args: object) -> None:
         raise AssertionError("never records")
 
     async def await_approval(self, session_id: object) -> None:

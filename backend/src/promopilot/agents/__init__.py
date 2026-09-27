@@ -2,12 +2,18 @@
 
 `build_graph` compiles the checkpointed agent graph (ADR 0046): the Context agent reads the
 brief, the optimising planner plans it (ADR 0038), the Critic validates the plan, the
-Explainer writes the template explanations, and the Approval interrupt waits for a decision.
+Explainer writes grounded explanations with a template fallback (ADR 0050), and the Approval
+interrupt waits for a decision.
 """
 
 from promopilot.agents.checkpoints import Checkpoints, MemoryCheckpoints, PostgresCheckpoints
 from promopilot.agents.context import BriefError, BriefReading
-from promopilot.agents.explainer import template_explanations
+from promopilot.agents.explainer import (
+    ExplainerAnswer,
+    LineRationale,
+    explain_plan,
+    template_explanations,
+)
 from promopilot.agents.graph import (
     GraphSnapshot,
     GraphTools,
@@ -31,7 +37,6 @@ from promopilot.agents.session import BriefData, read_planning_request
 from promopilot.agents.state import (
     ApprovalAnswer,
     ApprovalRequest,
-    Explanations,
     PlanningState,
 )
 
@@ -42,9 +47,10 @@ __all__ = [
     "BriefError",
     "BriefReading",
     "Checkpoints",
-    "Explanations",
+    "ExplainerAnswer",
     "GraphSnapshot",
     "GraphTools",
+    "LineRationale",
     "MemoryCheckpoints",
     "OptimisingPlanner",
     "PlannedRevision",
@@ -58,6 +64,7 @@ __all__ = [
     "SessionRecorder",
     "build_graph",
     "checkpoint_serializer",
+    "explain_plan",
     "graph_state",
     "read_planning_request",
     "record_cassettes",

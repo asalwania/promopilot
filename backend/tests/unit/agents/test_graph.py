@@ -25,6 +25,7 @@ from promopilot.domain import (
     DecisionKind,
     Mechanism,
     PlanDecision,
+    PlanExplanation,
     PlanLine,
     PlanningRequest,
     PlanRevision,
@@ -37,7 +38,7 @@ from promopilot.domain import (
 )
 from promopilot.guardrails import LineFacts, PlanFacts, SkuFacts
 from promopilot.llm import FakeProvider
-from tests.unit.agents.fakes import InMemoryRetailData
+from tests.unit.agents.fakes import InMemoryRetailData, explainer_down
 
 HISTORY_WEEKS = 52  # small_config
 BUDGET = 20_000.0
@@ -114,6 +115,7 @@ class RecordedSessions:
         self.status: dict[UUID, str] = {}
         self.revisions: dict[UUID, PlanRevision] = {}
         self.open_issues: dict[tuple[UUID, int], tuple[Violation, ...]] = {}
+        self.explanations: dict[tuple[UUID, int], PlanExplanation] = {}
         self.decisions: list[PlanDecision] = []
 
     async def save_revision(
@@ -125,6 +127,11 @@ class RecordedSessions:
         self, session_id: UUID, revision_number: int, issues: tuple[Violation, ...]
     ) -> None:
         self.open_issues[session_id, revision_number] = issues
+
+    async def save_explanation(
+        self, session_id: UUID, revision_number: int, explanation: PlanExplanation
+    ) -> None:
+        self.explanations[session_id, revision_number] = explanation
 
     async def record_decision(
         self,
@@ -173,7 +180,9 @@ def tools(
 async def test_a_passing_plan_goes_critic_then_explainer_then_waits_for_approval(
     data: InMemoryRetailData, sessions: RecordedSessions, checkpointer: InMemorySaver
 ) -> None:
-    graph = build_graph(tools(data, sessions), FakeProvider([READING]), checkpointer)
+    graph = build_graph(
+        tools(data, sessions), FakeProvider([READING, explainer_down()]), checkpointer
+    )
     session_id = uuid4()
 
     route = await start_planning(graph, str(session_id), session_id, BRIEF)
@@ -189,7 +198,8 @@ async def test_a_passing_plan_goes_critic_then_explainer_then_waits_for_approval
     assert values.critic_findings == ()
     assert values.explanations is not None
     assert values.explanations.summary
-    assert len(values.explanations.lines) == 1
+    assert len(values.explanations.rationales) == 1
+    assert sessions.explanations[session_id, 1] == values.explanations
     assert values.approval is None
     assert sessions.revisions[session_id] == planned().revision
     assert sessions.open_issues[session_id, 1] == ()
@@ -200,7 +210,9 @@ async def test_violations_are_kept_as_open_issues_and_the_plan_still_goes_for_ap
     data: InMemoryRetailData, sessions: RecordedSessions, checkpointer: InMemorySaver
 ) -> None:
     over_budget = planned(promo_cost=BUDGET + 5_000.0)
-    graph = build_graph(tools(data, sessions, over_budget), FakeProvider([READING]), checkpointer)
+    graph = build_graph(
+        tools(data, sessions, over_budget), FakeProvider([READING, explainer_down()]), checkpointer
+    )
     session_id = uuid4()
 
     route = await start_planning(graph, str(session_id), session_id, BRIEF)
@@ -216,7 +228,9 @@ async def test_violations_are_kept_as_open_issues_and_the_plan_still_goes_for_ap
 async def test_approving_records_the_decision_and_reaches_done(
     data: InMemoryRetailData, sessions: RecordedSessions, checkpointer: InMemorySaver
 ) -> None:
-    graph = build_graph(tools(data, sessions), FakeProvider([READING]), checkpointer)
+    graph = build_graph(
+        tools(data, sessions), FakeProvider([READING, explainer_down()]), checkpointer
+    )
     session_id = uuid4()
     await start_planning(graph, str(session_id), session_id, BRIEF)
 
@@ -238,7 +252,9 @@ async def test_approving_records_the_decision_and_reaches_done(
 async def test_rejecting_records_the_reason_and_waits_at_approval_again(
     data: InMemoryRetailData, sessions: RecordedSessions, checkpointer: InMemorySaver
 ) -> None:
-    graph = build_graph(tools(data, sessions), FakeProvider([READING]), checkpointer)
+    graph = build_graph(
+        tools(data, sessions), FakeProvider([READING, explainer_down()]), checkpointer
+    )
     session_id = uuid4()
     await start_planning(graph, str(session_id), session_id, BRIEF)
 
@@ -261,7 +277,9 @@ async def test_rejecting_records_the_reason_and_waits_at_approval_again(
 async def test_a_new_graph_on_the_same_checkpointer_resumes_where_the_old_one_paused(
     data: InMemoryRetailData, sessions: RecordedSessions, checkpointer: InMemorySaver
 ) -> None:
-    first = build_graph(tools(data, sessions), FakeProvider([READING]), checkpointer)
+    first = build_graph(
+        tools(data, sessions), FakeProvider([READING, explainer_down()]), checkpointer
+    )
     session_id = uuid4()
     await start_planning(first, str(session_id), session_id, BRIEF)
 

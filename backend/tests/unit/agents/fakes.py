@@ -1,10 +1,18 @@
-"""An in-memory stand-in for `promopilot.data.RetailData`, backed by a generated dataset."""
+"""An in-memory stand-in for `promopilot.data.RetailData`, backed by a generated dataset, and
+scripted LLM steps shared by agent tests."""
 
 import json
 
 import pandas as pd
 
 from promopilot.datagen import GeneratedDataset
+from promopilot.llm import LLMError
+
+
+def explainer_down() -> LLMError:
+    """A scripted FakeProvider step for the Explainer: its LLM fails, so the template explains
+    the plan revision (ADR 0050)."""
+    return LLMError("the Explainer's LLM is down in this test")
 
 
 class InMemoryRetailData:

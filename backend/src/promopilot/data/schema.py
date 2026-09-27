@@ -173,6 +173,8 @@ plan_revisions = Table(
     Column("relaxation", JSONB),
     # E8 #44 (ADR 0046): violations the Critic left open; null for revisions planned before it.
     Column("open_issues", JSONB),
+    # E8 #49 (ADR 0050): the Explainer's summary and rationales; null until it has run.
+    Column("explanation", JSONB),
 )
 
 plan_lines = Table(

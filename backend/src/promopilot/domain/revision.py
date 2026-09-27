@@ -5,6 +5,7 @@ from typing import Self
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from promopilot.domain.comparison import MechanismOutcome
+from promopilot.domain.explanation import PlanExplanation
 from promopilot.domain.plan import PlanLine, PromoPlan
 from promopilot.domain.policy import PolicyFinding
 from promopilot.domain.selection import (
@@ -62,8 +63,18 @@ class PlanRevision(BaseModel):
     open_issues: tuple[Violation, ...] = ()
     """Violations the Critic found that the revision still has when it goes for approval
     (ADR 0046); empty for revisions planned before E8."""
+    explanation: PlanExplanation | None = None
+    """The Explainer's summary and rationales (ADR 0050); None until the Explainer has run,
+    and for revisions planned before #49."""
 
     @model_validator(mode="after")
     def _is_a_valid_promo_plan(self) -> Self:
         PromoPlan(lines=tuple(line.line for line in self.lines))
+        return self
+
+    @model_validator(mode="after")
+    def _one_rationale_per_line(self) -> Self:
+        explained = self.explanation
+        if explained is not None and len(explained.rationales) != len(self.lines):
+            raise ValueError("an explanation has one rationale per plan line")
         return self

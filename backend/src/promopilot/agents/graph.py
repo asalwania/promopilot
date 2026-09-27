@@ -4,11 +4,13 @@
 In this slice the Context node reads the brief with the LLM (E3), the Planner runs the
 deterministic default sequence (option generation → optimiser, with the relaxation when the
 request is infeasible → simulation, ADR 0038/0044), the Critic runs `validate_plan` and keeps
-what it finds as open issues, and the Explainer writes the template explanations. The Critic
+what it finds as open issues, and the Explainer has the LLM explain the plan, checked by
+numeric grounding, with the template as its fallback (ADR 0050). The Critic
 loop (#48), the Clarify interrupt (#46) and amendments (#50) extend these edges.
 
 Nodes record the session as they go through a `SessionRecorder` (`promopilot.data.
-SessionStore`): the Planner saves the plan revision, the Critic its open issues, and Approval
+SessionStore`): the Planner saves the plan revision, the Critic its open issues, the Explainer its
+explanation, and Approval
 records each decision once the interrupt is answered. The session moves to awaiting approval
 only once `start_planning` returns with the thread paused at Approval, so the interrupt is
 checkpointed before anyone can decide on it. Every step is checkpointed before the next runs
@@ -22,6 +24,7 @@ from dataclasses import dataclass
 from typing import Any, Final, Literal, Protocol
 from uuid import UUID
 
+import structlog
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 from langgraph.graph import END, START, StateGraph
@@ -29,7 +32,7 @@ from langgraph.graph.state import CompiledStateGraph
 from langgraph.types import Command, interrupt
 from pydantic import BaseModel
 
-from promopilot.agents.explainer import template_explanations
+from promopilot.agents.explainer import explain_plan
 from promopilot.agents.planner import PlannedRevision
 from promopilot.agents.session import BriefData, read_planning_request
 from promopilot.agents.state import (
@@ -41,12 +44,15 @@ from promopilot.domain import (
     CompanyPolicy,
     DecisionKind,
     PlanDecision,
+    PlanExplanation,
     PlanningRequest,
     PlanRevision,
     Violation,
 )
 from promopilot.guardrails import validate_plan
 from promopilot.llm import LLMProvider
+
+log = structlog.get_logger(__name__)
 
 type PlanningGraph = CompiledStateGraph[PlanningState, None, PlanningState, PlanningState]
 
@@ -73,6 +79,10 @@ class SessionRecorder(Protocol):
 
     async def save_open_issues(
         self, session_id: UUID, revision_number: int, issues: tuple[Violation, ...]
+    ) -> None: ...
+
+    async def save_explanation(
+        self, session_id: UUID, revision_number: int, explanation: PlanExplanation
     ) -> None: ...
 
     async def record_decision(
@@ -134,7 +144,24 @@ def build_graph(
 
     async def explainer(state: PlanningState) -> dict[str, object]:
         plan = _required(state.plan, "a plan revision")
-        return {"explanations": template_explanations(plan, state.critic_findings)}
+        explanation = await explain_plan(
+            llm,
+            plan,
+            request=_required(state.request, "a planning request"),
+            policy=tools.policy,
+            facts=state.plan_facts,
+            open_issues=state.critic_findings,
+            notes=state.planner_notes,
+        )
+        if explanation.fallback_reason is not None:
+            log.warning(
+                "explainer_fallback",
+                session_id=str(state.session_id),
+                revision_number=plan.number,
+                reason=explanation.fallback_reason.value,
+            )
+        await tools.sessions.save_explanation(state.session_id, plan.number, explanation)
+        return {"explanations": explanation}
 
     async def approval(state: PlanningState) -> dict[str, object]:
         plan = _required(state.plan, "a plan revision")

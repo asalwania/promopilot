@@ -243,6 +243,17 @@ export const planSimulationSchema = z.object({
   ),
 }) satisfies z.ZodType<Schemas["PlanSimulation"]>;
 
+// What the Explainer wrote: grounded by the LLM, or the template fallback (ADR 0050).
+export const planExplanationSchema = z.object({
+  summary: z.string(),
+  rationales: z.array(z.string()),
+  source: z.enum(["llm", "template"]),
+  fallback_reason: z
+    .enum(["ungrounded", "invalid_answer", "llm_unavailable"])
+    .nullable()
+    .optional(),
+}) satisfies z.ZodType<Schemas["PlanExplanation"]>;
+
 export const planRevisionSchema = z.object({
   number: z.number(),
   lines: z.array(planRevisionLineSchema),
@@ -258,6 +269,7 @@ export const planRevisionSchema = z.object({
   policy_findings: z.array(policyFindingSchema),
   relaxation: relaxationSchema.nullable().optional(),
   open_issues: z.array(violationSchema),
+  explanation: planExplanationSchema.nullable().optional(),
 }) satisfies z.ZodType<Schemas["PlanRevision"]>;
 
 export const planningRequestSchema = z.object({

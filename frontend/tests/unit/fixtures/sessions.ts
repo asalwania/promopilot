@@ -227,6 +227,16 @@ export const awaitingApprovalSession: SessionResponse = {
     clearance_shortfalls: [],
     policy_findings: [],
     open_issues: [],
+    explanation: {
+      summary:
+        "Two lines across North and West, expected to add ₹12,731 within a ₹2 lakh budget.",
+      rationales: [
+        "SKU0003 in North at 20% off is the best option for its SKU and region.",
+        "SKU0011 in West bundles with SKU0042 for its basket lift.",
+      ],
+      source: "llm",
+      fallback_reason: null,
+    },
   },
 };
 
@@ -289,6 +299,13 @@ export const infeasibleSession: SessionResponse = {
       ],
       policy_binds: false,
       proven: true,
+    },
+    explanation: {
+      summary:
+        "Plan revision 1. Infeasible: no plan reaches every clearance target within the brief's constraints, so this is the closest plan.",
+      rationales: [],
+      source: "template",
+      fallback_reason: "llm_unavailable",
     },
   },
 };
