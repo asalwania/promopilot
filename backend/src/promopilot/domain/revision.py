@@ -12,6 +12,7 @@ from promopilot.domain.selection import (
     SolveStatus,
     WhyChosen,
 )
+from promopilot.domain.simulation import PlanSimulation
 
 
 class PlanRevisionLine(BaseModel):
@@ -44,6 +45,9 @@ class PlanRevision(BaseModel):
     binding_constraints: tuple[BindingConstraint, ...] = ()
     not_selected: tuple[NotSelectedOption, ...] = ()
     """Up to five of the best options left out, one per SKU and region, best first."""
+    simulation: PlanSimulation | None = None
+    """The Monte Carlo simulation of the revision's plan (ADR 0042); None only for revisions
+    planned before the simulator (E3-E6)."""
 
     @model_validator(mode="after")
     def _is_a_valid_promo_plan(self) -> Self:

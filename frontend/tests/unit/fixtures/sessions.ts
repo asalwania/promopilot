@@ -179,6 +179,46 @@ export const awaitingApprovalSession: SessionResponse = {
         cannibalises: [],
       },
     ],
+    simulation: {
+      n_runs: 1000,
+      seed: 0,
+      lines: [
+        {
+          sku_id: "SKU0003",
+          region: "North",
+          units: { p10: 700, p50: 810, p90: 830 },
+          revenue: { p10: 56000, p50: 64800, p90: 66400 },
+          gross_profit: { p10: 11200, p50: 12960, p90: 13280 },
+          margin: { p10: 0.2, p50: 0.2, p90: 0.2 },
+          promo_spend: { p10: 12000, p50: 13800, p90: 14100 },
+          sell_through: { p10: 0.84, p50: 0.98, p90: 1 },
+          stockout_probability: 0.31,
+        },
+        {
+          sku_id: "SKU0011",
+          region: "West",
+          units: { p10: 1400, p50: 1538, p90: 1690 },
+          revenue: { p10: 112000, p50: 123040, p90: 135200 },
+          gross_profit: { p10: 22400, p50: 24608, p90: 27040 },
+          margin: { p10: 0.2, p50: 0.2, p90: 0.2 },
+          promo_spend: { p10: 112000, p50: 123000, p90: 135000 },
+          sell_through: null,
+          stockout_probability: 0,
+        },
+      ],
+      total: {
+        units: { p10: 2150, p50: 2348, p90: 2500 },
+        revenue: { p10: 172000, p50: 187840, p90: 200000 },
+        gross_profit: { p10: 34400, p50: 37568, p90: 40000 },
+        margin: { p10: 0.2, p50: 0.2, p90: 0.2 },
+        promo_spend: { p10: 125000, p50: 136800, p90: 148000 },
+        sell_through: { p10: 0.84, p50: 0.98, p90: 1 },
+      },
+      regions: [
+        { region: "North", stockout_probability: 0.31 },
+        { region: "West", stockout_probability: 0 },
+      ],
+    },
   },
 };
 

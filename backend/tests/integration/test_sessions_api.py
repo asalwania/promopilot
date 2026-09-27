@@ -25,6 +25,7 @@ from promopilot.models.demand import DemandModel
 from promopilot.models.registry import ModelKind
 from promopilot.models.relations import Relations
 from promopilot.optimizer import SolverSettings
+from promopilot.simulator import SimulationSettings
 from tests.offline import NoModel
 from tests.unit.agents.test_generate_candidates import Fixed, entry
 
@@ -110,6 +111,7 @@ async def api_process(
         policy=FREE,
         settings=SolverSettings(),
         seed=0,
+        simulation=SimulationSettings(n_runs=200, seed=0),
     )
     sessions = SessionService(store=SessionStore(engine), data=data, llm=llm, planner=planner)
     app: FastAPI = create_app(
@@ -174,6 +176,16 @@ async def test_a_session_goes_from_planning_to_awaiting_approval_with_an_optimis
         assert {"PCT_OFF", "FIXED_PRICE"} <= set(mechanisms)
     assert len(revision["not_selected"]) <= 5
     assert all(entry["reasons"] for entry in revision["not_selected"])
+    # The stored simulation of the revision (ADR 0042).
+    simulation = revision["simulation"]
+    assert (simulation["n_runs"], simulation["seed"]) == (200, 0)
+    assert [(s["sku_id"], s["region"]) for s in simulation["lines"]] == [
+        (line["line"]["sku_id"], line["line"]["region"]) for line in revision["lines"]
+    ]
+    for simulated in [*simulation["lines"], simulation["total"]]:
+        units = simulated["units"]
+        assert units["p10"] <= units["p50"] <= units["p90"]
+    assert [r["region"] for r in simulation["regions"]] == ["North"]
 
 
 async def test_a_session_reports_the_constraints_that_bind_its_plan(

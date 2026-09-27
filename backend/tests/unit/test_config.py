@@ -40,3 +40,31 @@ def test_the_optimisers_time_limit_workers_and_seed_come_from_the_environment(
         patched.setenv("OPTIMIZER_WORKERS", "0")
         with pytest.raises(ValueError, match="optimizer_workers"):
             Settings()
+
+
+def test_the_simulation_runs_1000_times_with_seed_0_by_default(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("SIMULATION_RUNS", raising=False)
+    monkeypatch.delenv("SIMULATION_SEED", raising=False)
+
+    settings = Settings()
+
+    assert settings.simulation_runs == 1_000
+    assert settings.simulation_seed == 0
+
+
+def test_the_simulation_runs_and_seed_come_from_the_environment_within_bounds(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("SIMULATION_RUNS", "250")
+    monkeypatch.setenv("SIMULATION_SEED", "9")
+
+    settings = Settings()
+
+    assert (settings.simulation_runs, settings.simulation_seed) == (250, 9)
+    for runs in ("99", "5001"):
+        with monkeypatch.context() as patched:
+            patched.setenv("SIMULATION_RUNS", runs)
+            with pytest.raises(ValueError, match="simulation_runs"):
+                Settings()

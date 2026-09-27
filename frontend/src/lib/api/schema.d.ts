@@ -408,6 +408,23 @@ export interface components {
             sku_id: string;
         };
         /**
+         * LineSimulation
+         * @description One plan line's simulated ranges, identified by its SKU and region.
+         */
+        LineSimulation: {
+            gross_profit: components["schemas"]["Percentiles"];
+            margin: components["schemas"]["Percentiles"];
+            promo_spend: components["schemas"]["Percentiles"];
+            region: components["schemas"]["Region"];
+            revenue: components["schemas"]["Percentiles"];
+            sell_through: components["schemas"]["Percentiles"] | null;
+            /** Sku Id */
+            sku_id: string;
+            /** Stockout Probability */
+            stockout_probability: number;
+            units: components["schemas"]["Percentiles"];
+        };
+        /**
          * Mechanism
          * @enum {string}
          */
@@ -546,6 +563,18 @@ export interface components {
          */
         NotSelectedReason: "low_uplift" | "out_of_stock" | "breaks_policy" | "over_budget" | "breaks_margin" | "max_promoted_skus" | "cannibalises" | "time_limit";
         /**
+         * Percentiles
+         * @description The 10th, 50th and 90th percentiles of one simulated metric across the runs.
+         */
+        Percentiles: {
+            /** P10 */
+            p10: number;
+            /** P50 */
+            p50: number;
+            /** P90 */
+            p90: number;
+        };
+        /**
          * PlanLine
          * @description A promo option selected into a promo plan: one (SKU, region) decision (ADR 0004).
          */
@@ -588,6 +617,7 @@ export interface components {
             number: number;
             /** Objective */
             objective?: number | null;
+            simulation?: components["schemas"]["PlanSimulation"] | null;
             solver_status?: components["schemas"]["SolveStatus"] | null;
         };
         /**
@@ -608,6 +638,27 @@ export interface components {
             /** Promo Cost */
             promo_cost: number;
             why_chosen?: components["schemas"]["WhyChosen"] | null;
+        };
+        /**
+         * PlanSimulation
+         * @description What `simulate` returns for a promo plan, and what a plan revision stores.
+         */
+        PlanSimulation: {
+            /**
+             * Lines
+             * @default []
+             */
+            lines: components["schemas"]["LineSimulation"][];
+            /** N Runs */
+            n_runs: number;
+            /**
+             * Regions
+             * @default []
+             */
+            regions: components["schemas"]["RegionStockout"][];
+            /** Seed */
+            seed: number;
+            total: components["schemas"]["SimulatedOutcomes"];
         };
         /**
          * PlanningRequest
@@ -675,6 +726,12 @@ export interface components {
         RegionList: {
             /** Regions */
             regions: components["schemas"]["RegionStores"][];
+        };
+        /** RegionStockout */
+        RegionStockout: {
+            region: components["schemas"]["Region"];
+            /** Stockout Probability */
+            stockout_probability: number;
         };
         /** RegionStores */
         RegionStores: {
@@ -760,6 +817,22 @@ export interface components {
          * @enum {string}
          */
         SessionStatus: "planning" | "awaiting_clarification" | "awaiting_approval" | "approved" | "rejected" | "failed";
+        /**
+         * SimulatedOutcomes
+         * @description Ranges over the promo weeks, units capped at pooled available stock (ADR 0004, 0011).
+         *
+         *     Units and sell-through are the anchor SKU's; revenue, gross profit and promo spend
+         *     include a BUNDLE's partner (ADR 0017). Margin is gross profit over revenue in each run
+         *     (0 in a run with no revenue). Sell-through is None when there is no available stock.
+         */
+        SimulatedOutcomes: {
+            gross_profit: components["schemas"]["Percentiles"];
+            margin: components["schemas"]["Percentiles"];
+            promo_spend: components["schemas"]["Percentiles"];
+            revenue: components["schemas"]["Percentiles"];
+            sell_through: components["schemas"]["Percentiles"] | null;
+            units: components["schemas"]["Percentiles"];
+        };
         /**
          * SolveStatus
          * @enum {string}

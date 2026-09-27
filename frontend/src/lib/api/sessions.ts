@@ -124,6 +124,44 @@ export const planRevisionLineSchema = z.object({
   mechanism_comparison: z.array(mechanismOutcomeSchema),
 }) satisfies z.ZodType<Schemas["PlanRevisionLine"]>;
 
+const percentilesSchema = z.object({
+  p10: z.number(),
+  p50: z.number(),
+  p90: z.number(),
+}) satisfies z.ZodType<Schemas["Percentiles"]>;
+
+const simulatedOutcomesShape = {
+  units: percentilesSchema,
+  revenue: percentilesSchema,
+  gross_profit: percentilesSchema,
+  margin: percentilesSchema,
+  promo_spend: percentilesSchema,
+  sell_through: percentilesSchema.nullable(),
+};
+
+// The Monte Carlo simulation stored with a plan revision (ADR 0042).
+export const planSimulationSchema = z.object({
+  n_runs: z.number(),
+  seed: z.number(),
+  lines: z.array(
+    z.object({
+      ...simulatedOutcomesShape,
+      sku_id: z.string(),
+      region: regionSchema,
+      stockout_probability: z.number(),
+    }) satisfies z.ZodType<Schemas["LineSimulation"]>,
+  ),
+  total: z.object(simulatedOutcomesShape) satisfies z.ZodType<
+    Schemas["SimulatedOutcomes"]
+  >,
+  regions: z.array(
+    z.object({
+      region: regionSchema,
+      stockout_probability: z.number(),
+    }) satisfies z.ZodType<Schemas["RegionStockout"]>,
+  ),
+}) satisfies z.ZodType<Schemas["PlanSimulation"]>;
+
 export const planRevisionSchema = z.object({
   number: z.number(),
   lines: z.array(planRevisionLineSchema),
@@ -134,6 +172,7 @@ export const planRevisionSchema = z.object({
   objective: z.number().nullable().optional(),
   binding_constraints: z.array(bindingConstraintSchema),
   not_selected: z.array(notSelectedOptionSchema),
+  simulation: planSimulationSchema.nullable().optional(),
 }) satisfies z.ZodType<Schemas["PlanRevision"]>;
 
 export const planningRequestSchema = z.object({

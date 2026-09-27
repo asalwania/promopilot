@@ -21,6 +21,7 @@ from promopilot.models.registry import LatestModel, ModelKind, ModelRegistry
 from promopilot.models.relations import Relations
 from promopilot.models.serving import LiveRelations
 from promopilot.optimizer import SolverSettings
+from promopilot.simulator import DEFAULT_RUNS, SimulationSettings
 
 
 class _UnusedProbe:
@@ -47,6 +48,7 @@ def main() -> None:
             policy=CompanyPolicy(),
             settings=SolverSettings(),
             seed=0,
+            simulation=SimulationSettings(n_runs=DEFAULT_RUNS, seed=0),
         ),
     )
     models = ModelService(

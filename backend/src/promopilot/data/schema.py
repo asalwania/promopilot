@@ -159,6 +159,8 @@ plan_revisions = Table(
     Column("objective", Float),
     Column("binding_constraints", JSONB),
     Column("not_selected", JSONB),
+    # E7 (ADR 0042); null for revisions planned before the simulator.
+    Column("simulation", JSONB),
 )
 
 plan_lines = Table(

@@ -27,7 +27,7 @@ from promopilot.economics import (
     gross_profit,
     incremental_profit,
 )
-from promopilot.models.response import PromoResponse
+from promopilot.models.response import TERM_NAMES, PromoResponse, design
 
 HOLDOUT_WEEKS = 12
 """Baseline WAPE is measured on the last 12 weeks before the as-of week (SPEC §9.1)."""
@@ -164,6 +164,45 @@ class Prediction:
     """One row per option and segment: option, segment, units, units_std, baseline_units."""
 
 
+RESPONSE_ROW_COLUMNS = [
+    "option",
+    "sku_id",
+    "anchor",
+    "store_id",
+    "segment",
+    "week_id",
+    "price",
+    "base_price",
+    "unit_cost",
+    "baseline_units",
+]
+
+
+@dataclass(frozen=True)
+class ResponseRows:
+    """What sampling promo options' demand needs, per store, segment and promo week (ADR 0042).
+
+    A row's expected units are baseline_units x exp(Σ_t design[t] x term[t]), with the terms
+    of its SKU; `predict`'s units are these summed at the estimates. The simulator samples
+    the terms from N(estimate, std_error) and the units from a negative binomial of the SKU's
+    size around that mean (ADR 0024).
+    """
+
+    rows: pd.DataFrame
+    """One row per option, SKU (the anchor, and a BUNDLE's partner), store, segment and promo
+    week: RESPONSE_ROW_COLUMNS. `option` is the option's position in the input, `anchor` tells
+    the anchor from the partner, and baseline_units is the store's unpromoted baseline at the
+    series' reference competitor index."""
+    design: pd.DataFrame
+    """Each row's covariate for each term, aligned with `rows`; columns are term names."""
+    estimate: pd.DataFrame
+    """Per SKU (the index) and term (the columns): the fitted estimate."""
+    std_error: pd.DataFrame
+    """Per SKU and term: the estimate's standard error."""
+    dispersion: pd.Series
+    """Per SKU: the negative binomial size of store-level demand noise."""
+
+
 @dataclass(frozen=True)
 class DemandModel:
     as_of_week: int
@@ -198,6 +237,15 @@ class DemandModel:
         weeks sum to `predict`'s. Pairwise cannibalisation reads these (ADR 0033).
         """
         return self._response.line_paths(list(options), context, self._baseline)
+
+    def response_rows(
+        self, options: Sequence[PlanLine], context: PredictionContext
+    ) -> ResponseRows:
+        """The terms, covariates and baselines behind each option's promo-week units.
+
+        Raises ValueError for an option `predict` cannot predict.
+        """
+        return self._response.response_rows(list(options), context, self._baseline)
 
     def fitted_history(self, history: DemandHistory) -> pd.DataFrame:
         """The model's in-sample fit: FITTED_COLUMNS per region x SKU x segment x week.
@@ -447,6 +495,25 @@ class _Response:
         )
         return paths.reset_index().rename(columns={"promo": "option"})
 
+    def response_rows(
+        self, options: list[PlanLine], context: PredictionContext, baseline: _Baseline
+    ) -> ResponseRows:
+        rows, store_baseline = self._rows(options, context, baseline)
+        in_promo = (rows["week_id"] < rows["start_week"] + rows["duration"]).to_numpy()
+        rows = rows[in_promo].reset_index(drop=True)
+        sku_ids = sorted(set(rows["sku_id"]))
+        table = rows.rename(columns={"promo": "option"}).assign(
+            unit_cost=self.products["unit_cost"].reindex(rows["sku_id"]).to_numpy(),
+            baseline_units=store_baseline[in_promo],
+        )
+        return ResponseRows(
+            rows=table[RESPONSE_ROW_COLUMNS],
+            design=pd.DataFrame(design(rows), columns=TERM_NAMES),
+            estimate=self.model.wide("estimate").loc[sku_ids],
+            std_error=self.model.wide("std_error").loc[sku_ids],
+            dispersion=self.model.dispersion.loc[sku_ids].astype(float),
+        )
+
     def predict(
         self, options: list[PlanLine], context: PredictionContext, baseline: _Baseline
     ) -> Prediction:
@@ -514,6 +581,19 @@ class _Response:
     ) -> tuple[pd.DataFrame, np.ndarray, np.ndarray]:
         """Every store x segment week of each option's SKUs, through the pull-forward weeks,
         with the units it sells promoted and unpromoted."""
+        rows, store_baseline = self._rows(options, context, baseline)
+        plain = _with_ratios(
+            rows.assign(price=rows["base_price"], mechanism=None, pull_forward_share=0.0)
+        )
+        promoted = store_baseline * np.exp(self.model.log_effect(rows))
+        unpromoted = store_baseline * np.exp(self.model.log_effect(plain))
+        return rows, promoted, unpromoted
+
+    def _rows(
+        self, options: list[PlanLine], context: PredictionContext, baseline: _Baseline
+    ) -> tuple[pd.DataFrame, np.ndarray]:
+        """Every store x segment week of each option's SKUs, through the pull-forward weeks,
+        with its price terms and the store's baseline at the reference competitor index."""
         regions = set(self.stores["region"])
         for line in options:
             for sku_id in line.skus:
@@ -543,16 +623,10 @@ class _Response:
         rows = _with_reference(rows, self._competitors(context))
         rows["competitor_price"] = rows["competitor_price"].fillna(rows["base_price"])
         rows = _with_ratios(rows)
-        plain = _with_ratios(
-            rows.assign(price=rows["base_price"], mechanism=None, pull_forward_share=0.0)
-        )
-
         store_baseline = baseline.predict(
             rows[KEYS], competitor_index=rows["reference_index"].to_numpy()
         )
-        promoted = store_baseline * np.exp(self.model.log_effect(rows))
-        unpromoted = store_baseline * np.exp(self.model.log_effect(plain))
-        return rows, promoted, unpromoted
+        return rows, store_baseline
 
     def _by_segment(
         self, rows: pd.DataFrame, promoted: np.ndarray, unpromoted: np.ndarray

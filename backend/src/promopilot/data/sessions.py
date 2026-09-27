@@ -16,6 +16,7 @@ from promopilot.domain import (
     PlanningSession,
     PlanRevision,
     PlanRevisionLine,
+    PlanSimulation,
     SessionStatus,
     SolveStatus,
     WhyChosen,
@@ -103,6 +104,9 @@ class SessionStore:
                         revision.binding_constraints, mode="json"
                     ),
                     not_selected=_NOT_SELECTED.dump_python(revision.not_selected, mode="json"),
+                    simulation=None
+                    if revision.simulation is None
+                    else revision.simulation.model_dump(mode="json"),
                 )
             )
             if revision.lines:
@@ -178,6 +182,9 @@ def _revision(row: object, lines: tuple[PlanRevisionLine, ...]) -> PlanRevision:
         objective=values["objective"],
         binding_constraints=_BINDING.validate_python(values["binding_constraints"] or ()),
         not_selected=_NOT_SELECTED.validate_python(values["not_selected"] or ()),
+        simulation=None
+        if values["simulation"] is None
+        else PlanSimulation.model_validate(values["simulation"]),
     )
 
 

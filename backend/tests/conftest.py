@@ -2,10 +2,14 @@ import json
 
 import pytest
 
+from promopilot.agents.tools.inventory_status import pooled_stock
 from promopilot.datagen import GeneratedDataset, GeneratorConfig, generate, load_config
+from promopilot.domain import CompanyPolicy, PlanningRequest, PromoWindow, Region, Scope
 from promopilot.models import demand, relations
 from promopilot.models.demand import DemandHistory, DemandModel
 from promopilot.models.relations import Relations
+from promopilot.models.training import DEFAULT_SEED
+from promopilot.optimizer import OptionContext
 
 LLM_ENV = ("LLM_PROVIDER", "LLM_CASSETTE_DIR", "OPENAI_API_KEY", "OPENAI_MODEL")
 
@@ -104,4 +108,38 @@ def small_models(
     model = demand.fit(small_history, as_of_week=SMALL_AS_OF, seed=7)
     return model, relations.fit(
         small_history, small_dataset.baskets, model, as_of_week=SMALL_AS_OF, seed=7
+    )
+
+
+DEMO_AS_OF = 104
+
+DEMO_BRIEF = PlanningRequest(
+    as_of_week=DEMO_AS_OF,
+    scope=Scope(regions=(Region.NORTH, Region.WEST), categories=("Snacks", "Beverages")),
+    promo_window=PromoWindow(start_week=108, end_week=109),
+    marketing_budget=200_000.0,
+)
+"""The demo brief's scope, Diwali window and ₹2 lakh budget (ADR 0036, ADR 0037)."""
+
+
+@pytest.fixture(scope="session")
+def demo_context(default_dataset: GeneratedDataset) -> OptionContext:
+    """The seed-42 world fitted as `make train` fits it, with its pooled stock (marker `model`)."""
+    history = history_of(default_dataset)
+    model = demand.fit(history, DEMO_AS_OF, DEFAULT_SEED)
+    found = relations.fit(
+        history, default_dataset.baskets, model, as_of_week=DEMO_AS_OF, seed=DEFAULT_SEED
+    )
+    inventory = default_dataset.inventory
+    policy = CompanyPolicy()
+    return OptionContext(
+        demand_model=model,
+        relations=found,
+        products=default_dataset.products,
+        stock=pooled_stock(
+            inventory[inventory["snapshot_week"] == DEMO_AS_OF - 1],
+            default_dataset.stores,
+            policy,
+        ),
+        policy=policy,
     )
