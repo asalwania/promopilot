@@ -21,7 +21,7 @@ nothing before the interrupt.
 
 import enum
 import typing
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Final, Literal, Protocol
 from uuid import UUID
 
@@ -42,9 +42,20 @@ from promopilot.agents.state import (
     ApprovalRequest,
     PlanningState,
 )
+from promopilot.agents.trace import (
+    LLMPricing,
+    Node,
+    NoTrace,
+    TracedProvider,
+    TraceSink,
+    emit,
+    traced_node,
+)
 from promopilot.domain import (
     CompanyPolicy,
     DecisionKind,
+    DecisionMade,
+    FindingRaised,
     PlanDecision,
     PlanExplanation,
     PlanningRequest,
@@ -108,6 +119,10 @@ class GraphTools:
     policy: CompanyPolicy
     agent: AgentTools | None = None
     """The planner agent's tools; with them the LLM plans through the tool registry (#47)."""
+    trace: TraceSink = field(default_factory=NoTrace)
+    """Where the graph's trace events go (ADR 0047); dropped by default."""
+    pricing: LLMPricing = field(default_factory=LLMPricing)
+    """The prices token-usage events are costed with (ADR 0027)."""
 
 
 @dataclass(frozen=True)
@@ -126,7 +141,12 @@ class GraphSnapshot:
 def build_graph(
     tools: GraphTools, llm: LLMProvider, checkpointer: BaseCheckpointSaver[Any]
 ) -> PlanningGraph:
-    """The compiled agent graph. Build `checkpointer` with `checkpoint_serializer()`."""
+    """The compiled agent graph. Build `checkpointer` with `checkpoint_serializer()`.
+
+    Every node is traced (ADR 0047): add nodes with `add`, which wraps them in `traced_node`,
+    so code inside them can `emit` events, and every LLM call made through `llm` is costed.
+    """
+    llm = TracedProvider(llm, tools.pricing)
 
     async def context(state: PlanningState) -> dict[str, object]:
         return {"request": await read_planning_request(state.brief, llm, tools.brief_data)}
@@ -150,7 +170,23 @@ def build_graph(
         request = _required(state.request, "a planning request")
         plan = _required(state.plan, "a plan revision")
         findings = validate_plan(_required(state.plan_facts, "plan facts"), request, tools.policy)
+        for finding in findings:
+            await emit(
+                FindingRaised(
+                    source="plan_validation", code=finding.code.value, message=finding.message
+                )
+            )
         await tools.sessions.save_open_issues(state.session_id, plan.number, findings)
+        await emit(
+            DecisionMade(
+                decision="open_issues",
+                summary="The plan breaks hard constraints; they go to approval as open issues.",
+            )
+            if findings
+            else DecisionMade(
+                decision="plan_valid", summary="The plan meets every hard constraint."
+            )
+        )
         return {"critic_findings": findings}
 
     async def explainer(state: PlanningState) -> dict[str, object]:
@@ -171,6 +207,13 @@ def build_graph(
                 revision_number=plan.number,
                 reason=explanation.fallback_reason.value,
             )
+            await emit(
+                DecisionMade(
+                    decision="explainer_fallback",
+                    summary="The LLM's explanation was not used "
+                    f"({explanation.fallback_reason.value}), so the template explains the plan.",
+                )
+            )
         await tools.sessions.save_explanation(state.session_id, plan.number, explanation)
         return {"explanations": explanation}
 
@@ -181,6 +224,14 @@ def build_graph(
         )
         decision = await tools.sessions.record_decision(
             state.session_id, answer.decision, answer.revision_number, answer.reason
+        )
+        await emit(
+            DecisionMade(
+                decision=decision.decision.value,
+                summary=f"Plan revision {decision.revision_number} was approved."
+                if decision.decision is DecisionKind.APPROVED
+                else f"Plan revision {decision.revision_number} was rejected: {decision.reason}",
+            )
         )
         return {"approval": decision}
 
@@ -195,12 +246,16 @@ def build_graph(
         return {}
 
     graph = StateGraph(PlanningState)
-    graph.add_node(CONTEXT, context)
-    graph.add_node(PLANNER, planner)
-    graph.add_node(CRITIC, critic)
-    graph.add_node(EXPLAINER, explainer)
-    graph.add_node(APPROVAL, approval)
-    graph.add_node(DONE, done)
+
+    def add(name: str, node: Node[PlanningState]) -> None:
+        graph.add_node(name, traced_node(tools.trace, name, node))
+
+    add(CONTEXT, context)
+    add(PLANNER, planner)
+    add(CRITIC, critic)
+    add(EXPLAINER, explainer)
+    add(APPROVAL, approval)
+    add(DONE, done)
     graph.add_edge(START, CONTEXT)
     graph.add_edge(CONTEXT, PLANNER)
     graph.add_edge(PLANNER, CRITIC)

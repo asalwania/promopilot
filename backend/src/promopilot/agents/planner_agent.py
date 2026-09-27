@@ -34,8 +34,9 @@ from promopilot.agents.planner import PlannedRevision
 from promopilot.agents.state import DegradedReason
 from promopilot.agents.tools import ToolError, ToolOk, ToolResult, ToolSpec
 from promopilot.agents.tools.run_optimizer import RunOptimizerOutput
+from promopilot.agents.trace import TracedToolRegistry, emit
 from promopilot.competitors import CompetitorGaps
-from promopilot.domain import PlanningRequest
+from promopilot.domain import DecisionMade, PlanningRequest
 from promopilot.llm import CassetteMissError, LLMError, LLMProvider, Message
 from promopilot.llm import ToolSpec as LLMToolSpec
 
@@ -169,6 +170,8 @@ class _Planner:
         self._request = request
         self._llm = llm
         self._agent = agent
+        # Every call the planner makes is a trace event (ADR 0047).
+        self._tools = TracedToolRegistry(agent.tools)
         self._specs = [
             LLMToolSpec(name=s.name, description=s.description, input_schema=s.input_schema)
             for s in agent.tools.specs()
@@ -262,7 +265,7 @@ class _Planner:
         failure: Exception | None = None
         for delay in (*self._agent.retry_delays_s, None):
             try:
-                return await self._agent.tools.call(name, arguments)
+                return await self._tools.call(name, arguments)
             except Exception as error:
                 log.warning("planner_tool_raised", tool=name, error=repr(error), exc_info=True)
                 failure = error
@@ -310,7 +313,21 @@ def _opening_message(brief: str, request: PlanningRequest) -> str:
     )
 
 
+DECISIONS: Final = {
+    "planner_plan_gone": "The optimiser's plan (candidate set {candidate_set_id}) is gone, so "
+    "the default sequence plans instead.",
+    "planner_degraded": "The planner agent could not plan ({reason}), so the deterministic "
+    "default sequence plans instead.",
+    "planner_restarted": "The LLM failed mid-round, so the planner restarts its conversation: "
+    "{error}",
+    "planner_tool_call_limit": "The planner reached its limit of {limit} tool calls.",
+    "planner_step_limit": "The planner reached its limit of {limit} steps.",
+    "planner_call_refused": "A {tool} call was refused: {reason}",
+}
+"""What each planner decision says in the session's trace."""
+
+
 async def _decide(event: str, **fields: object) -> None:
-    """A planner decision for the session's trace. Until #45's `emit` lands this only logs;
-    at rebase it emits a `decision` trace event."""
+    """A planner decision: logged, and a `decision` event in the session's trace (ADR 0047)."""
     log.info(event, **fields)
+    await emit(DecisionMade(decision=event, summary=DECISIONS[event].format(**fields)))

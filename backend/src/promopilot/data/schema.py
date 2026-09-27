@@ -229,6 +229,21 @@ approvals = Table(
     ),
 )
 
+# Every step of a planning session's agent graph, numbered 1, 2, ... within the session: the
+# SSE trace (E8 #45, ADR 0047).
+
+trace_events = Table(
+    "trace_events",
+    metadata,
+    Column("session_id", UUID, ForeignKey("planning_sessions.id"), primary_key=True),
+    Column("seq", Integer, primary_key=True),
+    Column("node", Text),
+    Column("kind", Text, nullable=False),
+    Column("payload", JSONB, nullable=False),
+    Column("created_at", DateTime(timezone=True), nullable=False, server_default=func.now()),
+    CheckConstraint("seq >= 1", name="ck_trace_events_seq"),
+)
+
 # Model registry (E4): one row per trained model version; the artifact is a file under
 # MODEL_DIR, and artifact_path is relative to it (ADR 0023).
 

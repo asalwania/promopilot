@@ -537,7 +537,7 @@ Incremental profit is net of pull-forward; halo and cannibalisation count for ev
 
 ### 9.6 Agents (`agents`, LangGraph)
 
-**State (pydantic):** `brief`, `amendments[]`, `request: PlanningRequest | None`, `assumptions[]`, `clarifications[]`, `candidates_summary`, `plan`, `simulation`, `critic_findings[]`, `iteration`, `diff_from_previous`, `explanations`, `approval`, `trace[]`.
+**State (pydantic):** `brief`, `amendments[]`, `request: PlanningRequest | None`, `assumptions[]`, `clarifications[]`, `candidates_summary`, `plan`, `simulation`, `critic_findings[]`, `iteration`, `diff_from_previous`, `explanations`, `approval`. The trace is not in the state: every step is a trace event stored in order in `trace_events` and streamed over SSE (ADR 0047).
 
 **Graph:**
 

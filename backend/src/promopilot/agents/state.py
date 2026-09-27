@@ -3,9 +3,10 @@ and is answered with.
 
 The state is checkpointed after every step, so it holds only values: the brief, the planning
 request, the plan revision with its plan facts, the Planner's notes (ADR 0049), the Critic's
-findings, the explanations and the latest decision. Assumptions and clarifications (#46), the
-trace (#45) and the diff from the previous revision (#50) join it with the tickets that
-produce them; the simulation is on the plan revision (ADR 0042).
+findings, the explanations and the latest decision. Assumptions and clarifications (#46) and
+the diff from the previous revision (#50) join it with the tickets that produce them; the
+simulation is on the plan revision (ADR 0042). The trace is not state: every step is a trace
+event stored as it happens (ADR 0047).
 """
 
 from enum import StrEnum

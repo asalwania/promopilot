@@ -290,6 +290,17 @@ export const planningRequestSchema = z.object({
   max_promoted_skus_per_category_per_region: z.number().nullable().optional(),
 }) satisfies z.ZodType<Schemas["PlanningRequest"]>;
 
+// What a session's LLM calls used and cost: the sums of its token-usage trace
+// events (ADR 0047).
+const sessionUsageSchema = z.object({
+  calls: z.number(),
+  input_tokens: z.number(),
+  output_tokens: z.number(),
+  cost_usd: z.number(),
+  cost_inr: z.number(),
+  unpriced_models: z.array(z.string()),
+}) satisfies z.ZodType<Schemas["SessionUsage"]>;
+
 export const sessionSchema = z.object({
   session_id: z.string(),
   status: z.enum([
@@ -305,6 +316,7 @@ export const sessionSchema = z.object({
   plan_revision: planRevisionSchema.nullable(),
   error: z.string().nullable(),
   decisions: z.array(planDecisionSchema),
+  usage: sessionUsageSchema,
 }) satisfies z.ZodType<Schemas["SessionResponse"]>;
 
 export type Session = z.infer<typeof sessionSchema>;

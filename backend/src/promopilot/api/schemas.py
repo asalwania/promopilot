@@ -16,6 +16,7 @@ from promopilot.domain import (
     PlanRevision,
     PlanSimulation,
     SessionStatus,
+    SessionUsage,
 )
 from promopilot.models.registry import ModelKind, RegisteredModel
 from promopilot.simulator import MAX_RUNS, MIN_RUNS
@@ -101,6 +102,10 @@ class SessionResponse(BaseModel):
     decisions: list[PlanDecision] = Field(
         description="Every approval and rejection, oldest first: the session's audit trail."
     )
+    usage: SessionUsage = Field(
+        description="What the session's LLM calls used and cost: the sums of its token-usage "
+        "trace events (ADR 0047)."
+    )
 
     @classmethod
     def of(cls, session: PlanningSession) -> "SessionResponse":
@@ -112,7 +117,16 @@ class SessionResponse(BaseModel):
             plan_revision=session.latest_revision,
             error=session.error,
             decisions=list(session.decisions),
+            usage=session.usage,
         )
+
+
+class TraceStreamEnd(BaseModel):
+    """The last event of a session's trace stream (`event: end`): the session is final, so no
+    more trace events can come (ADR 0047)."""
+
+    session_id: UUID
+    status: SessionStatus
 
 
 class ApproveRequest(BaseModel):

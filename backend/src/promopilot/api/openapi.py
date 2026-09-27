@@ -14,7 +14,7 @@ from promopilot.api.models import ModelService
 from promopilot.api.plans import PlanService
 from promopilot.api.relations import RelationsService
 from promopilot.api.sessions import SessionService
-from promopilot.data import RetailData, SessionStore
+from promopilot.data import RetailData, SessionStore, TraceStore
 from promopilot.domain import CompanyPolicy
 from promopilot.llm import FakeProvider
 from promopilot.models.demand import DemandModel
@@ -56,6 +56,7 @@ def main() -> None:
         ),
         llm=FakeProvider([]),
         checkpoints=MemoryCheckpoints(),
+        trace=TraceStore(engine),
     )
     models = ModelService(
         registry=registry, data=RetailData(engine), live=demand, live_relations=relations

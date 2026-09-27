@@ -16,6 +16,14 @@ export const planningSession: SessionResponse = {
   plan_revision: null,
   error: null,
   decisions: [],
+  usage: {
+    calls: 0,
+    input_tokens: 0,
+    output_tokens: 0,
+    cost_usd: 0,
+    cost_inr: 0,
+    unpriced_models: [],
+  },
 };
 
 export const planLines: PlanRevisionLine[] = [

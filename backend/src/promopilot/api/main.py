@@ -9,7 +9,7 @@ from fastapi import FastAPI
 from sqlalchemy.ext.asyncio import create_async_engine
 
 from promopilot import __version__
-from promopilot.agents import GraphTools, PostgresCheckpoints
+from promopilot.agents import GraphTools, LLMPricing, PostgresCheckpoints
 from promopilot.api.catalog import CatalogService, catalog_router
 from promopilot.api.competitors import CompetitorService, competitors_router
 from promopilot.api.models import ModelService, models_router
@@ -19,9 +19,10 @@ from promopilot.api.relations import RelationsService, relations_router
 from promopilot.api.schemas import HealthChecks, HealthResponse
 from promopilot.api.sessions import SessionService, sessions_router
 from promopilot.config import Settings
-from promopilot.data import SessionStore, migrate
+from promopilot.data import SessionStore, TraceStore, migrate
 from promopilot.data.database import PostgresDatabaseProbe
 from promopilot.llm import build_provider
+from promopilot.logs import configure_logging
 
 log = structlog.get_logger(__name__)
 
@@ -102,6 +103,8 @@ def create_app(
 def build_app() -> FastAPI:
     """Production entry point: `uvicorn --factory promopilot.api.main:build_app`."""
     settings = Settings()
+    # JSON lines that name the session they came from (ADR 0047).
+    configure_logging(settings.log_format)
     probe = PostgresDatabaseProbe(settings.database_url)
     engine = create_async_engine(settings.database_url, pool_pre_ping=True)
     planning = build_planning(settings, engine)
@@ -113,6 +116,7 @@ def build_app() -> FastAPI:
         live_relations=planning.relations_model,
     )
     store = SessionStore(engine)
+    trace = TraceStore(engine)
     # Sessions run the agent graph, checkpointed in the app database (ADR 0046). Its planner
     # agent plans through the tool registry and falls back to the default sequence, which
     # plans with the latest demand model and the live relations model (ADR 0038, ADR 0049).
@@ -125,9 +129,14 @@ def build_app() -> FastAPI:
             sessions=store,
             policy=policy,
             agent=planning.agent,
+            # Every step is a trace event, and every LLM call is costed (ADR 0047).
+            trace=trace,
+            pricing=LLMPricing(prices=settings.llm_prices, usd_inr_rate=settings.usd_inr_rate),
         ),
         llm=build_provider(settings),
         checkpoints=PostgresCheckpoints(settings.database_url),
+        trace=trace,
+        trace_poll_interval_s=settings.trace_poll_interval_s,
     )
     app = create_app(
         database_probe=probe,

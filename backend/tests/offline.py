@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import create_async_engine
 
 from promopilot.agents import GraphTools, MemoryCheckpoints, PlannedRevision
 from promopilot.api.sessions import SessionService
-from promopilot.data import RetailData, SessionStore
+from promopilot.data import RetailData, SessionStore, TraceStore
 from promopilot.domain import CompanyPolicy, PlanningRequest
 from promopilot.llm import FakeProvider
 
@@ -37,4 +37,5 @@ def offline_sessions() -> SessionService:
         ),
         llm=FakeProvider([]),
         checkpoints=MemoryCheckpoints(),
+        trace=TraceStore(engine),
     )

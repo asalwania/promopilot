@@ -5,14 +5,21 @@ agent graph until the Approval interrupt: the brief is read into a planning requ
 optimising planner plans it (ADR 0038), the Critic validates it and the Explainer explains it.
 `POST /approve` and `POST /reject` resume the graph from its checkpoint within the request, so
 a decision survives an API restart between planning and deciding.
+
+Every step the graph takes is a trace event in Postgres (ADR 0047). `GET /events` streams them
+over SSE: it replays the events after `Last-Event-ID`, then polls for new ones until the
+session is final, and ends with an `end` event.
 """
 
 import asyncio
 import weakref
+from collections.abc import AsyncIterable, AsyncIterator
+from typing import Annotated, Protocol, cast
 from uuid import UUID
 
 import structlog
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, Depends, Header, HTTPException, status
+from fastapi.sse import EventSourceResponse, ServerSentEvent
 
 from promopilot.agents import (
     BriefError,
@@ -31,9 +38,10 @@ from promopilot.api.schemas import (
     RejectRequest,
     SessionCreated,
     SessionResponse,
+    TraceStreamEnd,
 )
-from promopilot.data import SessionConflictError, SessionStore
-from promopilot.domain import DecisionKind, SessionStatus, SolveStatus
+from promopilot.data import SessionConflictError, SessionStore, TraceRead
+from promopilot.domain import DecisionKind, SessionStatus, SolveStatus, TraceEvent
 from promopilot.llm import LLMError, LLMProvider
 
 log = structlog.get_logger(__name__)
@@ -47,6 +55,12 @@ class PlanningUnavailableError(Exception):
     """The agent graph's checkpointer could not be opened, so nothing can be planned."""
 
 
+class TraceReader(Protocol):
+    """Reads a session's trace events (`promopilot.data.TraceStore`)."""
+
+    async def read(self, session_id: UUID, *, after: int) -> TraceRead | None: ...
+
+
 class SessionService:
     """Owns the planning sessions of one API process: their agent graph and its background
     runs, and the decisions that resume it."""
@@ -58,11 +72,15 @@ class SessionService:
         tools: GraphTools,
         llm: LLMProvider,
         checkpoints: Checkpoints,
+        trace: TraceReader,
+        trace_poll_interval_s: float = 0.5,
     ) -> None:
         self._store = store
         self._tools = tools
         self._llm = llm
         self._checkpoints = checkpoints
+        self._trace = trace
+        self._poll_interval_s = trace_poll_interval_s
         self._graph: PlanningGraph | None = None
         self._tasks: set[asyncio.Task[None]] = set()
         # One decision at a time per session, so two requests cannot both resume one interrupt.
@@ -83,6 +101,38 @@ class SessionService:
     async def get(self, session_id: UUID) -> SessionResponse | None:
         session = await self._store.get(session_id)
         return None if session is None else SessionResponse.of(session)
+
+    async def exists(self, session_id: UUID) -> bool:
+        return await self._trace.read(session_id, after=0) is not None
+
+    async def events(
+        self, session_id: UUID, *, after: int
+    ) -> AsyncIterator[TraceEvent | SessionStatus]:
+        """The session's trace events numbered above `after`, in order, as they are written;
+        then, once the session is final and no more can come, its final status.
+
+        A session is final when it failed, or was approved and its graph has run to the end;
+        a session planned before E8 has no graph and never gets more events. Raises
+        `SessionNotFoundError` for an unknown session.
+        """
+        last = after
+        ending = False
+        while True:
+            read = await self._trace.read(session_id, after=last)
+            if read is None:
+                raise SessionNotFoundError(str(session_id))
+            for event in read.events:
+                yield event
+                last = event.id
+            if read.events:
+                continue
+            if ending:
+                yield read.status
+                return
+            # Once final, every event is written: one more read picks up any this one missed.
+            ending = await self._is_final(read)
+            if not ending:
+                await asyncio.sleep(self._poll_interval_s)
 
     async def approve(self, session_id: UUID, revision_number: int) -> SessionResponse:
         """Approve the latest plan revision; the session is then final. Raises
@@ -110,6 +160,18 @@ class SessionService:
         await asyncio.gather(*self._tasks, return_exceptions=True)
         await self._checkpoints.close()
 
+    async def _is_final(self, read: TraceRead) -> bool:
+        if read.status is SessionStatus.FAILED or read.thread_id is None:
+            return True
+        if read.status is not SessionStatus.APPROVED:
+            return False
+        # Approval records the decision before its node ends and Done runs; the thread has
+        # ended once its last checkpoint has nothing left to run.
+        if self._graph is None:
+            return True
+        ended = await graph_state(self._graph, read.thread_id)
+        return ended is None or ended.paused_at == ()
+
     def _require_graph(self) -> PlanningGraph:
         if self._graph is None:
             raise PlanningUnavailableError(
@@ -122,6 +184,20 @@ class SessionService:
     ) -> SessionResponse:
         graph = self._require_graph()
         lock = self._locks.setdefault(session_id, asyncio.Lock())
+        with structlog.contextvars.bound_contextvars(session_id=str(session_id)):
+            return await self._decide_locked(
+                graph, lock, session_id, decision, revision_number, reason
+            )
+
+    async def _decide_locked(
+        self,
+        graph: PlanningGraph,
+        lock: asyncio.Lock,
+        session_id: UUID,
+        decision: DecisionKind,
+        revision_number: int,
+        reason: str | None,
+    ) -> SessionResponse:
         async with lock:
             session = await self._store.get(session_id)
             if session is None:
@@ -157,6 +233,8 @@ class SessionService:
         return SessionResponse.of(decided)
 
     async def _run(self, graph: PlanningGraph, session_id: UUID, brief: str) -> None:
+        # The run is its own task, so the session id stays on every log line it writes.
+        structlog.contextvars.bind_contextvars(session_id=str(session_id))
         try:
             await start_planning(graph, str(session_id), session_id, brief)
             # Only once the Approval interrupt is checkpointed can anyone decide on it.
@@ -203,6 +281,35 @@ def sessions_router(sessions: SessionService) -> APIRouter:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "Unknown session")
         return found
 
+    async def known_session(session_id: UUID) -> UUID:
+        if not await sessions.exists(session_id):
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Unknown session")
+        return session_id
+
+    @router.get(
+        "/{session_id}/events",
+        response_class=EventSourceResponse,
+        responses={404: {"description": "Unknown session"}},
+    )
+    async def session_events(
+        session_id: Annotated[UUID, Depends(known_session)],
+        last_event_id: Annotated[str | None, Header()] = None,
+    ) -> AsyncIterable[TraceEvent | TraceStreamEnd]:
+        """The session's trace events over SSE (SF-01, ADR 0047), in order, as they happen.
+
+        Each event's SSE `id` is its number in the session; a client that reconnects with
+        `Last-Event-ID` gets the events after it, with no gaps or repeats (a missing or
+        non-numeric one replays the trace from the start). Once the session is final
+        (approved, or failed) the stream sends `event: end` with its status and closes.
+        """
+        after = int(last_event_id) if last_event_id and last_event_id.isdigit() else 0
+        async for item in sessions.events(session_id, after=after):
+            if isinstance(item, TraceEvent):
+                yield _documented(ServerSentEvent(data=item, id=str(item.id)))
+            else:
+                end = TraceStreamEnd(session_id=session_id, status=item)
+                yield _documented(ServerSentEvent(data=end, event="end"))
+
     @router.post("/{session_id}/approve", responses=decision_responses)
     async def approve_session(session_id: UUID, body: ApproveRequest) -> SessionResponse:
         """Approve the session's latest plan revision, which makes it final (SF-04)."""
@@ -228,3 +335,9 @@ def sessions_router(sessions: SessionService) -> APIRouter:
             raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, str(error)) from error
 
     return router
+
+
+def _documented(event: ServerSentEvent) -> TraceEvent | TraceStreamEnd:
+    """FastAPI documents each SSE event's data from the route's annotation but sends a
+    `ServerSentEvent` as it is, with its id and name; this lets it through mypy."""
+    return cast(TraceEvent | TraceStreamEnd, event)
