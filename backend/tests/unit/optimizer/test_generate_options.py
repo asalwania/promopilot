@@ -5,12 +5,14 @@ rule can be checked by hand.
 """
 
 from collections.abc import Iterable, Sequence
+from dataclasses import replace
 from typing import Any
 
 import numpy as np
 import pandas as pd
 import pytest
 
+from promopilot.competitors import CompetitorGap, CompetitorGaps
 from promopilot.domain import (
     CompanyPolicy,
     Mechanism,
@@ -33,6 +35,7 @@ from promopilot.optimizer import (
     P90_Z,
     FittedOptionFacts,
     OptionContext,
+    PriceMatch,
     PromoOptions,
     PruneReason,
     generate_options,
@@ -508,3 +511,163 @@ def test_the_reasons_each_mechanism_lost_options_for_are_recorded() -> None:
         PruneReason.STOCK,
     }
     assert ("A", Region.NORTH, Mechanism.PCT_OFF) not in pruned_by
+
+
+# --- clearance targets and price matches (ADR 0040) ------------------------------------------
+
+
+class PathDemand(FakeDemand):
+    """FakeDemand, broken down per week: the anchor's promo units spread evenly over its promo
+    weeks against 100 baseline units a week, then a 20-unit pull-forward dip in the week
+    after; a BUNDLE partner sells 60 a week against 40."""
+
+    def line_paths(self, options: Sequence[PlanLine], context: PredictionContext) -> pd.DataFrame:
+        units = self.predict(options, context).options["units"]
+        rows = []
+        for n, line in enumerate(options):
+            weeks = range(line.start_week, line.start_week + line.duration_weeks)
+            for week in weeks:
+                rows.append((n, week, line.sku_id, units[n] / line.duration_weeks, 100.0))
+                if line.bundle_partner_sku_id is not None:
+                    rows.append((n, week, line.bundle_partner_sku_id, 60.0, 40.0))
+            rows.append((n, weeks.stop, line.sku_id, 80.0, 100.0))
+        columns = ["option", "week_id", "sku_id", "units", "baseline_units"]
+        return pd.DataFrame(rows, columns=columns).assign(segment="Families", price=1.0)
+
+
+def cleared(*sku_ids: str, sell_through: float = 0.5) -> list[dict[str, Any]]:
+    return [{"sku_id": sku_id, "sell_through": sell_through} for sku_id in sku_ids]
+
+
+def test_a_sku_the_brief_names_for_clearance_is_overstocked_in_every_scope_region() -> None:
+    options = generate_options(request(clearance_targets=cleared("B")), context(PathDemand()))
+
+    for region in (Region.NORTH, Region.SOUTH):
+        depths = {
+            line.depth_pct
+            for line in lines_of(options, sku_id="B", mechanism=Mechanism.PCT_OFF, region=region)
+        }
+        assert depths == {5, 10, 15, 20, 25, 30, 40, 50}
+        assert (rows_of(options, sku_id="B", region=region)["clearance_value"] > 0).all()
+
+
+def test_a_clearance_target_outside_the_scope_is_rejected() -> None:
+    with pytest.raises(ValueError, match=r"clearance target.*C"):
+        generate_options(request(clearance_targets=cleared("C")), context(PathDemand()))
+
+
+def test_options_of_a_clearance_sku_carry_their_uplift_over_the_promo_window() -> None:
+    options = generate_options(request(clearance_targets=cleared("D")), context(PathDemand()))
+
+    early = rows_of(options, sku_id="D", start_week=60, duration_weeks=1)
+    # The dip in week 61 is inside the window: uplift = units - 100 - 20.
+    assert early["window_uplift"].to_numpy() == pytest.approx((early["units"] - 120).to_numpy())
+    late = rows_of(options, sku_id="D", start_week=63, duration_weeks=1)
+    # The dip in week 64 falls after the window.
+    assert late["window_uplift"].to_numpy() == pytest.approx((late["units"] - 100).to_numpy())
+    assert (rows_of(options, sku_id="A")["window_uplift"] == 0).all()
+    # Available stock, and the model's own baseline over the four window weeks (4 x 100).
+    found = {(c.sku_id, c.region, c.available_stock, c.baseline_units) for c in options.clearance}
+    assert found == {
+        ("D", Region.NORTH, PLENTY, 400.0),
+        ("D", Region.SOUTH, PLENTY, 400.0),
+    }
+
+
+def test_a_bundle_partner_with_a_clearance_target_carries_its_own_window_uplift() -> None:
+    planning = request(
+        scope=Scope(regions=(Region.NORTH,), categories=("Snacks", "Beverages")),
+        clearance_targets=cleared("C"),
+    )
+
+    options = generate_options(planning, context(PathDemand()), sku_ids=["A", "C"])
+
+    bundle = rows_of(
+        options, sku_id="A", mechanism=Mechanism.BUNDLE, duration_weeks=2, start_week=60
+    )
+    assert not bundle.empty
+    assert (bundle["partner_window_uplift"] == 40.0).all()
+    single = rows_of(options, sku_id="A", mechanism=Mechanism.PCT_OFF)
+    assert (single["partner_window_uplift"] == 0).all()
+
+
+def test_a_clearance_target_skips_a_region_with_no_available_stock() -> None:
+    inventory = stock(D_South=(0.0, False))
+
+    options = generate_options(
+        request(clearance_targets=cleared("D")), context(PathDemand(), inventory)
+    )
+
+    assert [(c.sku_id, c.region) for c in options.clearance] == [("D", Region.NORTH)]
+
+
+def gaps(*rows: tuple[str, Region, float, bool]) -> CompetitorGaps:
+    """(SKU, region, competitor price, KVI) rows against the catalogue's base prices."""
+    policy = CompanyPolicy()
+    found = []
+    for sku_id, region, competitor_price, is_kvi in rows:
+        cpi = competitor_price / PRICES[sku_id]
+        found.append(
+            CompetitorGap(
+                region=region,
+                sku_id=sku_id,
+                name=sku_id,
+                category="Snacks",
+                subcategory="Namkeen",
+                is_kvi=is_kvi,
+                base_price=PRICES[sku_id],
+                competitor_price=competitor_price,
+                competitor_on_promo=False,
+                price_week=57,
+                cpi=cpi,
+                gap=1 - cpi,
+                undercut=is_kvi and cpi < 1 - policy.undercut_threshold,
+            )
+        )
+    return CompetitorGaps(
+        as_of_week=58,
+        undercut_threshold=policy.undercut_threshold,
+        kvi_price_tolerance=policy.kvi_price_tolerance,
+        gaps=tuple(found),
+    )
+
+
+GRID = {5, 10, 15, 20, 25, 30, 40, 50}
+
+
+def test_an_undercut_kvi_gets_a_price_match_option_in_its_region() -> None:
+    # The competitor sells A at ₹87.50 in the North: 13% off (₹87) is the smallest match.
+    found = gaps(("A", Region.NORTH, 87.5, True), ("D", Region.NORTH, 30.0, False))
+    options = generate_options(request(), replace(context(), competitor_gaps=found))
+
+    matched = lines_of(options, sku_id="A", mechanism=Mechanism.PCT_OFF, depth_pct=13)
+    assert {line.region for line in matched} == {Region.NORTH}
+    assert {line.target_segment for line in matched} == set(TargetSegment)
+    assert options.price_matches == (
+        PriceMatch(sku_id="A", region=Region.NORTH, depth_pct=13, competitor_price=87.5),
+    )
+    # D is not a KVI: no match, however wide its gap.
+    d_depths = {
+        line.depth_pct for line in lines_of(options, sku_id="D", mechanism=Mechanism.PCT_OFF)
+    }
+    assert d_depths <= GRID
+
+
+def test_a_price_match_on_a_grid_depth_adds_no_option() -> None:
+    found = gaps(("A", Region.NORTH, 90.0, True))
+
+    options = generate_options(request(), replace(context(), competitor_gaps=found))
+
+    assert options.price_matches == (
+        PriceMatch(sku_id="A", region=Region.NORTH, depth_pct=10, competitor_price=90.0),
+    )
+    assert options.enumerated == generate_options(request(), context()).enumerated
+
+
+def test_the_optimisers_facts_name_each_kvis_competitor_price() -> None:
+    found = gaps(("A", Region.NORTH, 87.5, True))
+    facts = FittedOptionFacts(replace(context(), competitor_gaps=found))
+
+    north, south = facts.sku("A", Region.NORTH), facts.sku("A", Region.SOUTH)
+    assert (north.is_kvi, north.competitor_price) == (True, 87.5)
+    assert (south.is_kvi, south.competitor_price) == (False, None)

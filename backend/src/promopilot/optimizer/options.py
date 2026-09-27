@@ -20,8 +20,15 @@ pruned again when their P90 units, or a BUNDLE partner's, exceed the pooled avai
 The survivors carry their predictions, cannibalisation and halo (as if each ran alone, ADR
 0033) and clearance value, as the oracle counts it (ADR 0005, ADR 0017). Minimum margin and
 the budget are plan-level: the optimiser applies them, not this filter (ADR 0007, ADR 0036).
+
+A SKU the brief names for clearance is overstocked in every region of the scope (ADR 0014),
+and its options, as anchor or BUNDLE partner, carry their uplift over the promo window, which
+the optimiser's clearance targets read (ADR 0040). A KVI a competitor undercuts gets a
+price-match option: PCT_OFF at the smallest whole-percent depth that reaches the
+competitor's price, when that depth is not already on the grid (ADR 0031, ADR 0040).
 """
 
+import math
 from collections import Counter, defaultdict
 from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
@@ -30,6 +37,7 @@ from typing import Protocol
 import numpy as np
 import pandas as pd
 
+from promopilot.competitors import CompetitorGaps
 from promopilot.domain import (
     CompanyPolicy,
     Mechanism,
@@ -86,6 +94,9 @@ class OptionContext:
     policy: CompanyPolicy = field(default_factory=CompanyPolicy)
     competitor_prices: Mapping[tuple[Region, str], float] = field(default_factory=dict)
     """Competitor price overrides for the predictions; others are the last known."""
+    competitor_gaps: CompetitorGaps | None = None
+    """The latest competitor gaps (ADR 0031): undercut KVIs get price-match options, and the
+    optimiser checks the KVI price tolerance against them."""
 
 
 TABLE_COLUMNS = [
@@ -98,11 +109,42 @@ TABLE_COLUMNS = [
     "halo_profit",
     "clearance_value",
     "value",
+    "window_uplift",
+    "partner_window_uplift",
 ]
 """`PromoOptions.table`: the demand model's OPTION_COLUMNS, then P90 units against stock
 (the partner's are 0 without a BUNDLE), the line's cannibalisation, halo and clearance value,
 and value = incremental_profit - cannibalised_profit + halo_profit + clearance_value, what
-the option is worth if it runs alone. Money in rupees (ADR 0015)."""
+the option is worth if it runs alone. Money in rupees (ADR 0015).
+
+window_uplift and partner_window_uplift are the change in the anchor's and the partner's
+expected units over the promo window: promo-week units less baseline, net of the pull-forward
+dip that falls inside the window. They are computed only for a SKU with a clearance target,
+and are 0 otherwise (ADR 0040)."""
+
+
+@dataclass(frozen=True)
+class ClearanceBaseline:
+    """What a SKU with a clearance target sells over the promo window with no promotion, and
+    the stock it is measured against, in one region (ADR 0040)."""
+
+    sku_id: str
+    region: Region
+    available_stock: float
+    """Pooled available stock at the as-of week (ADR 0004): positive."""
+    baseline_units: float
+    """Expected units over the promo window with no promotion."""
+
+
+@dataclass(frozen=True)
+class PriceMatch:
+    """The price-match level of a KVI a competitor undercuts in a region (ADR 0040)."""
+
+    sku_id: str
+    region: Region
+    depth_pct: int
+    """The smallest whole-percent PCT_OFF depth at or below the competitor's price."""
+    competitor_price: float
 
 
 @dataclass(frozen=True)
@@ -122,6 +164,10 @@ class PromoOptions:
     """Per anchor SKU, region and mechanism, every reason any of its options was pruned for;
     absent where none was. The mechanism comparator explains an unavailable mechanism with it
     (ADR 0041)."""
+    clearance: tuple[ClearanceBaseline, ...] = ()
+    """One per clearance target and region of the scope with available stock."""
+    price_matches: tuple[PriceMatch, ...] = ()
+    """The price-match level of each undercut KVI in scope, enumerated as PCT_OFF."""
 
 
 class FittedOptionFacts:
@@ -137,13 +183,18 @@ class FittedOptionFacts:
         self._categories = dict(
             zip(products["sku_id"].astype(str), products["category"].astype(str), strict=True)
         )
+        gaps = context.competitor_gaps.gaps if context.competitor_gaps is not None else ()
+        self._gaps = {(gap.region, gap.sku_id): gap for gap in gaps}
 
     def sku(self, sku_id: str, region: Region) -> SkuFacts:
+        gap = self._gaps.get((region, sku_id))
         return SkuFacts(
             category=self._categories[sku_id],
             base_price=self._catalogue.base_price[sku_id],
             unit_cost=self._catalogue.unit_cost[sku_id],
             overstocked=self._stock.is_overstocked(sku_id, region),
+            is_kvi=gap is not None and gap.is_kvi,
+            competitor_price=None if gap is None else gap.competitor_price,
         )
 
     def pairwise_cannibalisation(self, pairs: Sequence[tuple[PlanLine, PlanLine]]) -> np.ndarray:
@@ -172,23 +223,34 @@ def generate_options(
     predict.
     """
     catalogue = _Catalogue.of(context.products)
-    stock = _Stock.of(context.stock)
+    cleared = _clearance_skus(context.products, request)
+    stock = _Stock.of(context.stock).with_overstocked(cleared, request.scope.regions)
     timings = _timings(request.promo_window)
     targets = [
         target for target in TargetSegment if target_segments is None or target in target_segments
     ]
     chosen = [mechanism for mechanism in Mechanism if mechanisms is None or mechanism in mechanisms]
     per_price = len(timings) * len(targets)
+    scoped = _in_scope(context.products, request, sku_ids)
+    matches = _price_matches(context.competitor_gaps, request, set(scoped), catalogue)
 
     pruned: Counter[PruneReason] = Counter()
     pruned_by: defaultdict[tuple[str, Region, Mechanism], set[PruneReason]] = defaultdict(set)
     enumerated = 0
     lines: list[PlanLine] = []
-    for sku_id in _in_scope(context.products, request, sku_ids):
+    for sku_id in scoped:
         partners = _partners(sku_id, context.relations, catalogue)
         for region in request.scope.regions:
             charm_prices: set[float] = set()
-            for mechanism, partner, depth in _price_levels(chosen, partners):
+            levels = list(_price_levels(chosen, partners))
+            match = next((m for m in matches if (m.sku_id, m.region) == (sku_id, region)), None)
+            if (
+                match is not None
+                and Mechanism.PCT_OFF in chosen
+                and match.depth_pct not in DEPTHS[Mechanism.PCT_OFF]
+            ):
+                levels.append((Mechanism.PCT_OFF, None, match.depth_pct))
+            for mechanism, partner, depth in levels:
                 enumerated += per_price
                 reason = _price_reason(
                     sku_id, partner, region, mechanism, depth, catalogue, stock, context.policy
@@ -217,17 +279,23 @@ def generate_options(
                     for target in targets
                 ]
 
+    prediction_context = PredictionContext(
+        policy=context.policy, competitor_prices=context.competitor_prices
+    )
+    clearance = _clearance_baselines(
+        cleared, request, context.demand_model, stock, prediction_context
+    )
     if not lines:
         return PromoOptions(
             (),
             pd.DataFrame(columns=TABLE_COLUMNS),
             enumerated,
             _counts(pruned),
-            _frozen(pruned_by),
+            pruned_by_mechanism=_frozen(pruned_by),
+            clearance=clearance,
+            price_matches=tuple(matches),
         )
-    prediction = context.demand_model.predict(
-        lines, PredictionContext(policy=context.policy, competitor_prices=context.competitor_prices)
-    )
+    prediction = context.demand_model.predict(lines, prediction_context)
     table = prediction.options.reset_index(drop=True)
     table["p90_units"] = table["units"] + P90_Z * table["units_std"]
     table["available_stock"] = [stock.available(line.sku_id, line.region) for line in lines]
@@ -260,8 +328,19 @@ def generate_options(
         + table["halo_profit"]
         + table["clearance_value"]
     )
+    anchor_uplift, partner_uplift = _window_uplifts(
+        kept, cleared, request.promo_window, context.demand_model, prediction_context
+    )
+    table["window_uplift"] = anchor_uplift
+    table["partner_window_uplift"] = partner_uplift
     return PromoOptions(
-        tuple(kept), table[TABLE_COLUMNS], enumerated, _counts(pruned), _frozen(pruned_by)
+        tuple(kept),
+        table[TABLE_COLUMNS],
+        enumerated,
+        _counts(pruned),
+        pruned_by_mechanism=_frozen(pruned_by),
+        clearance=clearance,
+        price_matches=tuple(matches),
     )
 
 
@@ -305,6 +384,130 @@ class _Stock:
 
     def is_overstocked(self, sku_id: str | None, region: Region) -> bool:
         return sku_id is not None and (sku_id, region.value) in self.overstocked
+
+    def with_overstocked(self, sku_ids: Sequence[str], regions: Sequence[Region]) -> "_Stock":
+        """The same stock, with these SKUs overstocked in these regions too."""
+        extra = {(sku_id, region.value) for sku_id in sku_ids for region in regions}
+        return _Stock(self.available_stock, self.overstocked | extra)
+
+
+def _clearance_skus(products: pd.DataFrame, request: PlanningRequest) -> list[str]:
+    """The SKUs the brief names for clearance, all in the request's scope."""
+    scoped = set(_in_scope(products, request, None))
+    named = [target.sku_id for target in request.clearance_targets]
+    outside = [sku_id for sku_id in named if sku_id not in scoped]
+    if outside:
+        raise ValueError(
+            f"a clearance target names SKUs outside the planning request's scope: "
+            f"{', '.join(outside)}"
+        )
+    return named
+
+
+def _price_matches(
+    gaps: CompetitorGaps | None,
+    request: PlanningRequest,
+    scoped: set[str],
+    catalogue: _Catalogue,
+) -> list[PriceMatch]:
+    """The price-match level of each KVI undercut in a region of the scope (ADR 0040)."""
+    if gaps is None:
+        return []
+    matches = []
+    for gap in sorted(gaps.gaps, key=lambda gap: (gap.sku_id, list(Region).index(gap.region))):
+        if not gap.undercut or gap.sku_id not in scoped or gap.region not in request.scope.regions:
+            continue
+        base_price = catalogue.base_price[gap.sku_id]
+        depth = max(1, math.floor((1 - gap.competitor_price / base_price) * 100))
+        while (
+            depth < 100
+            and effective_unit_price(Mechanism.PCT_OFF, base_price, depth)
+            > gap.competitor_price + _EPSILON
+        ):
+            depth += 1
+        matches.append(PriceMatch(gap.sku_id, gap.region, depth, gap.competitor_price))
+    return matches
+
+
+def _clearance_baselines(
+    cleared: Sequence[str],
+    request: PlanningRequest,
+    demand: OptionForecast,
+    stock: _Stock,
+    context: PredictionContext,
+) -> tuple[ClearanceBaseline, ...]:
+    """Each clearance SKU's window baseline and available stock, per region with stock.
+
+    The baseline is the demand model's own no-promotion units (`baseline_units`) of lines
+    that cover the window, so it is on the same footing as each option's uplift.
+    """
+    window = request.promo_window
+    chunks = [
+        (start, min(MAX_DURATION_WEEKS, window.end_week - start + 1))
+        for start in range(window.start_week, window.end_week + 1, MAX_DURATION_WEEKS)
+    ]
+    keys = [
+        (sku_id, region)
+        for sku_id in sorted(cleared)
+        for region in request.scope.regions
+        if stock.available(sku_id, region) > 0
+    ]
+    if not keys:
+        return ()
+    covering = [
+        PlanLine(
+            sku_id=sku_id,
+            region=region,
+            mechanism=Mechanism.PCT_OFF,
+            depth_pct=DEPTHS[Mechanism.PCT_OFF][0],
+            duration_weeks=duration,
+            start_week=start,
+            target_segment=TargetSegment.ALL_CUSTOMERS,
+        )
+        for sku_id, region in keys
+        for start, duration in chunks
+    ]
+    baseline = demand.predict(covering, context).options["baseline_units"].to_numpy(float)
+    per_key = baseline.reshape(len(keys), len(chunks)).sum(axis=1)
+    return tuple(
+        ClearanceBaseline(
+            sku_id=sku_id,
+            region=region,
+            available_stock=stock.available(sku_id, region),
+            baseline_units=float(units),
+        )
+        for (sku_id, region), units in zip(keys, per_key, strict=True)
+    )
+
+
+def _window_uplifts(
+    lines: Sequence[PlanLine],
+    cleared: Sequence[str],
+    window: PromoWindow,
+    demand: OptionForecast,
+    context: PredictionContext,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Each line's change in its anchor's and its partner's units over the promo window,
+    net of the pull-forward dip inside it; computed only for SKUs with a clearance target."""
+    anchor, partner = np.zeros(len(lines)), np.zeros(len(lines))
+    names = set(cleared)
+    rows = [n for n, line in enumerate(lines) if names & set(line.skus)]
+    if not rows:
+        return anchor, partner
+    paths = demand.line_paths([lines[n] for n in rows], context)
+    inside = paths[(paths["week_id"] >= window.start_week) & (paths["week_id"] <= window.end_week)]
+    change = (
+        (inside["units"] - inside["baseline_units"])
+        .groupby([inside["option"], inside["sku_id"]])
+        .sum()
+    )
+    for k, n in enumerate(rows):
+        line = lines[n]
+        if line.sku_id in names:
+            anchor[n] = float(change.get((k, line.sku_id), 0.0))
+        if line.bundle_partner_sku_id in names:
+            partner[n] = float(change.get((k, line.bundle_partner_sku_id), 0.0))
+    return anchor, partner
 
 
 def _in_scope(
