@@ -3,6 +3,7 @@ import json
 import pytest
 
 from promopilot.agents.tools.inventory_status import pooled_stock
+from promopilot.competitors import competitor_gaps
 from promopilot.datagen import GeneratedDataset, GeneratorConfig, generate, load_config
 from promopilot.domain import CompanyPolicy, PlanningRequest, PromoWindow, Region, Scope
 from promopilot.models import demand, relations
@@ -124,7 +125,8 @@ DEMO_BRIEF = PlanningRequest(
 
 @pytest.fixture(scope="session")
 def demo_context(default_dataset: GeneratedDataset) -> OptionContext:
-    """The seed-42 world fitted as `make train` fits it, with its pooled stock (marker `model`)."""
+    """The seed-42 world fitted as `make train` fits it, with its pooled stock and competitor
+    gaps (marker `model`)."""
     history = history_of(default_dataset)
     model = demand.fit(history, DEMO_AS_OF, DEFAULT_SEED)
     found = relations.fit(
@@ -142,4 +144,12 @@ def demo_context(default_dataset: GeneratedDataset) -> OptionContext:
             policy,
         ),
         policy=policy,
+        # Undercut KVIs get price-match options, as in a planning session (ADR 0040).
+        competitor_gaps=competitor_gaps(
+            default_dataset.products,
+            default_dataset.competitor_prices,
+            as_of_week=DEMO_AS_OF,
+            policy=policy,
+            regions=DEMO_BRIEF.scope.regions,
+        ),
     )
