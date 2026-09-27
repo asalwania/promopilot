@@ -250,6 +250,24 @@
         "title": "CompetitorGaps",
         "type": "object"
       },
+      "CompetitorReaction": {
+        "additionalProperties": false,
+        "description": "The competitor-reaction scenario (F-09 AC2, ADR 0045): in each run, each plan line's\ncompetitor matches its discount with this probability, independently of the other lines.",
+        "properties": {
+          "match_probability": {
+            "description": "Chance, per plan line and run, that the competitor matches our discount.",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Match Probability",
+            "type": "number"
+          }
+        },
+        "required": [
+          "match_probability"
+        ],
+        "title": "CompetitorReaction",
+        "type": "object"
+      },
       "Complement": {
         "properties": {
           "lift": {
@@ -1068,6 +1086,16 @@
       "PlanSimulation": {
         "description": "What `simulate` returns for a promo plan, and what a plan revision stores.",
         "properties": {
+          "competitor_reaction": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CompetitorReaction"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "lines": {
             "default": [],
             "items": {
@@ -1615,12 +1643,18 @@
       },
       "SimulatePlanRequest": {
         "additionalProperties": false,
-        "description": "Re-simulate a session's latest plan revision (ADR 0043). The seed is configuration.",
+        "description": "Re-simulate a session's latest plan revision (ADR 0043), optionally against a\ncompetitor reaction (ADR 0045). The seed is configuration.",
         "properties": {
           "competitor_reaction": {
-            "description": "Reserved for the competitor-reaction scenario (#41); only null for now.",
-            "title": "Competitor Reaction",
-            "type": "null"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CompetitorReaction"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The competitor-reaction scenario; omit or null for a competitor that never reacts."
           },
           "n_runs": {
             "anyOf": [

@@ -9,6 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from promopilot.agents.tools.estimate_demand import ModelVersion
 from promopilot.agents.tools.get_relations import Complement, Substitute
 from promopilot.domain import (
+    CompetitorReaction,
     PlanningRequest,
     PlanningSession,
     PlanRevision,
@@ -110,7 +111,8 @@ class SessionResponse(BaseModel):
 
 
 class SimulatePlanRequest(BaseModel):
-    """Re-simulate a session's latest plan revision (ADR 0043). The seed is configuration."""
+    """Re-simulate a session's latest plan revision (ADR 0043), optionally against a
+    competitor reaction (ADR 0045). The seed is configuration."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -120,9 +122,10 @@ class SimulatePlanRequest(BaseModel):
         le=MAX_RUNS,
         description="Runs to simulate; omit for the configured default (SIMULATION_RUNS).",
     )
-    competitor_reaction: None = Field(
+    competitor_reaction: CompetitorReaction | None = Field(
         default=None,
-        description="Reserved for the competitor-reaction scenario (#41); only null for now.",
+        description="The competitor-reaction scenario; omit or null for a competitor that "
+        "never reacts.",
     )
 
 

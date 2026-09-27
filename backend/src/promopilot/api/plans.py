@@ -4,7 +4,8 @@
 plan revision, the one `GET /api/sessions/{id}` shows. The revision is simulated on the latest
 demand model with the configured seed, units capped at the stock of the planning request's
 as-of week, and the result replaces the revision's stored simulation. The revision number and
-its plan lines stay as they are.
+its plan lines stay as they are. An optional competitor reaction stress-tests the plan against a
+price war, and the stored simulation records it (ADR 0045).
 """
 
 from typing import Protocol
@@ -16,7 +17,13 @@ from promopilot.agents.tools import ToolCallError
 from promopilot.agents.tools.estimate_demand import DemandModelSource
 from promopilot.agents.tools.simulate_plan import SimulationData, simulate_on_latest_model
 from promopilot.api.schemas import PlanSimulationResponse, SimulatePlanRequest
-from promopilot.domain import CompanyPolicy, PlanningSession, PlanSimulation, PromoPlan
+from promopilot.domain import (
+    CompanyPolicy,
+    CompetitorReaction,
+    PlanningSession,
+    PlanSimulation,
+    PromoPlan,
+)
 from promopilot.simulator import SimulationSettings
 
 UNAVAILABLE = {"model_unavailable", "data_unavailable"}
@@ -47,7 +54,12 @@ class PlanService:
         self._policy = policy
         self._defaults = defaults
 
-    async def simulate(self, session_id: UUID, n_runs: int | None) -> PlanSimulationResponse | None:
+    async def simulate(
+        self,
+        session_id: UUID,
+        n_runs: int | None,
+        competitor_reaction: CompetitorReaction | None = None,
+    ) -> PlanSimulationResponse | None:
         """None when the session is unknown or has no plan revision yet. Raises
         `ToolCallError` when the revision cannot be simulated now (`simulate_on_latest_model`)."""
         session = await self._revisions.get(session_id)
@@ -63,6 +75,7 @@ class PlanService:
             policy=self._policy,
             n_runs=n_runs or self._defaults.n_runs,
             seed=self._defaults.seed,
+            competitor_reaction=competitor_reaction,
         )
         await self._revisions.save_simulation(session_id, revision.number, simulated.simulation)
         return PlanSimulationResponse(
@@ -95,7 +108,7 @@ def plans_router(plans: PlanService) -> APIRouter:
     async def simulate_plan(session_id: UUID, body: SimulatePlanRequest) -> PlanSimulationResponse:
         """Re-simulate the session's latest plan revision and store the result against it."""
         try:
-            found = await plans.simulate(session_id, body.n_runs)
+            found = await plans.simulate(session_id, body.n_runs, body.competitor_reaction)
         except ToolCallError as failure:
             code = (
                 status.HTTP_503_SERVICE_UNAVAILABLE

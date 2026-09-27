@@ -60,6 +60,19 @@ class RegionStockout(BaseModel):
     """The share of runs in which at least one of the region's plan lines ran out."""
 
 
+class CompetitorReaction(BaseModel):
+    """The competitor-reaction scenario (F-09 AC2, ADR 0045): in each run, each plan line's
+    competitor matches its discount with this probability, independently of the other lines."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    match_probability: float = Field(
+        ge=0,
+        le=1,
+        description="Chance, per plan line and run, that the competitor matches our discount.",
+    )
+
+
 class PlanSimulation(BaseModel):
     """What `simulate` returns for a promo plan, and what a plan revision stores."""
 
@@ -67,6 +80,8 @@ class PlanSimulation(BaseModel):
 
     n_runs: int = Field(ge=1)
     seed: int
+    competitor_reaction: CompetitorReaction | None = None
+    """The scenario simulated; None when the competitor never reacts (ADR 0045)."""
     lines: tuple[LineSimulation, ...] = ()
     """In plan order."""
     total: SimulatedOutcomes

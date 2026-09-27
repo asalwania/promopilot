@@ -219,6 +219,10 @@ _Avoid_: version, iteration
 The Monte Carlo runs of a promo plan: each run samples the demand model's terms within their uncertainty and weekly demand noise, and caps units at available stock. It reports P10/P50/P90 of each plan line's and the plan's outcomes (ADR 0042).
 _Avoid_: forecast, scenario (which belongs to evals)
 
+**Competitor reaction**:
+A simulation's optional price-war stress test: in each run, the competitor matches each plan line's discount with a given match probability, drawn per line. A matched competitor cuts its price by the same share, so the competitor price index returns to where it was before the promotion, and undercut-sensitive SKUs (positive competitor sensitivity γ) lose the demand the discount won from the competitor (ADR 0045).
+_Avoid_: price war (for the simulation setting), scenario (which belongs to evals)
+
 **Stock-out probability**:
 The share of a simulation's runs in which a plan line's demand reached the available stock of its SKU (or of a BUNDLE's partner); for a region, the share in which at least one of its plan lines did.
 _Avoid_: stock-out risk (as a number)

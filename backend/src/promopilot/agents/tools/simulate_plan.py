@@ -3,7 +3,8 @@
 The planner passes the plan lines; the simulator samples them on the latest demand model and
 caps units at the pooled available stock of the bound as-of week (SPEC §9.5, ADR 0042). The seed
 and the default number of runs are bound when the tool is built, so the LLM cannot change the
-samples; it may only ask for more or fewer runs within the simulator's bounds.
+samples; it may only ask for more or fewer runs within the simulator's bounds, and for the
+competitor-reaction scenario (F-09 AC2, ADR 0045).
 """
 
 import asyncio
@@ -16,7 +17,13 @@ from promopilot.agents.tools.as_of import AsOfWeekSource, current_as_of_week
 from promopilot.agents.tools.estimate_demand import DemandModelSource, ModelVersion
 from promopilot.agents.tools.inventory_status import pooled_stock
 from promopilot.agents.tools.registry import Tool, ToolCallError
-from promopilot.domain import CompanyPolicy, PlanLine, PlanSimulation, PromoPlan
+from promopilot.domain import (
+    CompanyPolicy,
+    CompetitorReaction,
+    PlanLine,
+    PlanSimulation,
+    PromoPlan,
+)
 from promopilot.simulator import (
     MAX_RUNS,
     MIN_RUNS,
@@ -35,8 +42,11 @@ DESCRIPTION = (
     "sell-through and promo spend for each plan line (over its promo weeks; units and "
     "sell-through are the anchor SKU's, money includes a BUNDLE's partner) and for the whole "
     "plan, the stock-out probability of each line (the share of runs whose demand reached "
-    "the available stock) and of each region (at least one of its lines ran out). The seed is "
-    "fixed, so the same plan gives the same result."
+    "the available stock) and of each region (at least one of its lines ran out). To "
+    "stress-test a price war, pass competitor_reaction: in each run, the competitor matches "
+    "each line's discount with probability match_probability, which removes the promotion's "
+    "gain on the competitor's price. The seed is fixed, so the same plan and scenario give the "
+    "same result."
 )
 
 
@@ -60,6 +70,10 @@ class SimulatePlanInput(BaseModel):
         ge=MIN_RUNS,
         le=MAX_RUNS,
         description="Runs to simulate; omit for the default.",
+    )
+    competitor_reaction: CompetitorReaction | None = Field(
+        default=None,
+        description="The competitor-reaction scenario; omit for a competitor that never reacts.",
     )
 
 
@@ -100,6 +114,7 @@ def simulate_plan_tool(
             policy=policy,
             n_runs=arguments.n_runs or defaults.n_runs,
             seed=defaults.seed,
+            competitor_reaction=arguments.competitor_reaction,
         )
 
     return Tool(
@@ -120,9 +135,11 @@ async def simulate_on_latest_model(
     policy: CompanyPolicy,
     n_runs: int,
     seed: int,
+    competitor_reaction: CompetitorReaction | None = None,
 ) -> SimulatePlanOutput:
     """Simulate `plan` on the latest demand model, units capped at the pooled available stock
-    of the `as_of_week` snapshot. The tool and the re-simulate endpoint share it (ADR 0043).
+    of the `as_of_week` snapshot, optionally with a competitor reaction (ADR 0045). The tool
+    and the re-simulate endpoint share it (ADR 0043).
 
     Raises `ToolCallError`: model_unavailable with no trained demand model, data_unavailable
     with no inventory snapshot, invalid_input when the model cannot simulate the plan.
@@ -141,7 +158,14 @@ async def simulate_on_latest_model(
     )
     try:
         # Sampling is CPU-bound: keep the event loop free (ADR 0025).
-        simulation = await asyncio.to_thread(simulate, plan, inputs, n_runs=n_runs, seed=seed)
+        simulation = await asyncio.to_thread(
+            simulate,
+            plan,
+            inputs,
+            n_runs=n_runs,
+            seed=seed,
+            competitor_reaction=competitor_reaction,
+        )
     except ValueError as error:
         raise ToolCallError("invalid_input", str(error)) from error
     entry = demand[0]

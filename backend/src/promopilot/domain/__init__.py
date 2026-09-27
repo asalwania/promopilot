@@ -21,6 +21,7 @@ from promopilot.domain.selection import (
 )
 from promopilot.domain.session import PlanningSession, SessionStatus
 from promopilot.domain.simulation import (
+    CompetitorReaction,
     LineSimulation,
     Percentiles,
     PlanSimulation,
@@ -35,6 +36,7 @@ __all__ = [
     "ClearanceShortfall",
     "ClearanceTarget",
     "CompanyPolicy",
+    "CompetitorReaction",
     "ConstraintKind",
     "ConstraintSource",
     "LineSimulation",

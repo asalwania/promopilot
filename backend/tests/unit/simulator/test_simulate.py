@@ -12,7 +12,9 @@ from hypothesis import strategies as st
 
 from promopilot.domain import (
     CompanyPolicy,
+    CompetitorReaction,
     Mechanism,
+    Percentiles,
     PlanLine,
     PlanSimulation,
     PromoPlan,
@@ -20,7 +22,7 @@ from promopilot.domain import (
     TargetSegment,
 )
 from promopilot.economics import effective_unit_price
-from promopilot.models.demand import PredictionContext, ResponseRows
+from promopilot.models.demand import COMPETITOR_TERM, PredictionContext, ResponseRows
 from promopilot.simulator import SimulationInputs, simulate
 
 FREE = CompanyPolicy(fixed_cost_per_line_week=dict.fromkeys(Mechanism, 0.0))
@@ -32,13 +34,19 @@ HUGE = 1e9
 
 @dataclass(frozen=True)
 class HandBuilt:
-    """Response rows with one term, beta x log(p / base price), per store and promo week."""
+    """Response rows with one term, beta x log(p / base price), per store and promo week.
+
+    With `gamma`, a second term: the competitor covariate log(cp / p) - log r, for a competitor
+    priced at our base price (cp = base price) and a reference index r of 1.
+    """
 
     beta: float = -2.0
     beta_se: float = 0.0
     dispersion: float = HUGE
     baseline: Mapping[str, float] = field(default_factory=lambda: {"S1": 1_000.0})
     """Baseline units per store and week."""
+    gamma: Mapping[str, float] | None = None
+    """Competitor sensitivity per SKU, known exactly; None leaves the term out."""
 
     def response_rows(
         self, options: Sequence[PlanLine], context: PredictionContext
@@ -65,11 +73,18 @@ class HandBuilt:
                         )
         rows = pd.DataFrame(records)
         skus = sorted(PRICES)
+        design = pd.DataFrame({"beta": np.log(rows["price"] / rows["base_price"])})
+        estimate = pd.DataFrame({"beta": self.beta}, index=skus)
+        std_error = pd.DataFrame({"beta": self.beta_se}, index=skus)
+        if self.gamma is not None:
+            design[COMPETITOR_TERM] = np.log(rows["base_price"] / rows["price"])
+            estimate[COMPETITOR_TERM] = [self.gamma.get(sku, 0.0) for sku in skus]
+            std_error[COMPETITOR_TERM] = 0.0
         return ResponseRows(
             rows=rows,
-            design=pd.DataFrame({"beta": np.log(rows["price"] / rows["base_price"])}),
-            estimate=pd.DataFrame({"beta": self.beta}, index=skus),
-            std_error=pd.DataFrame({"beta": self.beta_se}, index=skus),
+            design=design,
+            estimate=estimate,
+            std_error=std_error,
             dispersion=pd.Series(self.dispersion, index=skus),
         )
 
@@ -119,9 +134,16 @@ def inputs(
 
 
 def run(
-    plan: PromoPlan, given_inputs: SimulationInputs, *, n_runs: int = 1_000, seed: int = 7
+    plan: PromoPlan,
+    given_inputs: SimulationInputs,
+    *,
+    n_runs: int = 1_000,
+    seed: int = 7,
+    reaction: CompetitorReaction | None = None,
 ) -> PlanSimulation:
-    return simulate(plan, given_inputs, n_runs=n_runs, seed=seed)
+    if reaction is None:
+        return simulate(plan, given_inputs, n_runs=n_runs, seed=seed)
+    return simulate(plan, given_inputs, n_runs=n_runs, seed=seed, competitor_reaction=reaction)
 
 
 def expected_units(demand: HandBuilt, planned: PlanLine) -> float:
@@ -316,8 +338,138 @@ def test_an_empty_plan_simulates_to_zero() -> None:
     assert result.total.sell_through is None
 
 
+SENSITIVE = HandBuilt(beta=-2.0, gamma={"A": 1.5}, baseline={"S1": 100_000.0})
+"""A is undercut-sensitive (gamma > 0), B and C are not; noise is tiny next to the means."""
+MATCH = CompetitorReaction(match_probability=1.0)
+
+
+def expected_with_competitor(demand: HandBuilt, planned: PlanLine, *, matched: bool) -> float:
+    """By hand: a matched competitor cuts its price as far as ours, so log(cp / p) is back at
+    its reference and the competitor term adds nothing; unmatched, it adds gamma x log(base / p)."""
+    assert demand.gamma is not None
+    base = PRICES[planned.sku_id]
+    price = effective_unit_price(planned.mechanism, base, planned.depth_pct)
+    gamma = 0.0 if matched else demand.gamma.get(planned.sku_id, 0.0)
+    return expected_units(demand, planned) * float(np.exp(gamma * np.log(base / price)))
+
+
+def test_a_matched_discount_lowers_p50_units_on_an_undercut_sensitive_sku() -> None:
+    sensitive = line("A", duration_weeks=1)
+    plan = PromoPlan(lines=(sensitive, line("B", duration_weeks=1)))
+
+    calm = run(plan, inputs(SENSITIVE))
+    war = run(plan, inputs(SENSITIVE), reaction=MATCH)
+
+    assert war.lines[0].units.p50 < calm.lines[0].units.p50
+    assert calm.lines[0].units.p50 == pytest.approx(
+        expected_with_competitor(SENSITIVE, sensitive, matched=False), rel=0.01
+    )
+    assert war.lines[0].units.p50 == pytest.approx(
+        expected_with_competitor(SENSITIVE, sensitive, matched=True), rel=0.01
+    )
+    assert war.total.gross_profit.p50 < calm.total.gross_profit.p50
+    # B has no competitor sensitivity: the same draws give it the very same outcomes.
+    assert war.lines[1] == calm.lines[1]
+
+
+@pytest.mark.parametrize(
+    ("mechanism", "depth_pct"),
+    [(Mechanism.PCT_OFF, 30), (Mechanism.BOGO, 50), (Mechanism.FIXED_PRICE, 15)],
+)
+def test_the_competitor_matches_each_mechanisms_effective_price(
+    mechanism: Mechanism, depth_pct: int
+) -> None:
+    planned = line("A", mechanism=mechanism, depth_pct=depth_pct, duration_weeks=1)
+
+    war = run(PromoPlan(lines=(planned,)), inputs(SENSITIVE), reaction=MATCH)
+
+    assert war.lines[0].units.p50 == pytest.approx(
+        expected_with_competitor(SENSITIVE, planned, matched=True), rel=0.01
+    )
+
+
+def test_the_competitor_matches_a_bundle_partners_discount_too() -> None:
+    demand = HandBuilt(beta=0.0, gamma={"B": 1.5}, baseline={"S1": 100_000.0})
+    planned = line("A", mechanism=Mechanism.BUNDLE, depth_pct=20, duration_weeks=1, partner="B")
+
+    calm = run(PromoPlan(lines=(planned,)), inputs(demand))
+    war = run(PromoPlan(lines=(planned,)), inputs(demand), reaction=MATCH)
+
+    # The anchor A is not undercut-sensitive; the partner B sells fewer, at Rs 40 each.
+    assert war.lines[0].units == calm.lines[0].units
+    lost = 100_000.0 * (np.exp(1.5 * np.log(50.0 / 40.0)) - 1.0) * 40.0
+    assert calm.lines[0].revenue.p50 - war.lines[0].revenue.p50 == pytest.approx(lost, rel=0.02)
+
+
+def test_the_competitor_reacts_to_each_plan_line_on_its_own() -> None:
+    north = line("A", duration_weeks=1)
+    west = line("A", region=Region.WEST, duration_weeks=1)
+    matched = expected_with_competitor(SENSITIVE, north, matched=True)
+    unmatched = expected_with_competitor(SENSITIVE, north, matched=False)
+
+    result = run(
+        PromoPlan(lines=(north, west)),
+        inputs(SENSITIVE),
+        reaction=CompetitorReaction(match_probability=0.5),
+    )
+
+    for simulated in result.lines:
+        assert simulated.units.p10 == pytest.approx(matched, rel=0.01)
+        assert simulated.units.p90 == pytest.approx(unmatched, rel=0.01)
+    # Independent draws per line: in about half the runs exactly one of the two lines is matched.
+    total = result.total.units
+    assert total.p10 == pytest.approx(2 * matched, rel=0.01)
+    assert total.p50 == pytest.approx(matched + unmatched, rel=0.01)
+    assert total.p90 == pytest.approx(2 * unmatched, rel=0.01)
+
+
+def test_no_chance_of_a_match_gives_the_same_results_as_no_scenario() -> None:
+    demand = HandBuilt(beta=-2.0, beta_se=0.4, dispersion=2.0, gamma={"A": 1.5, "B": 0.5})
+    plan = PromoPlan(lines=(line("A"), line("B", region=Region.WEST)))
+    never = CompetitorReaction(match_probability=0.0)
+
+    omitted = run(plan, inputs(demand), seed=5)
+    zero = run(plan, inputs(demand), seed=5, reaction=never)
+
+    assert omitted.competitor_reaction is None
+    assert zero.competitor_reaction == never
+    assert zero.model_copy(update={"competitor_reaction": None}) == omitted
+
+
+def test_omitting_the_scenario_gives_the_results_from_before_it() -> None:
+    # Pinned on main before the competitor-reaction scenario (#41): the seeded draws are unchanged.
+    plan = PromoPlan(lines=(line("A"), line("B", region=Region.WEST)))
+
+    result = run(plan, inputs(NOISY), n_runs=500, seed=11)
+
+    assert result.lines[0].units == Percentiles(p10=85.0, p50=150.5, p90=242.10000000000002)
+    assert result.lines[1].revenue == Percentiles(p10=3596.0, p50=5780.0, p90=9324.0)
+    assert result.total.gross_profit == Percentiles(p10=3048.0, p50=4545.0, p90=6502.0)
+    assert result.total.promo_spend == Percentiles(p10=3048.0, p50=4545.0, p90=6502.0)
+
+
+def test_the_same_seed_and_scenario_give_identical_results() -> None:
+    demand = HandBuilt(beta=-2.0, beta_se=0.4, dispersion=2.0, gamma={"A": 1.5})
+    plan = PromoPlan(lines=(line("A"), line("A", region=Region.WEST)))
+    half = CompetitorReaction(match_probability=0.5)
+
+    first = run(plan, inputs(demand), seed=9, reaction=half)
+    second = run(plan, inputs(demand), seed=9, reaction=half)
+
+    assert first == second
+    assert first.competitor_reaction == half
+
+
+def test_an_empty_plan_records_its_competitor_reaction() -> None:
+    result = run(PromoPlan(), inputs(NOISY), n_runs=100, reaction=MATCH)
+
+    assert result.competitor_reaction == MATCH
+
+
 @st.composite
-def small_plans(draw: st.DrawFn) -> tuple[PromoPlan, HandBuilt, dict[tuple[str, Region], float]]:
+def small_plans(
+    draw: st.DrawFn,
+) -> tuple[PromoPlan, HandBuilt, dict[tuple[str, Region], float], CompetitorReaction | None]:
     skus = draw(st.lists(st.sampled_from(sorted(PRICES)), min_size=1, max_size=3, unique=True))
     lines = tuple(
         line(
@@ -336,21 +488,26 @@ def small_plans(draw: st.DrawFn) -> tuple[PromoPlan, HandBuilt, dict[tuple[str, 
             "S1": draw(st.floats(0.0, 50.0)),
             "S2": draw(st.floats(0.0, 50.0)),
         },
+        gamma={sku: draw(st.floats(0.0, 3.0)) for sku in PRICES},
     )
     available = {
         (planned.sku_id, planned.region): draw(st.floats(-10.0, 500.0)) for planned in lines
     }
-    return PromoPlan(lines=lines), demand, available
+    reaction = draw(
+        st.none() | st.builds(CompetitorReaction, match_probability=st.floats(0.0, 1.0))
+    )
+    return PromoPlan(lines=lines), demand, available, reaction
 
 
 @settings(max_examples=40, deadline=None, suppress_health_check=[HealthCheck.too_slow])
 @given(case=small_plans(), seed=st.integers(0, 2**32 - 1))
 def test_p10_p50_p90_are_ordered_for_every_metric(
-    case: tuple[PromoPlan, HandBuilt, dict[tuple[str, Region], float]], seed: int
+    case: tuple[PromoPlan, HandBuilt, dict[tuple[str, Region], float], CompetitorReaction | None],
+    seed: int,
 ) -> None:
-    plan, demand, available = case
+    plan, demand, available, reaction = case
 
-    result = run(plan, inputs(demand, available), n_runs=200, seed=seed)
+    result = run(plan, inputs(demand, available), n_runs=200, seed=seed, reaction=reaction)
 
     for outcomes in [*result.lines, result.total]:
         ranges = [
