@@ -255,7 +255,7 @@ export interface components {
          * @description How sure the optimiser is that a constraint binds (ADR 0038).
          * @enum {string}
          */
-        BindingEvidence: "exact" | "lower_bound" | "unproven";
+        BindingEvidence: "exact" | "lower_bound" | "unproven" | "infeasible";
         /**
          * ClearanceShortfall
          * @description A clearance target the plan misses: no plan within the other constraints reaches it,
@@ -689,6 +689,7 @@ export interface components {
              * @default []
              */
             policy_findings: components["schemas"]["PolicyFinding"][];
+            relaxation?: components["schemas"]["Relaxation"] | null;
             simulation?: components["schemas"]["PlanSimulation"] | null;
             solver_status?: components["schemas"]["SolveStatus"] | null;
         };
@@ -871,6 +872,39 @@ export interface components {
             sku_id: string;
             /** Substitutes */
             substitutes: components["schemas"]["Substitute"][];
+        };
+        /**
+         * Relaxation
+         * @description The smallest change to the brief's constraints that makes an infeasible request
+         *     feasible: the least sum of each change as a share of the brief's value (ADR 0044).
+         */
+        Relaxation: {
+            /** Changes */
+            changes: components["schemas"]["RelaxedConstraint"][];
+            /** Policy Binds */
+            policy_binds: boolean;
+            /** Proven */
+            proven: boolean;
+        };
+        /**
+         * RelaxedConstraint
+         * @description One brief constraint the relaxation changes, and by how much (ADR 0044).
+         */
+        RelaxedConstraint: {
+            /** Change */
+            change: number;
+            /** Current */
+            current: number;
+            kind: components["schemas"]["ConstraintKind"];
+            /** Policy Allows */
+            policy_allows?: number | null;
+            region?: components["schemas"]["Region"] | null;
+            /** Relaxed */
+            relaxed: number | null;
+            /** Sku Id */
+            sku_id?: string | null;
+            /** @default brief */
+            source: components["schemas"]["ConstraintSource"];
         };
         /**
          * Scope

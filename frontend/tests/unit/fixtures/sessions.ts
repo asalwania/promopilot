@@ -233,3 +233,59 @@ export const failedSession: SessionResponse = {
   status: "failed",
   error: "The brief could not be planned: the brief states no marketing budget",
 };
+
+// A request no plan can reach every clearance target of, and its relaxation (ADR 0044).
+export const infeasibleSession: SessionResponse = {
+  ...awaitingApprovalSession,
+  plan_revision: {
+    number: 1,
+    lines: [],
+    solver_status: "INFEASIBLE",
+    objective: 0,
+    binding_constraints: [
+      {
+        kind: "marketing_budget",
+        source: "brief",
+        limit: 200000,
+        evidence: "infeasible",
+        objective_gain: null,
+      },
+      {
+        kind: "clearance_target",
+        source: "brief",
+        limit: 0.5,
+        sku_id: "SKU0029",
+        region: "North",
+        evidence: "infeasible",
+        objective_gain: null,
+      },
+    ],
+    not_selected: [],
+    clearance_shortfalls: [
+      {
+        sku_id: "SKU0029",
+        region: "North",
+        target: 0.5,
+        expected_sell_through: 0.42,
+        shortfall_units: 96,
+      },
+    ],
+    policy_findings: [],
+    relaxation: {
+      changes: [
+        {
+          kind: "marketing_budget",
+          source: "brief",
+          region: null,
+          sku_id: null,
+          current: 200000,
+          relaxed: 214500,
+          change: 0.0725,
+          policy_allows: null,
+        },
+      ],
+      policy_binds: false,
+      proven: true,
+    },
+  },
+};

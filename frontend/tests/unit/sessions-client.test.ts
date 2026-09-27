@@ -6,7 +6,11 @@ import {
   SessionLoadError,
 } from "@/lib/api/sessions";
 
-import { awaitingApprovalSession, SESSION_ID } from "./fixtures/sessions";
+import {
+  awaitingApprovalSession,
+  infeasibleSession,
+  SESSION_ID,
+} from "./fixtures/sessions";
 
 type Call = { url: string; init?: RequestInit };
 
@@ -106,6 +110,17 @@ describe("getSession", () => {
     expect(calls.map((call) => call.url)).toEqual([
       `/api/sessions/${SESSION_ID}`,
     ]);
+  });
+
+  it("reads an infeasible session with its binding constraints and relaxation", async () => {
+    const { fetchImpl } = recordingFetch(() =>
+      Response.json(infeasibleSession),
+    );
+
+    const session = await getSession(SESSION_ID, fetchImpl);
+
+    expect(session).toEqual(infeasibleSession);
+    expect(session.plan_revision?.relaxation?.changes[0].relaxed).toBe(214500);
   });
 
   it("fails as not found when the API does not know the session", async () => {

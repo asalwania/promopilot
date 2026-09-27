@@ -39,6 +39,15 @@ one is not, the plan comes as close as any can and `clearance_shortfalls` report
 it falls short. The empty plan is always feasible in the first phase, so there is always a
 plan to return, even when no better one is found in time.
 
+A request is infeasible exactly when no plan reaches every clearance target within its other
+constraints: every other constraint is one the empty plan keeps (ADR 0044). Proven so, the
+status is INFEASIBLE (a timeout is FEASIBLE, never INFEASIBLE). The closest plan still comes
+back, and so does the relaxation: the smallest change to the brief's own constraints (budget,
+regional caps, minimum margin down to the floor, a tighter promoted-SKU cap, a KVI tolerance
+the brief turned on, the clearance targets) that makes it feasible, each change weighed in
+basis points of the brief's value. Company policy is never relaxed; when only lowering a
+target helps, policy binds.
+
 Beside the plan, `solve` reports (ADR 0038):
 
 - the binding constraints: each plan-level constraint whose removal gives a strictly better
@@ -208,49 +217,31 @@ def solve(
     outcome = problem.solve(
         settings, seed, hint=closest.picked if closest else (), time_limit=time_limit
     )
-    if outcome.status == cp_model.INFEASIBLE:
-        return OptimisationResult(
-            SolveStatus.INFEASIBLE,
-            0.0,
-            PromoPlan(),
-            (),
-            0.0,
-            problem.choosable,
-            0,
-            policy_findings=findings,
-        )
     found = outcome.status in (cp_model.OPTIMAL, cp_model.FEASIBLE)
     # No plan found in time: the closest plan keeps every constraint, the lowered targets
     # included; without targets the empty plan does.
     picked = outcome.picked if found else (closest.picked if closest else [])
     charged = outcome.charged if found else problem.charged(picked)
-    proven = outcome.status == cp_model.OPTIMAL and (closest is None or closest.proven)
     objective = int(problem.value[picked].sum()) - charged
+    shortfalls = problem.shortfalls(picked)
     relaxation: Relaxation | None = None
+    binding: tuple[BindingConstraint, ...]
     if closest is not None and any(closest.shortfall.values()):
-        # No plan found reaches every clearance target (ADR 0044): the brief's own targets
-        # say how far each must come down, or what else must give.
+        # No plan found reaches every clearance target (ADR 0044): the brief's own constraints
+        # say what must give. Only a proven shortfall is infeasible, never a timeout.
         relaxation, relaxed_plan = brief.relax(closest, settings, seed)
-        if closest.proven:
-            # Proven: no plan reaches every target. A timeout is never reported infeasible.
-            return OptimisationResult(
-                status=SolveStatus.INFEASIBLE,
-                objective=objective / PAISE,
-                plan=PromoPlan(lines=tuple(problem.lines[n] for n in picked)),
-                selected=tuple(problem.eligible[n] for n in picked),
-                pairwise_cannibalisation=charged / PAISE,
-                eligible=problem.choosable,
-                pairs=len(problem.pairs),
-                binding_constraints=brief.infeasible(
-                    relaxation, relaxed_plan, problem.shortfalls(picked)
-                ),
-                why_chosen=tuple(problem.why_chosen(n) for n in picked),
-                not_selected=problem.not_selected(picked),
-                clearance_shortfalls=problem.shortfalls(picked),
-                policy_findings=findings,
-                relaxation=relaxation,
-            )
-    status = SolveStatus.OPTIMAL if proven else SolveStatus.FEASIBLE
+        status = SolveStatus.INFEASIBLE if closest.proven else SolveStatus.FEASIBLE
+        binding = (
+            brief.infeasible(relaxation, relaxed_plan, shortfalls)
+            if closest.proven
+            else problem.unproven()
+        )
+    elif outcome.status == cp_model.OPTIMAL and (closest is None or closest.proven):
+        status = SolveStatus.OPTIMAL
+        binding = problem.binding(picked, objective, settings, seed)
+    else:
+        status = SolveStatus.FEASIBLE
+        binding = problem.unproven()
     return OptimisationResult(
         status=status,
         objective=objective / PAISE,
@@ -259,12 +250,10 @@ def solve(
         pairwise_cannibalisation=charged / PAISE,
         eligible=problem.choosable,
         pairs=len(problem.pairs) if found or closest else 0,
-        binding_constraints=(
-            problem.binding(picked, objective, settings, seed) if proven else problem.unproven()
-        ),
+        binding_constraints=binding,
         why_chosen=tuple(problem.why_chosen(n) for n in picked),
         not_selected=problem.not_selected(picked),
-        clearance_shortfalls=problem.shortfalls(picked),
+        clearance_shortfalls=shortfalls,
         policy_findings=findings,
         relaxation=relaxation,
     )

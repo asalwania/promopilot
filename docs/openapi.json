@@ -76,7 +76,8 @@
         "enum": [
           "exact",
           "lower_bound",
-          "unproven"
+          "unproven",
+          "infeasible"
         ],
         "title": "BindingEvidence",
         "type": "string"
@@ -1008,6 +1009,16 @@
             "title": "Policy Findings",
             "type": "array"
           },
+          "relaxation": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Relaxation"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "simulation": {
             "anyOf": [
               {
@@ -1480,6 +1491,104 @@
           "complements"
         ],
         "title": "RelationsResponse",
+        "type": "object"
+      },
+      "Relaxation": {
+        "description": "The smallest change to the brief's constraints that makes an infeasible request\nfeasible: the least sum of each change as a share of the brief's value (ADR 0044).",
+        "properties": {
+          "changes": {
+            "items": {
+              "$ref": "#/components/schemas/RelaxedConstraint"
+            },
+            "title": "Changes",
+            "type": "array"
+          },
+          "policy_binds": {
+            "title": "Policy Binds",
+            "type": "boolean"
+          },
+          "proven": {
+            "title": "Proven",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "changes",
+          "policy_binds",
+          "proven"
+        ],
+        "title": "Relaxation",
+        "type": "object"
+      },
+      "RelaxedConstraint": {
+        "description": "One brief constraint the relaxation changes, and by how much (ADR 0044).",
+        "properties": {
+          "change": {
+            "title": "Change",
+            "type": "number"
+          },
+          "current": {
+            "title": "Current",
+            "type": "number"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/ConstraintKind"
+          },
+          "policy_allows": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Policy Allows"
+          },
+          "region": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Region"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "relaxed": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Relaxed"
+          },
+          "sku_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sku Id"
+          },
+          "source": {
+            "$ref": "#/components/schemas/ConstraintSource",
+            "default": "brief"
+          }
+        },
+        "required": [
+          "kind",
+          "current",
+          "relaxed",
+          "change"
+        ],
+        "title": "RelaxedConstraint",
         "type": "object"
       },
       "Scope": {

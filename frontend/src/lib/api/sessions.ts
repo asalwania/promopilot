@@ -51,24 +51,46 @@ export const whyChosenSchema = z.object({
   best_for_sku_region: z.boolean(),
 }) satisfies z.ZodType<Schemas["WhyChosen"]>;
 
+const constraintKindSchema = z.enum([
+  "marketing_budget",
+  "minimum_margin",
+  "margin_floor",
+  "max_promoted_skus",
+  "regional_budget",
+  "clearance_target",
+  "kvi_price_tolerance",
+]);
+
+const constraintSourceSchema = z.enum(["brief", "company_policy"]);
+
 export const bindingConstraintSchema = z.object({
-  kind: z.enum([
-    "marketing_budget",
-    "minimum_margin",
-    "margin_floor",
-    "max_promoted_skus",
-    "regional_budget",
-    "clearance_target",
-    "kvi_price_tolerance",
-  ]),
-  source: z.enum(["brief", "company_policy"]),
+  kind: constraintKindSchema,
+  source: constraintSourceSchema,
   limit: z.number(),
   category: z.string().nullable().optional(),
   region: regionSchema.nullable().optional(),
   sku_id: z.string().nullable().optional(),
-  evidence: z.enum(["exact", "lower_bound", "unproven"]),
+  evidence: z.enum(["exact", "lower_bound", "unproven", "infeasible"]),
   objective_gain: z.number().nullable(),
 }) satisfies z.ZodType<Schemas["BindingConstraint"]>;
+
+// The smallest change to an infeasible request's brief constraints (ADR 0044).
+export const relaxationSchema = z.object({
+  changes: z.array(
+    z.object({
+      kind: constraintKindSchema,
+      source: constraintSourceSchema,
+      region: regionSchema.nullable().optional(),
+      sku_id: z.string().nullable().optional(),
+      current: z.number(),
+      relaxed: z.number().nullable(),
+      change: z.number(),
+      policy_allows: z.number().nullable().optional(),
+    }) satisfies z.ZodType<Schemas["RelaxedConstraint"]>,
+  ),
+  policy_binds: z.boolean(),
+  proven: z.boolean(),
+}) satisfies z.ZodType<Schemas["Relaxation"]>;
 
 export const notSelectedOptionSchema = z.object({
   option: planLineSchema,
@@ -203,6 +225,7 @@ export const planRevisionSchema = z.object({
   simulation: planSimulationSchema.nullable().optional(),
   clearance_shortfalls: z.array(clearanceShortfallSchema),
   policy_findings: z.array(policyFindingSchema),
+  relaxation: relaxationSchema.nullable().optional(),
 }) satisfies z.ZodType<Schemas["PlanRevision"]>;
 
 export const planningRequestSchema = z.object({
