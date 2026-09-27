@@ -1105,6 +1105,39 @@
         "title": "PlanSimulation",
         "type": "object"
       },
+      "PlanSimulationResponse": {
+        "description": "A plan revision's new simulation, now stored against it in place of the old one.",
+        "properties": {
+          "as_of_week": {
+            "title": "As Of Week",
+            "type": "integer"
+          },
+          "demand_model": {
+            "$ref": "#/components/schemas/ModelVersion"
+          },
+          "revision_number": {
+            "title": "Revision Number",
+            "type": "integer"
+          },
+          "session_id": {
+            "format": "uuid",
+            "title": "Session Id",
+            "type": "string"
+          },
+          "simulation": {
+            "$ref": "#/components/schemas/PlanSimulation"
+          }
+        },
+        "required": [
+          "session_id",
+          "revision_number",
+          "demand_model",
+          "as_of_week",
+          "simulation"
+        ],
+        "title": "PlanSimulationResponse",
+        "type": "object"
+      },
       "PlanningRequest": {
         "description": "Money is in rupees (ADR 0015). The brief's optional constraints may only tighten\ncompany policy; a value that would loosen it is kept here as read, and planning applies\nthe policy value instead and flags it (ADR 0007, ADR 0040).",
         "properties": {
@@ -1579,6 +1612,33 @@
         ],
         "title": "SessionStatus",
         "type": "string"
+      },
+      "SimulatePlanRequest": {
+        "additionalProperties": false,
+        "description": "Re-simulate a session's latest plan revision (ADR 0043). The seed is configuration.",
+        "properties": {
+          "competitor_reaction": {
+            "description": "Reserved for the competitor-reaction scenario (#41); only null for now.",
+            "title": "Competitor Reaction",
+            "type": "null"
+          },
+          "n_runs": {
+            "anyOf": [
+              {
+                "maximum": 5000.0,
+                "minimum": 100.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Runs to simulate; omit for the configured default (SIMULATION_RUNS).",
+            "title": "N Runs"
+          }
+        },
+        "title": "SimulatePlanRequest",
+        "type": "object"
       },
       "SimulatedOutcomes": {
         "description": "Ranges over the promo weeks, units capped at pooled available stock (ADR 0004, 0011).\n\nUnits and sell-through are the anchor SKU's; revenue, gross profit and promo spend\ninclude a BUNDLE's partner (ADR 0017). Margin is gross profit over revenue in each run\n(0 in a run with no revenue). Sell-through is None when there is no available stock.",
@@ -2112,6 +2172,69 @@
         "summary": "Retrain",
         "tags": [
           "models"
+        ]
+      }
+    },
+    "/api/plans/{session_id}/simulate": {
+      "post": {
+        "description": "Re-simulate the session's latest plan revision and store the result against it.",
+        "operationId": "simulate_plan_api_plans__session_id__simulate_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SimulatePlanRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanSimulationResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "description": "Unknown session, or a session without a plan revision yet"
+          },
+          "409": {
+            "description": "The latest demand model cannot simulate the stored plan"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "503": {
+            "description": "No trained demand model, or no inventory snapshot for the planning request's as-of week"
+          }
+        },
+        "summary": "Simulate Plan",
+        "tags": [
+          "plans"
         ]
       }
     },

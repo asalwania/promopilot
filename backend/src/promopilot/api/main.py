@@ -24,6 +24,7 @@ from promopilot.agents.tools.simulate_plan import simulate_plan_tool
 from promopilot.api.catalog import CatalogService, catalog_router
 from promopilot.api.competitors import CompetitorService, competitors_router
 from promopilot.api.models import ModelService, models_router
+from promopilot.api.plans import PlanService, plans_router
 from promopilot.api.relations import RelationsService, relations_router
 from promopilot.api.schemas import HealthChecks, HealthResponse
 from promopilot.api.sessions import SessionService, sessions_router
@@ -59,6 +60,7 @@ def create_app(
     competitors: CompetitorService | None = None,
     relations: RelationsService | None = None,
     catalog: CatalogService | None = None,
+    plans: PlanService | None = None,
 ) -> FastAPI:
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
@@ -82,6 +84,8 @@ def create_app(
         app.include_router(relations_router(relations))
     if catalog is not None:
         app.include_router(catalog_router(catalog))
+    if plans is not None:
+        app.include_router(plans_router(plans))
 
     # `/health` serves the container healthcheck; `/api/health` is what the web proxy forwards.
     @app.get("/health")
@@ -131,9 +135,11 @@ def build_app() -> FastAPI:
     simulation_settings = SimulationSettings(
         n_runs=settings.simulation_runs, seed=settings.simulation_seed
     )
+    store = SessionStore(engine)
     # Sessions plan with the latest demand model and the live relations model (ADR 0038).
+    # A stored plan revision is re-simulated with the same settings (ADR 0043).
     sessions = SessionService(
-        store=SessionStore(engine),
+        store=store,
         data=data,
         llm=build_provider(settings),
         planner=OptimisingPlanner(
@@ -154,6 +160,13 @@ def build_app() -> FastAPI:
         competitors=CompetitorService(data, policy=policy),
         relations=RelationsService(relations_model, data),
         catalog=CatalogService(data, policy=policy),
+        plans=PlanService(
+            revisions=store,
+            demand_models=demand_model,
+            data=data,
+            policy=policy,
+            defaults=simulation_settings,
+        ),
     )
     # The agents' tools (ADR 0025): the model is resolved per call, so a retrain is picked up,
     # and so is the as-of week, so newly loaded data moves the data tools' clock (ADR 0032).

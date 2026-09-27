@@ -92,36 +92,14 @@ def simulate_plan_tool(
                     f"{planned.sku_id} in {planned.region} starts in week {planned.start_week}, "
                     f"before the as-of week {week}",
                 )
-        demand = await demand_models.get()
-        if demand is None:
-            raise ToolCallError("model_unavailable", "no demand model is trained yet")
-        try:
-            snapshot = await data.inventory(week)
-        except LookupError as error:
-            raise ToolCallError("data_unavailable", str(error)) from error
-        inputs = SimulationInputs(
-            demand=demand[1],
-            stock=pooled_stock(snapshot, await data.stores(), policy),
+        return await simulate_on_latest_model(
+            plan,
+            demand_models,
+            data,
+            week,
             policy=policy,
-        )
-        try:
-            # Sampling is CPU-bound: keep the event loop free (ADR 0025).
-            simulation = await asyncio.to_thread(
-                simulate,
-                plan,
-                inputs,
-                n_runs=arguments.n_runs or defaults.n_runs,
-                seed=defaults.seed,
-            )
-        except ValueError as error:
-            raise ToolCallError("invalid_input", str(error)) from error
-        entry = demand[0]
-        return SimulatePlanOutput(
-            demand_model=ModelVersion(
-                model_id=entry.model_id, version=entry.version, as_of_week=entry.as_of_week
-            ),
-            as_of_week=week,
-            simulation=simulation,
+            n_runs=arguments.n_runs or defaults.n_runs,
+            seed=defaults.seed,
         )
 
     return Tool(
@@ -130,6 +108,49 @@ def simulate_plan_tool(
         input_type=SimulatePlanInput,
         output_type=SimulatePlanOutput,
         handler=simulate_plan,
+    )
+
+
+async def simulate_on_latest_model(
+    plan: PromoPlan,
+    demand_models: DemandModelSource,
+    data: SimulationData,
+    as_of_week: int,
+    *,
+    policy: CompanyPolicy,
+    n_runs: int,
+    seed: int,
+) -> SimulatePlanOutput:
+    """Simulate `plan` on the latest demand model, units capped at the pooled available stock
+    of the `as_of_week` snapshot. The tool and the re-simulate endpoint share it (ADR 0043).
+
+    Raises `ToolCallError`: model_unavailable with no trained demand model, data_unavailable
+    with no inventory snapshot, invalid_input when the model cannot simulate the plan.
+    """
+    demand = await demand_models.get()
+    if demand is None:
+        raise ToolCallError("model_unavailable", "no demand model is trained yet")
+    try:
+        snapshot = await data.inventory(as_of_week)
+    except LookupError as error:
+        raise ToolCallError("data_unavailable", str(error)) from error
+    inputs = SimulationInputs(
+        demand=demand[1],
+        stock=pooled_stock(snapshot, await data.stores(), policy),
+        policy=policy,
+    )
+    try:
+        # Sampling is CPU-bound: keep the event loop free (ADR 0025).
+        simulation = await asyncio.to_thread(simulate, plan, inputs, n_runs=n_runs, seed=seed)
+    except ValueError as error:
+        raise ToolCallError("invalid_input", str(error)) from error
+    entry = demand[0]
+    return SimulatePlanOutput(
+        demand_model=ModelVersion(
+            model_id=entry.model_id, version=entry.version, as_of_week=entry.as_of_week
+        ),
+        as_of_week=as_of_week,
+        simulation=simulation,
     )
 
 
