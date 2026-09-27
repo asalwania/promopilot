@@ -79,6 +79,8 @@ from promopilot.domain import (
     PolicyFinding,
     PromoPlan,
     Region,
+    Relaxation,
+    RelaxedConstraint,
     SelectionReason,
     SelectionReasonCode,
     SolveStatus,
@@ -97,17 +99,25 @@ _ROUNDING = 1e-6
 """Paise (or thousandths of a unit) lost to float noise before rounding up or down."""
 _MIN_RESOLVE_SECONDS = 0.001
 """Less binding time left than this settles no more constraints."""
+BASIS_POINTS = 10_000
+"""A relaxation's changes are weighed in basis points of the brief's own values (ADR 0044),
+and relaxed margins and sell-throughs are reported to a basis point."""
+MARGIN_STEP = 0.005
+"""The steps by which the relaxation may lower the brief's minimum margin; the relaxed margin
+reported is the plan's own, to a basis point."""
 
 
 @dataclass(frozen=True)
 class SolverSettings:
     """The solver's time limit and worker count (OPTIMIZER_TIME_LIMIT_SECONDS,
     OPTIMIZER_WORKERS), and the time shared by the re-solves that find binding constraints
-    (OPTIMIZER_BINDING_TIME_LIMIT_SECONDS, ADR 0038)."""
+    (OPTIMIZER_BINDING_TIME_LIMIT_SECONDS, ADR 0038), and the time for finding the smallest
+    relaxation of an infeasible request (OPTIMIZER_RELAXATION_TIME_LIMIT_SECONDS, ADR 0044)."""
 
     time_limit_seconds: float = 10.0
     workers: int = 1
     binding_time_limit_seconds: float = 8.0
+    relaxation_time_limit_seconds: float = 10.0
 
     def __post_init__(self) -> None:
         if self.time_limit_seconds <= 0:
@@ -116,6 +126,8 @@ class SolverSettings:
             raise ValueError("the solver needs at least one worker")
         if self.binding_time_limit_seconds < 0:
             raise ValueError("the binding time limit cannot be negative")
+        if self.relaxation_time_limit_seconds <= 0:
+            raise ValueError("the relaxation time limit must be positive")
 
 
 class OptionFacts(Protocol):
@@ -162,6 +174,9 @@ class OptimisationResult:
     plan misses them."""
     policy_findings: tuple[PolicyFinding, ...] = ()
     """Brief values that would have loosened company policy, which was applied instead."""
+    relaxation: Relaxation | None = None
+    """When no plan is found that reaches every clearance target, the smallest change to the
+    brief's constraints that would make the request feasible (ADR 0044)."""
 
 
 NOT_SELECTED_SHOWN = 5
@@ -182,6 +197,7 @@ def solve(
     settings = settings or SolverSettings()
     started = time.monotonic()
     problem = _Problem.of(request, options, facts, policy)
+    brief = problem  # with the brief's own clearance targets, before any is lowered
     findings = problem.rules.findings
     closest: _Closest | None = None
     time_limit = settings.time_limit_seconds
@@ -209,8 +225,32 @@ def solve(
     picked = outcome.picked if found else (closest.picked if closest else [])
     charged = outcome.charged if found else problem.charged(picked)
     proven = outcome.status == cp_model.OPTIMAL and (closest is None or closest.proven)
-    status = SolveStatus.OPTIMAL if proven else SolveStatus.FEASIBLE
     objective = int(problem.value[picked].sum()) - charged
+    relaxation: Relaxation | None = None
+    if closest is not None and any(closest.shortfall.values()):
+        # No plan found reaches every clearance target (ADR 0044): the brief's own targets
+        # say how far each must come down, or what else must give.
+        relaxation, relaxed_plan = brief.relax(closest, settings, seed)
+        if closest.proven:
+            # Proven: no plan reaches every target. A timeout is never reported infeasible.
+            return OptimisationResult(
+                status=SolveStatus.INFEASIBLE,
+                objective=objective / PAISE,
+                plan=PromoPlan(lines=tuple(problem.lines[n] for n in picked)),
+                selected=tuple(problem.eligible[n] for n in picked),
+                pairwise_cannibalisation=charged / PAISE,
+                eligible=problem.choosable,
+                pairs=len(problem.pairs),
+                binding_constraints=brief.infeasible(
+                    relaxation, relaxed_plan, problem.shortfalls(picked)
+                ),
+                why_chosen=tuple(problem.why_chosen(n) for n in picked),
+                not_selected=problem.not_selected(picked),
+                clearance_shortfalls=problem.shortfalls(picked),
+                policy_findings=findings,
+                relaxation=relaxation,
+            )
+    status = SolveStatus.OPTIMAL if proven else SolveStatus.FEASIBLE
     return OptimisationResult(
         status=status,
         objective=objective / PAISE,
@@ -226,6 +266,7 @@ def solve(
         not_selected=problem.not_selected(picked),
         clearance_shortfalls=problem.shortfalls(picked),
         policy_findings=findings,
+        relaxation=relaxation,
     )
 
 
@@ -945,6 +986,283 @@ class _Problem:
             )
         return tuple(sorted(found, key=lambda s: (s.sku_id, list(Region).index(s.region))))
 
+    def relax(
+        self, closest: _Closest, settings: SolverSettings, seed: int
+    ) -> tuple[Relaxation, list[int]]:
+        """The smallest change to the brief's constraints that makes every clearance target
+        reachable (ADR 0044), and a plan that reaches them with it.
+
+        Two re-solves share the relaxation time limit. The first frees every brief constraint
+        but the clearance targets as far as company policy allows: if a target must still come
+        down, policy binds. The second finds the least sum of changes, each in basis points of
+        the brief's value. When it finds nothing in time, the closest plan gives the
+        relaxation: each target lowered to what it reaches.
+        """
+        started = time.monotonic()
+        limit = settings.relaxation_time_limit_seconds
+        held = self._least_change(settings, seed, closest.picked, free=True, time_limit=limit / 2)
+        left = max(limit - (time.monotonic() - started), limit / 2)
+        whole = self._least_change(settings, seed, closest.picked, free=False, time_limit=left)
+        found = (cp_model.OPTIMAL, cp_model.FEASIBLE)
+        plan = whole.picked if whole.status in found else closest.picked
+        policy_binds = held.status in found and held.cost > 0
+        allows = (
+            {
+                change.sku_id: change.relaxed or 0.0
+                for change in self._changes(held.picked)
+                if change.kind is ConstraintKind.CLEARANCE_TARGET
+            }
+            if policy_binds
+            else {}
+        )
+        changes = tuple(
+            change.model_copy(update={"policy_allows": allows[change.sku_id]})
+            if change.sku_id in allows
+            else change
+            for change in self._changes(plan)
+        )
+        proven = closest.proven and held.status == whole.status == cp_model.OPTIMAL
+        return Relaxation(changes=changes, policy_binds=policy_binds, proven=proven), plan
+
+    def _least_change(
+        self,
+        settings: SolverSettings,
+        seed: int,
+        hint: Sequence[int],
+        *,
+        free: bool,
+        time_limit: float,
+    ) -> "_Change":
+        """A plan that reaches every clearance target with the least change to the brief's
+        constraints, each in basis points of the brief's value. With `free`, every brief
+        constraint but the targets is relaxed as far as policy allows at no cost, so only
+        lowering a target counts. Company policy is never relaxed."""
+        model = cp_model.CpModel()
+        x = self._variables(model)
+        rules, policy = self.rules, self.policy
+        costs: list[tuple[int, cp_model.IntVar]] = []
+
+        def slack(upper: int, name: str, weight: int) -> cp_model.IntVar:
+            variable = model.new_int_var(0, upper, name)
+            if free:
+                model.add(variable == upper)
+            else:
+                costs.append((weight, variable))
+            return variable
+
+        room = policy.max_promoted_skus_per_category_per_region - rules.max_promoted_skus
+        extra_skus = None
+        if rules.max_promoted_skus_source is ConstraintSource.BRIEF and room > 0:
+            weight = math.ceil(BASIS_POINTS / rules.max_promoted_skus)
+            extra_skus = slack(room, "cap", weight)
+        lowered: dict[str, tuple[cp_model.IntVar, cp_model.IntVar]] = {}
+        for sku_id in sorted({str(limit.sku_id) for limit in self.targets}):
+            by = model.new_int_var(0, BASIS_POINTS - 1, f"lower_{sku_id}")
+            dropped = model.new_bool_var(f"drop_{sku_id}")
+            costs += [(1, by), (BASIS_POINTS, dropped)]
+            lowered[sku_id] = (by, dropped)
+        tolerance = policy.kvi_price_tolerance if policy.kvi_price_tolerance_enabled else None
+        for k, limit in enumerate(self.limits):
+            expression = _dot(self.coefficients[k], x)
+            bound = int(self.bound[k])
+            if limit == _BUDGET or limit.kind is ConstraintKind.REGIONAL_BUDGET:
+                most = int(np.maximum(self.coefficients[k], 0).sum())
+                base = max(bound, 1)
+                upper = max(0, math.ceil(BASIS_POINTS * (most - bound) / base))
+                more = slack(upper, f"more{k}", 1)
+                model.add(BASIS_POINTS * expression - base * more <= BASIS_POINTS * bound)
+            elif limit == _MARGIN and rules.min_margin_source is ConstraintSource.BRIEF:
+                self._margin_levels(model, x, free, costs)
+            elif limit.kind is ConstraintKind.MAX_PROMOTED_SKUS and extra_skus is not None:
+                model.add(expression - extra_skus <= bound)
+            elif limit in self.targets:
+                target = self.targets[limit]
+                by, dropped = lowered[str(limit.sku_id)]
+                units = target.sell_through * target.baseline.available_stock
+                per = math.floor(units * MILLI_UNITS + _ROUNDING)
+                model.add(
+                    BASIS_POINTS * expression - per * by <= BASIS_POINTS * bound
+                ).only_enforce_if(dropped.Not())
+            elif limit == _KVI and rules.kvi_price_tolerance_source is ConstraintSource.BRIEF:
+                off = slack(1, "kvi_off", BASIS_POINTS)
+                model.add(expression <= 0).only_enforce_if(off.Not())
+                if tolerance is not None:
+                    breaking = [_breaks_kvi(line, self.facts, tolerance) for line in self.lines]
+                    model.add(_dot(np.array(breaking, dtype=np.int64), x) <= 0)
+            else:
+                model.add(expression <= bound)
+        model.minimize(sum(weight * variable for weight, variable in costs))
+        hinted = set(hint)
+        for n, chosen in enumerate(x):
+            model.add_hint(chosen, n in hinted)
+        solver = self._solver(settings, seed, time_limit, first=False)
+        status = solver.solve(model)
+        if status not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
+            return _Change(status, [], 0)
+        picked = [n for n, chosen in enumerate(x) if solver.boolean_value(chosen)]
+        return _Change(status, picked, round(solver.objective_value))
+
+    def _margin_levels(
+        self,
+        model: cp_model.CpModel,
+        x: list[cp_model.IntVar],
+        free: bool,
+        costs: list[tuple[int, cp_model.IntVar]],
+    ) -> None:
+        """The brief's minimum margin, which may come down in MARGIN_STEP steps to the
+        company-policy margin floor, each level costing its change in basis points."""
+        minimum, floor = self.rules.min_margin, self.policy.margin_floor
+        levels = [floor]
+        if not free:
+            steps = math.ceil((minimum - floor) / MARGIN_STEP - _ROUNDING)
+            levels = [minimum - step * MARGIN_STEP for step in range(steps)] + [floor]
+        table = self.options.table.iloc[self.eligible]
+        revenue = table["revenue"].to_numpy(float)
+        gross_profit = table["gross_profit"].to_numpy(float)
+        chosen = []
+        for n, level in enumerate(levels):
+            at = model.new_bool_var(f"margin{n}")
+            short = _paise_up(level * revenue - gross_profit)
+            model.add(_dot(short, x) <= 0).only_enforce_if(at)
+            chosen.append(at)
+            weight = math.ceil(BASIS_POINTS * (minimum - level) / minimum - _ROUNDING)
+            if weight > 0 and not free:
+                costs.append((weight, at))
+        model.add_exactly_one(chosen)
+
+    def _changes(self, plan: list[int]) -> list[RelaxedConstraint]:
+        """The smallest change to each brief constraint the plan breaks that lets it keep
+        them: a budget to what it spends, the minimum margin to the plan's blended margin (to
+        a basis point), the promoted-SKU cap to the most it promotes, the KVI tolerance to
+        policy's, and each clearance target to the least any region reaches (to a basis
+        point), or dropped."""
+        totals = self.coefficients[:, plan].sum(axis=1)
+        rules, request = self.rules, self.request
+        over = [
+            (limit, int(total))
+            for limit, total, bound in zip(self.limits, totals, self.bound, strict=True)
+            if int(total) > int(bound)
+        ]
+        found: list[RelaxedConstraint] = []
+        for limit, total in over:
+            if limit == _BUDGET:
+                found.append(_raised(limit.kind, request.marketing_budget, total / PAISE))
+        for limit, total in over:
+            if limit.kind is ConstraintKind.REGIONAL_BUDGET:
+                assert limit.region is not None
+                cap = request.regional_budget_caps[limit.region]
+                found.append(_raised(limit.kind, cap, total / PAISE, region=limit.region))
+        if any(limit == _MARGIN for limit, _ in over):
+            margin = self._least_margin(plan)
+            found.append(
+                RelaxedConstraint(
+                    kind=ConstraintKind.MINIMUM_MARGIN,
+                    current=rules.min_margin,
+                    relaxed=margin,
+                    change=(rules.min_margin - margin) / rules.min_margin,
+                )
+            )
+        most = max(
+            (total for limit, total in over if limit.kind is ConstraintKind.MAX_PROMOTED_SKUS),
+            default=0,
+        )
+        if most:
+            found.append(_raised(ConstraintKind.MAX_PROMOTED_SKUS, rules.max_promoted_skus, most))
+        if any(limit == _KVI for limit, _ in over):
+            assert rules.kvi_price_tolerance is not None
+            enabled = self.policy.kvi_price_tolerance_enabled
+            found.append(
+                RelaxedConstraint(
+                    kind=ConstraintKind.KVI_PRICE_TOLERANCE,
+                    current=rules.kvi_price_tolerance,
+                    relaxed=self.policy.kvi_price_tolerance if enabled else None,
+                    change=1.0,
+                )
+            )
+        reached: dict[str, float | None] = {}
+        for limit, total in over:
+            if limit in self.targets:
+                sku_id = str(limit.sku_id)
+                share = self._reachable(limit, total)
+                earlier = reached.get(sku_id, 1.0)
+                reached[sku_id] = None if share is None or earlier is None else min(share, earlier)
+        wanted = {target.sku_id: target.sell_through for target in request.clearance_targets}
+        for sku_id, share in sorted(reached.items()):
+            asked = wanted[sku_id]
+            found.append(
+                RelaxedConstraint(
+                    kind=ConstraintKind.CLEARANCE_TARGET,
+                    sku_id=sku_id,
+                    current=asked,
+                    relaxed=share,
+                    change=1.0 if share is None else (asked - share) / asked,
+                )
+            )
+        return found
+
+    def _least_margin(self, plan: list[int]) -> float:
+        """The highest minimum margin, to a basis point and never below the margin floor,
+        that the plan keeps with its margin shortfalls rounded as the solver rounds them."""
+        table = self.options.table.iloc[[self.eligible[n] for n in plan]]
+        revenue = table["revenue"].to_numpy(float)
+        gross_profit = table["gross_profit"].to_numpy(float)
+        floor = self.policy.margin_floor
+        blended = gross_profit.sum() / revenue.sum() if revenue.sum() > 0 else floor
+        level = math.floor(min(blended, self.rules.min_margin) * BASIS_POINTS + _ROUNDING)
+        while (
+            level / BASIS_POINTS > floor
+            and _paise_up(level / BASIS_POINTS * revenue - gross_profit).sum() > 0
+        ):
+            level -= 1
+        return max(level / BASIS_POINTS, floor)
+
+    def _reachable(self, limit: _Limit, total: int) -> float | None:
+        """The highest sell-through, to a basis point, that the plan reaches for a clearance
+        target in its region, with units rounded as the solver rounds them; None below one
+        basis point."""
+        baseline = self.targets[limit].baseline
+        sold = -total  # thousandths of a unit the plan adds over the window
+        stock, base = baseline.available_stock, baseline.baseline_units
+        share = math.floor((base + sold / MILLI_UNITS) / stock * BASIS_POINTS + _ROUNDING)
+        while (
+            share > 0
+            and math.ceil((share / BASIS_POINTS * stock - base) * MILLI_UNITS - _ROUNDING) > sold
+        ):
+            share -= 1
+        return share / BASIS_POINTS if share > 0 else None
+
+    def infeasible(
+        self,
+        relaxation: Relaxation,
+        relaxed_plan: list[int],
+        shortfalls: Sequence[ClearanceShortfall],
+    ) -> tuple[BindingConstraint, ...]:
+        """The binding constraints of an infeasible request: each clearance target the plan
+        misses and each constraint the relaxation changes, at the brief's values."""
+        kinds = {change.kind for change in relaxation.changes}
+        regions = {
+            change.region
+            for change in relaxation.changes
+            if change.kind is ConstraintKind.REGIONAL_BUDGET
+        }
+        missed = {(shortfall.sku_id, shortfall.region) for shortfall in shortfalls}
+        totals = self.coefficients[:, relaxed_plan].sum(axis=1)
+        found = []
+        for k, limit in enumerate(self.limits):
+            if limit.kind is ConstraintKind.CLEARANCE_TARGET:
+                binds = (limit.sku_id, limit.region) in missed
+            elif limit.kind is ConstraintKind.REGIONAL_BUDGET:
+                binds = limit.region in regions
+            elif limit.kind is ConstraintKind.MAX_PROMOTED_SKUS:
+                binds = limit.kind in kinds and int(totals[k]) > int(self.bound[k])
+            elif limit == _MARGIN:
+                binds = ConstraintKind.MINIMUM_MARGIN in kinds
+            else:
+                binds = limit.kind in kinds
+            if binds:
+                found.append(self._named(limit, BindingEvidence.INFEASIBLE, None))
+        return tuple(found)
+
     def _uplift(self, row: int, limit: _Limit) -> float:
         """The units a candidate row adds towards a clearance target over the window."""
         line = self.options.lines[row]
@@ -1094,6 +1412,28 @@ class _Problem:
             if promoted + extra > cap:
                 return True
         return False
+
+
+@dataclass(frozen=True)
+class _Change:
+    """A plan found with the least change to the brief's constraints."""
+
+    status: cp_model.CpSolverStatus
+    picked: list[int]
+    cost: int
+    """The sum of its changes in basis points of the brief's values."""
+
+
+def _raised(
+    kind: ConstraintKind, current: float, needed: float, *, region: Region | None = None
+) -> RelaxedConstraint:
+    return RelaxedConstraint(
+        kind=kind,
+        region=region,
+        current=current,
+        relaxed=float(needed),
+        change=(needed - current) / current,
+    )
 
 
 def _target_order(limit: _Limit) -> tuple[str, int]:

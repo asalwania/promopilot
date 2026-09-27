@@ -18,6 +18,7 @@ from promopilot.agents.tools.get_competitor_gaps import get_competitor_gaps_tool
 from promopilot.agents.tools.get_relations import get_relations_tool
 from promopilot.agents.tools.holidays import get_holidays_tool
 from promopilot.agents.tools.inventory_status import get_inventory_status_tool
+from promopilot.agents.tools.relax_constraints import relax_constraints_tool
 from promopilot.agents.tools.run_optimizer import run_optimizer_tool
 from promopilot.agents.tools.scope_data import get_scope_data_tool
 from promopilot.agents.tools.simulate_plan import simulate_plan_tool
@@ -131,6 +132,7 @@ def build_app() -> FastAPI:
         time_limit_seconds=settings.optimizer_time_limit_seconds,
         workers=settings.optimizer_workers,
         binding_time_limit_seconds=settings.optimizer_binding_time_limit_seconds,
+        relaxation_time_limit_seconds=settings.optimizer_relaxation_time_limit_seconds,
     )
     simulation_settings = SimulationSettings(
         n_runs=settings.simulation_runs, seed=settings.simulation_seed
@@ -190,6 +192,12 @@ def build_app() -> FastAPI:
                 store=app.state.candidates,
             ),
             run_optimizer_tool(
+                app.state.candidates,
+                policy=policy,
+                settings=solver_settings,
+                seed=settings.optimizer_seed,
+            ),
+            relax_constraints_tool(
                 app.state.candidates,
                 policy=policy,
                 settings=solver_settings,

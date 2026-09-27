@@ -53,6 +53,9 @@ class BindingEvidence(StrEnum):
     objective gains at least `objective_gain`."""
     UNPROVEN = "unproven"
     """It may bind, but the time for re-solving ran out before that was settled."""
+    INFEASIBLE = "infeasible"
+    """The request is infeasible and this constraint is part of why: a clearance target the
+    plan misses, or a constraint the relaxation changes (ADR 0044)."""
 
 
 class BindingConstraint(BaseModel):
@@ -75,7 +78,7 @@ class BindingConstraint(BaseModel):
     evidence: BindingEvidence
     objective_gain: float | None
     """Rupees the objective gains when the constraint is dropped: exact, or at least this
-    much; None when unproven."""
+    much; None when unproven or infeasible."""
 
 
 class SelectionReasonCode(StrEnum):
@@ -175,3 +178,44 @@ class ClearanceShortfall(BaseModel):
     stock."""
     shortfall_units: float
     """Units short of the target."""
+
+
+class RelaxedConstraint(BaseModel):
+    """One brief constraint the relaxation changes, and by how much (ADR 0044)."""
+
+    model_config = ConfigDict(frozen=True)
+
+    kind: ConstraintKind
+    """marketing_budget, regional_budget, minimum_margin, max_promoted_skus (the brief's
+    tighter cap, every category and region), kvi_price_tolerance or clearance_target."""
+    source: ConstraintSource = ConstraintSource.BRIEF
+    """Always the brief: company policy is never relaxed (ADR 0007)."""
+    region: Region | None = None
+    """The region, for a regional budget cap."""
+    sku_id: str | None = None
+    """The SKU, for a clearance target (in every region of the scope)."""
+    current: float
+    """The brief's value: rupees, a fraction, or a SKU count."""
+    relaxed: float | None
+    """The smallest value that makes the request feasible; None drops the constraint (the
+    KVI price tolerance turned off, or a clearance target dropped)."""
+    change: float
+    """The change as a share of the brief's value: 1 when the constraint is dropped."""
+    policy_allows: float | None = None
+    """For a clearance target when company policy binds: the most sell-through reachable
+    with every other brief constraint relaxed as far as policy allows."""
+
+
+class Relaxation(BaseModel):
+    """The smallest change to the brief's constraints that makes an infeasible request
+    feasible: the least sum of each change as a share of the brief's value (ADR 0044)."""
+
+    model_config = ConfigDict(frozen=True)
+
+    changes: tuple[RelaxedConstraint, ...]
+    policy_binds: bool
+    """No change to the budget, caps, minimum margin or KVI tolerance alone would reach every
+    clearance target: company policy binds, so a target must come down."""
+    proven: bool
+    """Whether the request is proven infeasible and the relaxation proven smallest; false
+    when the solver's time ran out first."""

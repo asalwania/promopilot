@@ -53,6 +53,9 @@ class Settings(BaseSettings):
     # Wall-clock seconds for proving which constraints bind, after the solve (ADR 0038). A
     # constraint left unsettled when the time runs out is reported as unproven.
     optimizer_binding_time_limit_seconds: float = Field(default=8.0, ge=0)
+    # Wall-clock seconds for finding the smallest relaxation of an infeasible request (ADR
+    # 0044); only a request no plan can reach every clearance target of spends them.
+    optimizer_relaxation_time_limit_seconds: float = Field(default=10.0, gt=0)
 
     # The Monte Carlo simulation of every plan revision (ADR 0042): runs per simulation, within
     # the simulator's MIN_RUNS..MAX_RUNS, and the seed that makes it reproducible.

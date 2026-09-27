@@ -164,6 +164,8 @@ plan_revisions = Table(
     # E6 #36 (ADR 0040); null for revisions planned before it.
     Column("clearance_shortfalls", JSONB),
     Column("policy_findings", JSONB),
+    # E6 #37 (ADR 0044); null unless the request is infeasible (or not proven feasible).
+    Column("relaxation", JSONB),
 )
 
 plan_lines = Table(

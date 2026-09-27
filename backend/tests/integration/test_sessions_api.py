@@ -15,6 +15,8 @@ from sqlalchemy.ext.asyncio import create_async_engine
 from testcontainers.community.postgres import PostgresContainer
 
 from promopilot.agents import BriefReading, OptimisingPlanner
+from promopilot.agents.session import Planner
+from promopilot.agents.tools.inventory_status import pooled_stock
 from promopilot.api.main import create_app
 from promopilot.api.plans import PlanService
 from promopilot.api.sessions import SessionService
@@ -24,11 +26,14 @@ from promopilot.domain import (
     ClearanceShortfall,
     ClearanceTarget,
     CompanyPolicy,
+    ConstraintKind,
     Mechanism,
     PlanningRequest,
     PlanRevision,
     PromoWindow,
     Region,
+    Relaxation,
+    RelaxedConstraint,
     Scope,
     SolveStatus,
 )
@@ -96,22 +101,28 @@ def postgres_url(
         yield url
 
 
-type Api = Callable[[str, LLMProvider], AbstractAsyncContextManager[AsyncClient]]
+type Api = Callable[..., AbstractAsyncContextManager[AsyncClient]]
 
 
 @pytest.fixture
 def running_api(small_models: tuple[DemandModel, Relations]) -> Api:
-    """Starts one API process planning on the small world's fitted models."""
+    """Starts one API process planning on the small world's fitted models; `planning`
+    wraps its planner."""
 
-    def start(url: str, llm: LLMProvider) -> AbstractAsyncContextManager[AsyncClient]:
-        return api_process(url, llm, small_models)
+    def start(
+        url: str, llm: LLMProvider, planning: Callable[[Planner], Planner] | None = None
+    ) -> AbstractAsyncContextManager[AsyncClient]:
+        return api_process(url, llm, small_models, planning)
 
     return start
 
 
 @asynccontextmanager
 async def api_process(
-    url: str, llm: LLMProvider, models: tuple[DemandModel, Relations] | None
+    url: str,
+    llm: LLMProvider,
+    models: tuple[DemandModel, Relations] | None,
+    planning: Callable[[Planner], Planner] | None = None,
 ) -> AsyncIterator[AsyncClient]:
     """One API process: its own engine, startup and shutdown, like a uvicorn worker."""
     engine = create_async_engine(url)
@@ -128,7 +139,9 @@ async def api_process(
         simulation=simulation,
     )
     store = SessionStore(engine)
-    sessions = SessionService(store=store, data=data, llm=llm, planner=planner)
+    sessions = SessionService(
+        store=store, data=data, llm=llm, planner=planning(planner) if planning else planner
+    )
     plans = PlanService(
         revisions=store, demand_models=demand, data=data, policy=FREE, defaults=simulation
     )
@@ -322,6 +335,59 @@ async def test_a_brief_that_would_loosen_policy_is_flagged_on_the_plan_revision(
     assert revision["clearance_shortfalls"] == []
 
 
+class Clearing:
+    """Plans every request with a clearance target: the brief cannot carry one until #46."""
+
+    def __init__(self, inner: Planner, target: ClearanceTarget) -> None:
+        self.inner = inner
+        self.target = target
+
+    async def plan(self, request: PlanningRequest) -> PlanRevision:
+        return await self.inner.plan(
+            request.model_copy(update={"clearance_targets": (self.target,)})
+        )
+
+
+async def test_an_infeasible_session_exposes_its_binding_constraints_and_relaxation(
+    postgres_url: str, running_api: Api, small_dataset: GeneratedDataset
+) -> None:
+    snapshot = small_dataset.inventory.query(f"snapshot_week == {HISTORY_WEEKS - 1}")
+    pooled = pooled_stock(snapshot, small_dataset.stores, FREE).query("region == 'North'")
+    snacks = set(small_dataset.products.query("category == 'Snacks'")["sku_id"])
+    covered = pooled[pooled["sku_id"].isin(snacks)].sort_values("days_of_cover")
+    sku_id = str(covered["sku_id"].iloc[-1])
+    # Selling every unit of the Snacks SKU with the most cover in two weeks is out of reach:
+    # P90 units must stay within stock, so no brief change helps and company policy binds.
+    target = ClearanceTarget(sku_id=sku_id, sell_through=1.0)
+    async with running_api(
+        postgres_url, FakeProvider([READING]), lambda inner: Clearing(inner, target)
+    ) as client:
+        session_id = (await client.post("/api/sessions", json={"brief": BRIEF})).json()[
+            "session_id"
+        ]
+        done = await settled(client, session_id)
+
+    assert done["status"] == "awaiting_approval"
+    revision = done["plan_revision"]
+    assert revision["solver_status"] == "INFEASIBLE"
+    assert [
+        (c["kind"], c["source"], c["sku_id"], c["region"], c["limit"], c["evidence"])
+        for c in revision["binding_constraints"]
+    ] == [("clearance_target", "brief", sku_id, "North", 1.0, "infeasible")]
+    [shortfall] = revision["clearance_shortfalls"]
+    relaxation = revision["relaxation"]
+    assert relaxation["policy_binds"] is True
+    [change] = relaxation["changes"]
+    assert (change["kind"], change["source"], change["sku_id"], change["current"]) == (
+        "clearance_target",
+        "brief",
+        sku_id,
+        1.0,
+    )
+    assert change["relaxed"] is None or change["relaxed"] <= shortfall["expected_sell_through"]
+    assert change["change"] > 0
+
+
 async def test_a_plan_revision_keeps_its_clearance_shortfalls_and_the_briefs_constraints(
     postgres_url: str,
 ) -> None:
@@ -344,8 +410,31 @@ async def test_a_plan_revision_keeps_its_clearance_shortfalls_and_the_briefs_con
         expected_sell_through=0.6,
         shortfall_units=64.8,
     )
+    relaxation = Relaxation(
+        changes=(
+            RelaxedConstraint(
+                kind=ConstraintKind.MARKETING_BUDGET,
+                current=BUDGET,
+                relaxed=22_000.0,
+                change=0.1,
+            ),
+            RelaxedConstraint(
+                kind=ConstraintKind.CLEARANCE_TARGET,
+                sku_id="SKU0005",
+                current=0.9,
+                relaxed=0.6,
+                change=1 / 3,
+                policy_allows=0.6,
+            ),
+        ),
+        policy_binds=True,
+        proven=True,
+    )
     revision = PlanRevision(
-        number=1, solver_status=SolveStatus.OPTIMAL, clearance_shortfalls=(shortfall,)
+        number=1,
+        solver_status=SolveStatus.INFEASIBLE,
+        clearance_shortfalls=(shortfall,),
+        relaxation=relaxation,
     )
     try:
         session_id = await store.create(BRIEF)

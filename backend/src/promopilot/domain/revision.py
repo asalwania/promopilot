@@ -11,6 +11,7 @@ from promopilot.domain.selection import (
     BindingConstraint,
     ClearanceShortfall,
     NotSelectedOption,
+    Relaxation,
     SolveStatus,
     WhyChosen,
 )
@@ -54,6 +55,9 @@ class PlanRevision(BaseModel):
     """Clearance targets no plan could reach, and by how much this one misses them."""
     policy_findings: tuple[PolicyFinding, ...] = ()
     """Brief values that would have loosened company policy, which was kept instead."""
+    relaxation: Relaxation | None = None
+    """For a request that is infeasible, or not proven feasible in time, the smallest change
+    to the brief's constraints that makes it feasible (ADR 0044); None otherwise."""
 
     @model_validator(mode="after")
     def _is_a_valid_promo_plan(self) -> Self:

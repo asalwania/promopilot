@@ -110,7 +110,8 @@ def test_an_unreachable_clearance_target_gives_the_closest_plan_and_reports_the_
 
     result = run(rows, clearance=[D_NORTH], clearance_targets=target())
 
-    assert result.status is SolveStatus.OPTIMAL
+    # Infeasible (ADR 0044), but the closest plan still comes back.
+    assert result.status is SolveStatus.INFEASIBLE
     assert result.plan.lines == (D10,)
     assert result.clearance_shortfalls == (
         ClearanceShortfall(
@@ -210,7 +211,7 @@ def test_no_plan_in_time_still_returns_a_plan_that_keeps_every_other_constraint(
         seed=SEED,
     )
 
-    assert result.status in (SolveStatus.OPTIMAL, SolveStatus.FEASIBLE)
+    assert result.status in (SolveStatus.OPTIMAL, SolveStatus.FEASIBLE, SolveStatus.INFEASIBLE)
     plan = plan_facts(rows, result.selected, FakeFacts())
     others = [v for v in validate_plan(plan, request(clearance_targets=target()), CompanyPolicy())]
     assert others == []
