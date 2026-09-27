@@ -1,6 +1,75 @@
 {
   "components": {
     "schemas": {
+      "BindingConstraint": {
+        "description": "A constraint that limits the plan: dropping it gives a strictly better objective, or,\nwhen time ran out, one that may.",
+        "properties": {
+          "category": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category"
+          },
+          "evidence": {
+            "$ref": "#/components/schemas/BindingEvidence"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/ConstraintKind"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "number"
+          },
+          "objective_gain": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Objective Gain"
+          },
+          "region": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Region"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "source": {
+            "$ref": "#/components/schemas/ConstraintSource"
+          }
+        },
+        "required": [
+          "kind",
+          "source",
+          "limit",
+          "evidence",
+          "objective_gain"
+        ],
+        "title": "BindingConstraint",
+        "type": "object"
+      },
+      "BindingEvidence": {
+        "description": "How sure the optimiser is that a constraint binds (ADR 0038).",
+        "enum": [
+          "exact",
+          "lower_bound",
+          "unproven"
+        ],
+        "title": "BindingEvidence",
+        "type": "string"
+      },
       "CompetitorGap": {
         "description": "One SKU in one region against the competitor's latest price before the as-of week.",
         "properties": {
@@ -165,6 +234,26 @@
         ],
         "title": "Complement",
         "type": "object"
+      },
+      "ConstraintKind": {
+        "description": "A plan-level constraint the optimiser enforces (ADR 0036, ADR 0038).",
+        "enum": [
+          "marketing_budget",
+          "minimum_margin",
+          "margin_floor",
+          "max_promoted_skus"
+        ],
+        "title": "ConstraintKind",
+        "type": "string"
+      },
+      "ConstraintSource": {
+        "description": "Who set a constraint: only the brief's constraints may be relaxed (ADR 0007).",
+        "enum": [
+          "brief",
+          "company_policy"
+        ],
+        "title": "ConstraintSource",
+        "type": "string"
       },
       "CreateSessionRequest": {
         "properties": {
@@ -442,6 +531,55 @@
         "title": "ModelVersion",
         "type": "object"
       },
+      "NotSelectedOption": {
+        "description": "The best option of a SKU and region with no plan line, and why it was left out.",
+        "properties": {
+          "cannibalises": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Cannibalises",
+            "type": "array"
+          },
+          "option": {
+            "$ref": "#/components/schemas/PlanLine"
+          },
+          "reasons": {
+            "items": {
+              "$ref": "#/components/schemas/NotSelectedReason"
+            },
+            "title": "Reasons",
+            "type": "array"
+          },
+          "value": {
+            "title": "Value",
+            "type": "number"
+          }
+        },
+        "required": [
+          "option",
+          "value",
+          "reasons"
+        ],
+        "title": "NotSelectedOption",
+        "type": "object"
+      },
+      "NotSelectedReason": {
+        "description": "Why a promo option is not in the plan: a rule it breaks alone or added to the plan.",
+        "enum": [
+          "low_uplift",
+          "out_of_stock",
+          "breaks_policy",
+          "over_budget",
+          "breaks_margin",
+          "max_promoted_skus",
+          "cannibalises",
+          "time_limit"
+        ],
+        "title": "NotSelectedReason",
+        "type": "string"
+      },
       "PlanLine": {
         "description": "A promo option selected into a promo plan: one (SKU, region) decision (ADR 0004).",
         "properties": {
@@ -502,6 +640,14 @@
       "PlanRevision": {
         "description": "One numbered version of the promo plan within a planning session.",
         "properties": {
+          "binding_constraints": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/BindingConstraint"
+            },
+            "title": "Binding Constraints",
+            "type": "array"
+          },
           "lines": {
             "default": [],
             "items": {
@@ -510,10 +656,39 @@
             "title": "Lines",
             "type": "array"
           },
+          "not_selected": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/NotSelectedOption"
+            },
+            "title": "Not Selected",
+            "type": "array"
+          },
           "number": {
             "minimum": 1.0,
             "title": "Number",
             "type": "integer"
+          },
+          "objective": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Objective"
+          },
+          "solver_status": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SolveStatus"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [
@@ -541,6 +716,16 @@
             "minimum": 0.0,
             "title": "Promo Cost",
             "type": "number"
+          },
+          "why_chosen": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WhyChosen"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [
@@ -810,6 +995,33 @@
         "title": "Segment",
         "type": "string"
       },
+      "SelectionReason": {
+        "properties": {
+          "amount": {
+            "title": "Amount",
+            "type": "number"
+          },
+          "code": {
+            "$ref": "#/components/schemas/SelectionReasonCode"
+          }
+        },
+        "required": [
+          "code",
+          "amount"
+        ],
+        "title": "SelectionReason",
+        "type": "object"
+      },
+      "SelectionReasonCode": {
+        "description": "A positive part of a plan line's value (ADR 0005, ADR 0035).",
+        "enum": [
+          "incremental_profit",
+          "clearance_value",
+          "halo"
+        ],
+        "title": "SelectionReasonCode",
+        "type": "string"
+      },
       "SessionCreated": {
         "properties": {
           "session_id": {
@@ -893,6 +1105,15 @@
           "failed"
         ],
         "title": "SessionStatus",
+        "type": "string"
+      },
+      "SolveStatus": {
+        "enum": [
+          "OPTIMAL",
+          "FEASIBLE",
+          "INFEASIBLE"
+        ],
+        "title": "SolveStatus",
         "type": "string"
       },
       "Store": {
@@ -1003,6 +1224,33 @@
           "type"
         ],
         "title": "ValidationError",
+        "type": "object"
+      },
+      "WhyChosen": {
+        "description": "Why a plan line was chosen: the positive parts of its value, what it is worth alone,\nand whether it is the best option the optimiser could pick for its SKU and region.",
+        "properties": {
+          "best_for_sku_region": {
+            "title": "Best For Sku Region",
+            "type": "boolean"
+          },
+          "reasons": {
+            "items": {
+              "$ref": "#/components/schemas/SelectionReason"
+            },
+            "title": "Reasons",
+            "type": "array"
+          },
+          "value": {
+            "title": "Value",
+            "type": "number"
+          }
+        },
+        "required": [
+          "reasons",
+          "value",
+          "best_for_sku_region"
+        ],
+        "title": "WhyChosen",
         "type": "object"
       }
     }

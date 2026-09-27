@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from promopilot.agents import BriefReading, RecordingError, plan_session, record_cassettes
+from promopilot.agents import BriefReading, RecordingError, read_planning_request, record_cassettes
 from promopilot.datagen import GeneratedDataset
 from promopilot.domain import Region
 from promopilot.llm import FakeProvider, ReplayProvider
@@ -33,18 +33,18 @@ def names(directory: Path) -> set[str]:
     return {path.name for path in directory.iterdir()}
 
 
-async def test_recorded_briefs_replay_to_the_same_plan_with_no_live_provider(
+async def test_recorded_briefs_replay_to_the_same_planning_request_with_no_live_provider(
     data: InMemoryRetailData, tmp_path: Path
 ) -> None:
     recorded = await record_cassettes([BRIEF], FakeProvider([reading()]), data, tmp_path)
 
-    replayed = await plan_session(BRIEF, ReplayProvider(tmp_path), data)
+    replayed = await read_planning_request(BRIEF, ReplayProvider(tmp_path), data)
 
     assert replayed == recorded[0]
-    assert len(replayed.revision.lines) > 0
+    assert replayed.marketing_budget == 20_000.0
 
 
-async def test_a_brief_that_does_not_plan_fails_the_run_and_keeps_the_old_cassettes(
+async def test_a_brief_that_does_not_read_fails_the_run_and_keeps_the_old_cassettes(
     data: InMemoryRetailData, tmp_path: Path
 ) -> None:
     old = tmp_path / f"{'a' * 64}.json"

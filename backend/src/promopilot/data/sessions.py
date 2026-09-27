@@ -2,18 +2,26 @@
 
 from uuid import UUID, uuid4
 
+from pydantic import TypeAdapter
 from sqlalchemy import func, insert, select, update
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from promopilot.data.schema import plan_lines, plan_revisions, planning_sessions
 from promopilot.domain import (
+    BindingConstraint,
+    NotSelectedOption,
     PlanLine,
     PlanningRequest,
     PlanningSession,
     PlanRevision,
     PlanRevisionLine,
     SessionStatus,
+    SolveStatus,
+    WhyChosen,
 )
+
+_BINDING = TypeAdapter(tuple[BindingConstraint, ...])
+_NOT_SELECTED = TypeAdapter(tuple[NotSelectedOption, ...])
 
 INTERRUPTED = "planning was interrupted by an API restart; start a new session"
 
@@ -41,13 +49,15 @@ class SessionStore:
             ).one_or_none()
             if session is None:
                 return None
-            latest = (
+            revision = (
                 await connection.execute(
-                    select(func.max(plan_revisions.c.number)).where(
-                        plan_revisions.c.session_id == session_id
-                    )
+                    select(plan_revisions)
+                    .where(plan_revisions.c.session_id == session_id)
+                    .order_by(plan_revisions.c.number.desc())
+                    .limit(1)
                 )
-            ).scalar_one()
+            ).one_or_none()
+            latest = None if revision is None else revision.number
             lines = []
             if latest is not None:
                 lines = list(
@@ -69,8 +79,8 @@ class SessionStore:
             status=SessionStatus(session.status),
             planning_request=None if request is None else PlanningRequest.model_validate(request),
             latest_revision=None
-            if latest is None
-            else PlanRevision(number=latest, lines=tuple(_revision_line(row) for row in lines)),
+            if revision is None
+            else _revision(revision, tuple(_revision_line(row) for row in lines)),
             error=session.error,
         )
 
@@ -80,7 +90,18 @@ class SessionStore:
         """Store the planning request and the plan revision; the session awaits approval."""
         async with self._engine.begin() as connection:
             await connection.execute(
-                insert(plan_revisions).values(session_id=session_id, number=revision.number)
+                insert(plan_revisions).values(
+                    session_id=session_id,
+                    number=revision.number,
+                    solver_status=None
+                    if revision.solver_status is None
+                    else revision.solver_status.value,
+                    objective=revision.objective,
+                    binding_constraints=_BINDING.dump_python(
+                        revision.binding_constraints, mode="json"
+                    ),
+                    not_selected=_NOT_SELECTED.dump_python(revision.not_selected, mode="json"),
+                )
             )
             if revision.lines:
                 await connection.execute(
@@ -138,7 +159,23 @@ def _line_row(
         "expected_units": planned.expected_units,
         "promo_cost": planned.promo_cost,
         "expected_incremental_profit": planned.expected_incremental_profit,
+        "why_chosen": None
+        if planned.why_chosen is None
+        else planned.why_chosen.model_dump(mode="json"),
     }
+
+
+def _revision(row: object, lines: tuple[PlanRevisionLine, ...]) -> PlanRevision:
+    values = dict(row._mapping)  # type: ignore[attr-defined]
+    status = values["solver_status"]
+    return PlanRevision(
+        number=values["number"],
+        lines=lines,
+        solver_status=None if status is None else SolveStatus(status),
+        objective=values["objective"],
+        binding_constraints=_BINDING.validate_python(values["binding_constraints"] or ()),
+        not_selected=_NOT_SELECTED.validate_python(values["not_selected"] or ()),
+    )
 
 
 def _revision_line(row: object) -> PlanRevisionLine:
@@ -149,4 +186,7 @@ def _revision_line(row: object) -> PlanRevisionLine:
         expected_units=values["expected_units"],
         promo_cost=values["promo_cost"],
         expected_incremental_profit=values["expected_incremental_profit"],
+        why_chosen=None
+        if values["why_chosen"] is None
+        else WhyChosen.model_validate(values["why_chosen"]),
     )

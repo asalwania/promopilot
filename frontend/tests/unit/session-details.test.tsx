@@ -55,18 +55,27 @@ describe("SessionDetails", () => {
     expect(screen.queryByRole("table")).not.toBeInTheDocument();
   });
 
-  it("says so when no plan line fits the budget", () => {
+  it("says so when no promo option is worth a plan line", () => {
     render(
       <SessionDetails
         session={{
           ...awaitingApprovalSession,
-          plan_revision: { number: 1, lines: [] },
+          plan_revision: {
+            number: 1,
+            lines: [],
+            solver_status: "OPTIMAL",
+            objective: 0,
+            binding_constraints: [],
+            not_selected: [],
+          },
         }}
       />,
     );
 
     expect(
-      screen.getByText("No plan line fits within the marketing budget."),
+      screen.getByText(
+        "No promo option pays for itself within the brief's constraints.",
+      ),
     ).toBeInTheDocument();
     expect(screen.queryByRole("table")).not.toBeInTheDocument();
   });

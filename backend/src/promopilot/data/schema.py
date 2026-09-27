@@ -154,6 +154,11 @@ plan_revisions = Table(
     Column("session_id", UUID, ForeignKey("planning_sessions.id"), primary_key=True),
     Column("number", Integer, primary_key=True),
     Column("created_at", DateTime(timezone=True), nullable=False, server_default=func.now()),
+    # E6 (ADR 0038); null for revisions planned before the optimiser.
+    Column("solver_status", Text),
+    Column("objective", Float),
+    Column("binding_constraints", JSONB),
+    Column("not_selected", JSONB),
 )
 
 plan_lines = Table(
@@ -173,6 +178,7 @@ plan_lines = Table(
     Column("expected_units", Float, nullable=False),
     Column("promo_cost", Float, nullable=False),
     Column("expected_incremental_profit", Float, nullable=False),
+    Column("why_chosen", JSONB),
     ForeignKeyConstraint(
         ["session_id", "revision_number"],
         ["plan_revisions.session_id", "plan_revisions.number"],

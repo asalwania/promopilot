@@ -1,8 +1,8 @@
 """`python -m promopilot.cassettes`: re-record the LLM cassettes with a live provider.
 
-`make record-cassettes` plans every brief in `cassettes/briefs.json` through the provider named
+`make record-cassettes` reads every brief in `cassettes/briefs.json` through the provider named
 by LLM_PROVIDER, against the data loaded in Postgres (`make data`), and replaces the cassettes
-only if every brief reaches a plan (ADR 0019).
+only if every brief becomes a planning request (ADR 0019, ADR 0038).
 """
 
 import argparse
@@ -43,8 +43,8 @@ async def run(argv: Sequence[str] | None = None) -> int:
         return 1
     finally:
         await engine.dispose()
-    for brief, result in zip(briefs, results, strict=True):
-        print(f"{len(result.revision.lines)} plan lines for {brief!a}")
+    for brief, request in zip(briefs, results, strict=True):
+        print(f"{request.model_dump_json()} for {brief!a}")
     print(f"recorded {len(cassette_paths(settings.llm_cassette_dir))} cassettes")
     return 0
 

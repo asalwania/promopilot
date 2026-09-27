@@ -34,12 +34,70 @@ export const planLineSchema = z.object({
   bundle_partner_sku_id: z.string().nullable().optional(),
 }) satisfies z.ZodType<Schemas["PlanLine"]>;
 
+// Why the optimiser chose each plan line and left the others out (ADR 0038).
+export const whyChosenSchema = z.object({
+  reasons: z.array(
+    z.object({
+      code: z.enum(["incremental_profit", "clearance_value", "halo"]),
+      amount: z.number(),
+    }),
+  ),
+  value: z.number(),
+  best_for_sku_region: z.boolean(),
+}) satisfies z.ZodType<Schemas["WhyChosen"]>;
+
+export const bindingConstraintSchema = z.object({
+  kind: z.enum([
+    "marketing_budget",
+    "minimum_margin",
+    "margin_floor",
+    "max_promoted_skus",
+  ]),
+  source: z.enum(["brief", "company_policy"]),
+  limit: z.number(),
+  category: z.string().nullable().optional(),
+  region: regionSchema.nullable().optional(),
+  evidence: z.enum(["exact", "lower_bound", "unproven"]),
+  objective_gain: z.number().nullable(),
+}) satisfies z.ZodType<Schemas["BindingConstraint"]>;
+
+export const notSelectedOptionSchema = z.object({
+  option: planLineSchema,
+  value: z.number(),
+  reasons: z.array(
+    z.enum([
+      "low_uplift",
+      "out_of_stock",
+      "breaks_policy",
+      "over_budget",
+      "breaks_margin",
+      "max_promoted_skus",
+      "cannibalises",
+      "time_limit",
+    ]),
+  ),
+  cannibalises: z.array(z.string()),
+}) satisfies z.ZodType<Schemas["NotSelectedOption"]>;
+
 export const planRevisionLineSchema = z.object({
   line: planLineSchema,
   expected_units: z.number(),
   promo_cost: z.number(),
   expected_incremental_profit: z.number(),
+  why_chosen: whyChosenSchema.nullable().optional(),
 }) satisfies z.ZodType<Schemas["PlanRevisionLine"]>;
+
+export const planRevisionSchema = z.object({
+  number: z.number(),
+  lines: z.array(planRevisionLineSchema),
+  solver_status: z
+    .enum(["OPTIMAL", "FEASIBLE", "INFEASIBLE"])
+    .nullable()
+    .optional(),
+  objective: z.number().nullable().optional(),
+  binding_constraints: z.array(bindingConstraintSchema),
+  not_selected: z.array(notSelectedOptionSchema),
+}) satisfies z.ZodType<Schemas["PlanRevision"]>;
 
 export const planningRequestSchema = z.object({
   as_of_week: z.number(),
@@ -65,9 +123,7 @@ export const sessionSchema = z.object({
   ]),
   brief: z.string(),
   planning_request: planningRequestSchema.nullable(),
-  plan_revision: z
-    .object({ number: z.number(), lines: z.array(planRevisionLineSchema) })
-    .nullable(),
+  plan_revision: planRevisionSchema.nullable(),
   error: z.string().nullable(),
 }) satisfies z.ZodType<Schemas["SessionResponse"]>;
 

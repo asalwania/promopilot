@@ -56,7 +56,8 @@ export function SessionDetails({ session }: { session: Session }) {
               <PlanTable lines={session.plan_revision.lines} />
             ) : (
               <p className="text-muted-foreground text-sm">
-                No plan line fits within the marketing budget.
+                No promo option pays for itself within the brief&apos;s
+                constraints.
               </p>
             )}
           </CardContent>

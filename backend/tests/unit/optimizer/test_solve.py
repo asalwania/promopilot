@@ -642,6 +642,8 @@ def test_solver_settings_are_validated() -> None:
         SolverSettings(time_limit_seconds=0)
     with pytest.raises(ValueError, match="worker"):
         SolverSettings(workers=0)
+    with pytest.raises(ValueError, match="binding time limit"):
+        SolverSettings(binding_time_limit_seconds=-1)
 
 
 # --- per-region differences through option generation ----------------------------------

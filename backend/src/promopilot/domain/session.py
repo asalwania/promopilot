@@ -5,8 +5,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
 
-from promopilot.domain.plan import PlanRevision
 from promopilot.domain.request import PlanningRequest
+from promopilot.domain.revision import PlanRevision
 
 
 class SessionStatus(StrEnum):

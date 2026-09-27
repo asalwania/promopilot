@@ -13,7 +13,13 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field
 
 from promopilot.agents.tools.registry import Tool, ToolCallError
-from promopilot.domain import CompanyPolicy, PlanLine
+from promopilot.domain import (
+    BindingConstraint,
+    CompanyPolicy,
+    NotSelectedOption,
+    PlanLine,
+    WhyChosen,
+)
 from promopilot.economics import blended_margin
 from promopilot.optimizer import CandidateStore, SolverSettings, SolveStatus, solve
 
@@ -26,8 +32,10 @@ DESCRIPTION = (
     "company-policy margin floor), and at most the company-policy number of promoted SKUs "
     "per category per region. Only options that pay for themselves alone are selected. "
     "Returns the solver status (OPTIMAL, FEASIBLE when the time limit ran out first, "
-    "INFEASIBLE), the objective, each selected plan line with its numbers, and the plan's "
-    "totals. A candidate_set_id that is no longer stored must be regenerated."
+    "INFEASIBLE), the objective, each selected plan line with its numbers and why it was "
+    "chosen, the plan's totals, the binding constraints (those whose removal would raise the "
+    "objective) and the best options left out with the rules they break. A "
+    "candidate_set_id that is no longer stored must be regenerated."
 )
 
 
@@ -57,6 +65,7 @@ class OptimizedLine(BaseModel):
     value: float = Field(
         description="incremental_profit - cannibalised_profit + halo_profit + clearance_value"
     )
+    why_chosen: WhyChosen
 
 
 class RunOptimizerOutput(BaseModel):
@@ -82,9 +91,17 @@ class RunOptimizerOutput(BaseModel):
         description="Candidate options that pay for themselves alone and keep every per-line rule."
     )
     pairs: int = Field(description="Pairs of eligible options that interact.")
+    binding_constraints: list[BindingConstraint] = Field(
+        description="Constraints whose removal gives a strictly better objective (OPTIMAL only)."
+    )
+    not_selected: list[NotSelectedOption] = Field(
+        description="The best option of up to 5 SKUs and regions with no plan line, best first."
+    )
 
 
-_LINE_COLUMNS = [name for name in OptimizedLine.model_fields if name != "option"]
+_LINE_COLUMNS = [
+    name for name in OptimizedLine.model_fields if name not in ("option", "why_chosen")
+]
 
 
 def run_optimizer_tool(
@@ -110,9 +127,13 @@ def run_optimizer_tool(
         table = options.table.iloc[list(result.selected)]
         lines = [
             OptimizedLine.model_validate(
-                {"option": options.lines[n], **table.loc[n, _LINE_COLUMNS].to_dict()}
+                {
+                    "option": options.lines[n],
+                    "why_chosen": why,
+                    **table.loc[n, _LINE_COLUMNS].to_dict(),
+                }
             )
-            for n in result.selected
+            for n, why in zip(result.selected, result.why_chosen, strict=True)
         ]
         return RunOptimizerOutput(
             candidate_set_id=stored.candidate_set_id,
@@ -129,6 +150,8 @@ def run_optimizer_tool(
             candidate_options=len(options.lines),
             eligible_options=result.eligible,
             pairs=result.pairs,
+            binding_constraints=list(result.binding_constraints),
+            not_selected=list(result.not_selected),
         )
 
     return Tool(

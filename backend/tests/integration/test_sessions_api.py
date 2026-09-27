@@ -1,8 +1,9 @@
-"""The session API over HTTP, with a FakeProvider, against real Postgres (E3 seam 1)."""
+"""The session API over HTTP, with a FakeProvider and the optimising planner on the small
+world's fitted models, against real Postgres (E3 seam 1, E6 seam 5)."""
 
 import asyncio
-from collections.abc import AsyncIterator, Iterator, Sequence
-from contextlib import asynccontextmanager
+from collections.abc import AsyncIterator, Callable, Iterator, Sequence
+from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from pathlib import Path
 from typing import Any
 
@@ -13,14 +14,19 @@ from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import create_async_engine
 from testcontainers.community.postgres import PostgresContainer
 
-from promopilot.agents import BriefReading
+from promopilot.agents import BriefReading, OptimisingPlanner
 from promopilot.api.main import create_app
 from promopilot.api.sessions import SessionService
 from promopilot.data import RetailData, SessionStore, load_dataset
 from promopilot.datagen import GeneratedDataset, write
-from promopilot.domain import Region
+from promopilot.domain import CompanyPolicy, Mechanism, Region
 from promopilot.llm import FakeProvider, LLMError, LLMProvider, Message, ToolSpec, ToolTurn
+from promopilot.models.demand import DemandModel
+from promopilot.models.registry import ModelKind
+from promopilot.models.relations import Relations
+from promopilot.optimizer import SolverSettings
 from tests.offline import NoModel
+from tests.unit.agents.test_generate_candidates import Fixed, entry
 
 pytestmark = pytest.mark.integration
 
@@ -36,6 +42,8 @@ READING = BriefReading(
     min_margin=None,
 )
 BRIEF = "Snacks push in the North over the next festival, ₹20k budget"
+FREE = CompanyPolicy(margin_floor=0.10, fixed_cost_per_line_week=dict.fromkeys(Mechanism, 0.0))
+"""Without fixed marketing costs, some of the small world's options pay for themselves."""
 
 
 class HealthyProbe:
@@ -75,11 +83,35 @@ def postgres_url(
         yield url
 
 
+type Api = Callable[[str, LLMProvider], AbstractAsyncContextManager[AsyncClient]]
+
+
+@pytest.fixture
+def running_api(small_models: tuple[DemandModel, Relations]) -> Api:
+    """Starts one API process planning on the small world's fitted models."""
+
+    def start(url: str, llm: LLMProvider) -> AbstractAsyncContextManager[AsyncClient]:
+        return api_process(url, llm, small_models)
+
+    return start
+
+
 @asynccontextmanager
-async def running_api(url: str, llm: LLMProvider) -> AsyncIterator[AsyncClient]:
+async def api_process(
+    url: str, llm: LLMProvider, models: tuple[DemandModel, Relations] | None
+) -> AsyncIterator[AsyncClient]:
     """One API process: its own engine, startup and shutdown, like a uvicorn worker."""
     engine = create_async_engine(url)
-    sessions = SessionService(store=SessionStore(engine), data=RetailData(engine), llm=llm)
+    data = RetailData(engine)
+    planner = OptimisingPlanner(
+        Fixed(None if models is None else (entry(ModelKind.DEMAND, 1), models[0])),
+        Fixed(None if models is None else (entry(ModelKind.RELATIONS, 1), models[1])),
+        data,
+        policy=FREE,
+        settings=SolverSettings(),
+        seed=0,
+    )
+    sessions = SessionService(store=SessionStore(engine), data=data, llm=llm, planner=planner)
     app: FastAPI = create_app(
         database_probe=HealthyProbe(), model_status=NoModel(), sessions=sessions
     )
@@ -93,7 +125,7 @@ async def running_api(url: str, llm: LLMProvider) -> AsyncIterator[AsyncClient]:
 
 
 async def settled(client: AsyncClient, session_id: str) -> dict[str, Any]:
-    for _ in range(200):
+    for _ in range(600):
         body: dict[str, Any] = (await client.get(f"/api/sessions/{session_id}")).json()
         if body["status"] != "planning":
             return body
@@ -101,8 +133,8 @@ async def settled(client: AsyncClient, session_id: str) -> dict[str, Any]:
     raise AssertionError(f"session {session_id} is still planning")
 
 
-async def test_a_session_goes_from_planning_to_awaiting_approval_with_a_plan_in_budget_and_scope(
-    postgres_url: str, small_dataset: GeneratedDataset
+async def test_a_session_goes_from_planning_to_awaiting_approval_with_an_optimised_plan(
+    postgres_url: str, running_api: Api, small_dataset: GeneratedDataset
 ) -> None:
     llm = GatedProvider(FakeProvider([READING]))
     async with running_api(postgres_url, llm) as client:
@@ -130,9 +162,46 @@ async def test_a_session_goes_from_planning_to_awaiting_approval_with_a_plan_in_
     assert sum(line["promo_cost"] for line in revision["lines"]) <= BUDGET
     assert {line["line"]["region"] for line in revision["lines"]} == {"North"}
     assert {line["line"]["sku_id"] for line in revision["lines"]} <= snacks
+    assert revision["solver_status"] == "OPTIMAL"
+    assert revision["objective"] > 0
+    assert all(line["why_chosen"]["reasons"] for line in revision["lines"])
+    assert len(revision["not_selected"]) <= 5
+    assert all(entry["reasons"] for entry in revision["not_selected"])
 
 
-async def test_an_llm_error_fails_the_session(postgres_url: str) -> None:
+async def test_a_session_reports_the_constraints_that_bind_its_plan(
+    postgres_url: str, running_api: Api
+) -> None:
+    tight = READING.model_copy(update={"marketing_budget": 300.0})
+    async with running_api(postgres_url, FakeProvider([tight])) as client:
+        session_id = (await client.post("/api/sessions", json={"brief": BRIEF})).json()[
+            "session_id"
+        ]
+        done = await settled(client, session_id)
+
+    revision = done["plan_revision"]
+    assert revision["solver_status"] == "OPTIMAL"
+    assert {"kind": "marketing_budget", "source": "brief", "limit": 300.0} in [
+        {key: constraint[key] for key in ("kind", "source", "limit")}
+        for constraint in revision["binding_constraints"]
+    ]
+    assert sum(line["promo_cost"] for line in revision["lines"]) <= 300.0
+
+
+async def test_a_session_without_trained_models_fails_saying_how_to_train(
+    postgres_url: str,
+) -> None:
+    async with api_process(postgres_url, FakeProvider([READING]), None) as client:
+        session_id = (await client.post("/api/sessions", json={"brief": BRIEF})).json()[
+            "session_id"
+        ]
+        done = await settled(client, session_id)
+
+    assert done["status"] == "failed"
+    assert "make train" in done["error"]
+
+
+async def test_an_llm_error_fails_the_session(postgres_url: str, running_api: Api) -> None:
     async with running_api(postgres_url, FakeProvider([LLMError("provider down")])) as client:
         session_id = (await client.post("/api/sessions", json={"brief": BRIEF})).json()[
             "session_id"
@@ -144,7 +213,9 @@ async def test_an_llm_error_fails_the_session(postgres_url: str) -> None:
     assert done["plan_revision"] is None
 
 
-async def test_a_brief_missing_its_budget_fails_the_session_saying_so(postgres_url: str) -> None:
+async def test_a_brief_missing_its_budget_fails_the_session_saying_so(
+    postgres_url: str, running_api: Api
+) -> None:
     unbudgeted = READING.model_copy(update={"marketing_budget": None})
     async with running_api(postgres_url, FakeProvider([unbudgeted])) as client:
         session_id = (await client.post("/api/sessions", json={"brief": BRIEF})).json()[
@@ -157,7 +228,7 @@ async def test_a_brief_missing_its_budget_fails_the_session_saying_so(postgres_u
 
 
 async def test_an_unknown_session_is_404(postgres_url: str) -> None:
-    async with running_api(postgres_url, FakeProvider([])) as client:
+    async with api_process(postgres_url, FakeProvider([]), None) as client:
         response = await client.get("/api/sessions/00000000-0000-0000-0000-000000000000")
 
     assert response.status_code == 404
@@ -166,7 +237,7 @@ async def test_an_unknown_session_is_404(postgres_url: str) -> None:
 @pytest.mark.parametrize("brief", ["", "   \n ", "x" * 2001], ids=["empty", "blank", "oversized"])
 async def test_an_empty_or_oversized_brief_is_422(postgres_url: str, brief: str) -> None:
     llm = FakeProvider([])
-    async with running_api(postgres_url, llm) as client:
+    async with api_process(postgres_url, llm, None) as client:
         response = await client.post("/api/sessions", json={"brief": brief})
 
     assert response.status_code == 422
@@ -175,6 +246,7 @@ async def test_an_empty_or_oversized_brief_is_422(postgres_url: str, brief: str)
 
 async def test_finished_sessions_survive_a_restart_and_interrupted_ones_fail(
     postgres_url: str,
+    running_api: Api,
 ) -> None:
     async with running_api(postgres_url, FakeProvider([READING])) as client:
         finished_id = (await client.post("/api/sessions", json={"brief": BRIEF})).json()[
