@@ -267,6 +267,18 @@ _Avoid_: error, failure, issue (which the critic's risk review raises)
 The check that every number in an explanation appears in tool outputs, allowing only the rounding the text shows ("₹6.2 lakh", "18%").
 _Avoid_: fact-checking, hallucination check
 
+**Explanation**:
+What the explainer writes for a plan revision: a summary of the plan and a rationale for each plan line, whose every number passes numeric grounding. Money is shown in lakh or crore from ₹1 lakh up (ADR 0050).
+_Avoid_: description, commentary
+
+**Rationale**:
+The part of an explanation that says why one plan line is in the plan: its "why chosen" reasons, how its mechanism compares, and its risks.
+_Avoid_: reason (which is one code of "why chosen"), justification
+
+**Template explanation**:
+The deterministic explanation written from the plan revision's own numbers. It is the fallback when the LLM's answer fails numeric grounding twice, misses a plan line twice, or the LLM is unavailable, and the explanation records why it was used.
+_Avoid_: default explanation, canned text
+
 ### Evaluation
 
 **Scenario**:
