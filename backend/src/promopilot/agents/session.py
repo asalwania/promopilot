@@ -1,11 +1,19 @@
-"""Reading a brief into a planning request: the Context node's step (E3, ADR 0046)."""
+"""Reading a brief into a planning request: the Context node's step (ADR 0046, ADR 0048)."""
 
+from collections.abc import Sequence
 from typing import Protocol
 
 import pandas as pd
 
-from promopilot.agents.context import read_brief
-from promopilot.domain import PlanningRequest
+from promopilot.agents.assumptions import (
+    ContextReading,
+    ContextWorld,
+    interpret,
+    missing_fields_message,
+)
+from promopilot.agents.context import BriefError, context_messages, read_brief, week_table
+from promopilot.agents.tools.inventory_status import pooled_stock
+from promopilot.domain import Clarification, CompanyPolicy, PlanningRequest
 from promopilot.llm import LLMProvider
 
 
@@ -15,19 +23,71 @@ class BriefData(Protocol):
     async def products(self) -> pd.DataFrame: ...
     async def calendar(self) -> pd.DataFrame: ...
     async def default_as_of_week(self) -> int: ...
+    async def stores(self) -> pd.DataFrame: ...
+    async def inventory(self, as_of_week: int) -> pd.DataFrame: ...
+    async def latest_competitor_prices(self, as_of_week: int) -> pd.DataFrame: ...
 
 
-async def read_planning_request(brief: str, llm: LLMProvider, data: BriefData) -> PlanningRequest:
-    """Read the brief into a planning request at the default as-of week.
+async def read_context(
+    brief: str,
+    llm: LLMProvider,
+    data: BriefData,
+    *,
+    policy: CompanyPolicy,
+    clarifications: Sequence[Clarification] = (),
+    amendments: Sequence[str] = (),
+) -> ContextReading:
+    """Read the brief, the answers so far and any amendments at the default as-of week: a
+    planning request with its assumptions, or the questions to ask first (ADR 0048).
 
-    Raises `BriefError` when the brief cannot become a planning request and `LLMError` when
+    Raises `BriefError` when the reading cannot form a planning request and `LLMError` when
     the LLM fails.
     """
+    as_of_week = await data.default_as_of_week()
     products = await data.products()
-    return await read_brief(
-        brief,
+    calendar = await data.calendar()
+    as_of_rows = calendar[calendar["week_id"] == as_of_week]["week_start"]
+    as_of_date = str(as_of_rows.iloc[0]) if len(as_of_rows) else "unknown"
+    reading = await read_brief(
         llm,
-        as_of_week=await data.default_as_of_week(),
-        calendar=await data.calendar(),
-        categories=sorted(products["category"].unique()),
+        context_messages(
+            brief,
+            as_of_week=as_of_week,
+            as_of_date=as_of_date,
+            table=week_table(calendar, as_of_week),
+            regions=sorted(calendar["region"].unique()),
+            categories=sorted(products["category"].unique()),
+            clarifications=clarifications,
+            amendments=amendments,
+        ),
     )
+    try:
+        snapshot = await data.inventory(as_of_week)
+    except LookupError:
+        stock = None  # no snapshot yet: the planner reports it; the overstock list is skipped
+    else:
+        stock = pooled_stock(snapshot, await data.stores(), policy)
+    world = ContextWorld(
+        as_of_week=as_of_week,
+        as_of_date=as_of_date,
+        products=products,
+        calendar=calendar,
+        stock=stock,
+        competitor_prices=await data.latest_competitor_prices(as_of_week),
+        policy=policy,
+    )
+    return interpret(reading, world)
+
+
+async def read_planning_request(
+    brief: str, llm: LLMProvider, data: BriefData, policy: CompanyPolicy | None = None
+) -> PlanningRequest:
+    """Read a brief that needs no clarification into a planning request.
+
+    Raises `BriefError` when it needs one (naming what is missing) or is invalid, and
+    `LLMError` when the LLM fails.
+    """
+    reading = await read_context(brief, llm, data, policy=policy or CompanyPolicy())
+    if reading.request is None:
+        raise BriefError(missing_fields_message(reading.questions))
+    return reading.request

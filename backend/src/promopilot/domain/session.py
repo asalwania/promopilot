@@ -6,6 +6,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from promopilot.domain.assumption import Assumption, Clarification, ClarificationQuestion
 from promopilot.domain.request import PlanningRequest
 from promopilot.domain.revision import PlanRevision
 from promopilot.domain.trace import SessionUsage
@@ -15,8 +16,8 @@ class SessionStatus(StrEnum):
     """Every status a planning session can have (ADR 0046).
 
     planning -> awaiting_approval -> approved (final) or rejected (open for amendments); any
-    failure while planning -> failed. awaiting_clarification arrives with the Context agent
-    (#46).
+    failure while planning -> failed; planning -> awaiting_clarification -> planning when the
+    questions are answered (ADR 0048).
     """
 
     PLANNING = "planning"
@@ -61,3 +62,9 @@ class PlanningSession(BaseModel):
     """Every approval and rejection, oldest first."""
     usage: SessionUsage = SessionUsage()
     """What its LLM calls used and cost: the sums of its token-usage trace events (ADR 0047)."""
+    assumptions: tuple[Assumption, ...] = ()
+    """How the Context agent read the brief, from its latest reading (ADR 0048)."""
+    questions: tuple[ClarificationQuestion, ...] = ()
+    """The clarification questions waiting for an answer; empty unless awaiting one."""
+    clarifications: tuple[Clarification, ...] = ()
+    """Every question answered so far, oldest first."""

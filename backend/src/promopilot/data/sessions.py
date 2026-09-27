@@ -1,5 +1,6 @@
 """Persistence for planning sessions, their plan revisions, their explanations and every
-decision on them (E3, E8: ADR 0046, ADR 0050)."""
+decision on them (E3, E8: ADR 0046, ADR 0050), with the Context agent's assumptions and
+clarifications (ADR 0048)."""
 
 from uuid import UUID, uuid4
 
@@ -10,7 +11,10 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 from promopilot.data.schema import approvals, plan_lines, plan_revisions, planning_sessions
 from promopilot.data.trace import session_usage
 from promopilot.domain import (
+    Assumption,
     BindingConstraint,
+    Clarification,
+    ClarificationQuestion,
     ClearanceShortfall,
     DecisionKind,
     MechanismOutcome,
@@ -37,6 +41,9 @@ _COMPARISON = TypeAdapter(tuple[MechanismOutcome, ...])
 _SHORTFALLS = TypeAdapter(tuple[ClearanceShortfall, ...])
 _FINDINGS = TypeAdapter(tuple[PolicyFinding, ...])
 _ISSUES = TypeAdapter(tuple[Violation, ...])
+_ASSUMPTIONS = TypeAdapter(tuple[Assumption, ...])
+_QUESTIONS = TypeAdapter(tuple[ClarificationQuestion, ...])
+_CLARIFICATIONS = TypeAdapter(tuple[Clarification, ...])
 
 INTERRUPTED = "planning was interrupted by an API restart; start a new session"
 
@@ -124,7 +131,64 @@ class SessionStore:
                 for row in decisions
             ),
             usage=usage,
+            assumptions=_ASSUMPTIONS.validate_python(session.assumptions or ()),
+            questions=_QUESTIONS.validate_python(session.questions or ()),
+            clarifications=_CLARIFICATIONS.validate_python(session.clarifications or ()),
         )
+
+    async def save_assumptions(self, session_id: UUID, assumptions: tuple[Assumption, ...]) -> None:
+        """Store the Context agent's latest assumptions; the status is unchanged."""
+        async with self._engine.begin() as connection:
+            await connection.execute(
+                update(planning_sessions)
+                .where(planning_sessions.c.id == session_id)
+                .values(
+                    assumptions=_ASSUMPTIONS.dump_python(assumptions, mode="json"),
+                    updated_at=func.now(),
+                )
+            )
+
+    async def await_clarification(
+        self, session_id: UUID, questions: tuple[ClarificationQuestion, ...]
+    ) -> None:
+        """A `planning` session now awaits answers to these questions; any other status is
+        kept (ADR 0048)."""
+        async with self._engine.begin() as connection:
+            await connection.execute(
+                update(planning_sessions)
+                .where(
+                    planning_sessions.c.id == session_id,
+                    planning_sessions.c.status == SessionStatus.PLANNING.value,
+                )
+                .values(
+                    status=SessionStatus.AWAITING_CLARIFICATION.value,
+                    questions=_QUESTIONS.dump_python(questions, mode="json"),
+                    updated_at=func.now(),
+                )
+            )
+
+    async def answer_clarifications(
+        self, session_id: UUID, clarifications: tuple[Clarification, ...]
+    ) -> None:
+        """Keep the answered questions (every one so far, oldest first) and move a session
+        awaiting clarification back to `planning`. Raises `SessionConflictError`, changing
+        nothing, when it is not awaiting clarification."""
+        async with self._engine.begin() as connection:
+            moved = await connection.execute(
+                update(planning_sessions)
+                .where(
+                    planning_sessions.c.id == session_id,
+                    planning_sessions.c.status == SessionStatus.AWAITING_CLARIFICATION.value,
+                )
+                .values(
+                    status=SessionStatus.PLANNING.value,
+                    questions=None,
+                    clarifications=_CLARIFICATIONS.dump_python(clarifications, mode="json"),
+                    updated_at=func.now(),
+                )
+            )
+            if moved.rowcount != 1:
+                raise SessionConflictError(f"session {session_id} is not awaiting clarification")
 
     async def save_revision(
         self, session_id: UUID, request: PlanningRequest, revision: PlanRevision

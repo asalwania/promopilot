@@ -230,6 +230,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/sessions/{session_id}/clarify": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Clarify Session
+         * @description Answer the open clarification questions; planning resumes in the background.
+         */
+        post: operations["clarify_session_api_sessions__session_id__clarify_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/sessions/{session_id}/events": {
         parameters: {
             query?: never;
@@ -308,6 +328,33 @@ export interface components {
             revision_number: number;
         };
         /**
+         * Assumption
+         * @description One planning-request field (or a fact the plan relies on) as the agent read or inferred
+         *     it: its value in words, where it came from and how sure the agent is (ADR 0048).
+         */
+        Assumption: {
+            /** Confidence */
+            confidence: number;
+            /** Field */
+            field: string;
+            /**
+             * Flagged
+             * @default false
+             */
+            flagged: boolean;
+            /** Note */
+            note?: string | null;
+            source: components["schemas"]["AssumptionSource"];
+            /** Value */
+            value: string;
+        };
+        /**
+         * AssumptionSource
+         * @description Where an assumed value came from.
+         * @enum {string}
+         */
+        AssumptionSource: "brief" | "data" | "default";
+        /**
          * BindingConstraint
          * @description A constraint that limits the plan: dropping it gives a strictly better objective, or,
          *     when time ran out, one that may.
@@ -333,6 +380,15 @@ export interface components {
          */
         BindingEvidence: "exact" | "lower_bound" | "unproven" | "infeasible";
         /**
+         * Clarification
+         * @description A question the agent asked and the manager's answer, in their own words.
+         */
+        Clarification: {
+            /** Answer */
+            answer: string;
+            question: components["schemas"]["ClarificationQuestion"];
+        };
+        /**
          * ClarificationAsked
          * @description The Context agent paused to ask the manager these questions.
          */
@@ -344,6 +400,37 @@ export interface components {
             kind: "clarification";
             /** Questions */
             questions: string[];
+        };
+        /**
+         * ClarificationQuestion
+         * @description A specific question the agent asks instead of guessing (AG-02).
+         */
+        ClarificationQuestion: {
+            /** Field */
+            field: string;
+            /** Id */
+            id: string;
+            /** Question */
+            question: string;
+            reason: components["schemas"]["QuestionReason"];
+            /**
+             * Suggestions
+             * @default []
+             */
+            suggestions: string[];
+        };
+        /**
+         * ClarifyRequest
+         * @description Answers to the session's open clarification questions (ADR 0048).
+         */
+        ClarifyRequest: {
+            /**
+             * Answers
+             * @description An answer in plain English for every open question, keyed by its id.
+             */
+            answers: {
+                [key: string]: string;
+            };
         };
         /**
          * ClearanceShortfall
@@ -1048,6 +1135,11 @@ export interface components {
          */
         PruneReason: "no_charm_price" | "max_discount" | "below_cost" | "duplicate_price" | "stock" | "partner_stock";
         /**
+         * QuestionReason
+         * @enum {string}
+         */
+        QuestionReason: "missing" | "low_confidence" | "ambiguous";
+        /**
          * Region
          * @enum {string}
          */
@@ -1178,8 +1270,18 @@ export interface components {
          * @description One planning session's read model: status, brief, planning request, latest revision.
          */
         SessionResponse: {
+            /**
+             * Assumptions
+             * @description How the Context agent read the brief, each with its source and confidence (ADR 0048).
+             */
+            assumptions: components["schemas"]["Assumption"][];
             /** Brief */
             brief: string;
+            /**
+             * Clarifications
+             * @description Every question answered so far, oldest first.
+             */
+            clarifications: components["schemas"]["Clarification"][];
             /**
              * Decisions
              * @description Every approval and rejection, oldest first: the session's audit trail.
@@ -1189,6 +1291,11 @@ export interface components {
             error: string | null;
             plan_revision: components["schemas"]["PlanRevision"] | null;
             planning_request: components["schemas"]["PlanningRequest"] | null;
+            /**
+             * Questions
+             * @description The clarification questions waiting for an answer (awaiting_clarification).
+             */
+            questions: components["schemas"]["ClarificationQuestion"][];
             /**
              * Session Id
              * Format: uuid
@@ -1203,8 +1310,8 @@ export interface components {
          * @description Every status a planning session can have (ADR 0046).
          *
          *     planning -> awaiting_approval -> approved (final) or rejected (open for amendments); any
-         *     failure while planning -> failed. awaiting_clarification arrives with the Context agent
-         *     (#46).
+         *     failure while planning -> failed; planning -> awaiting_clarification -> planning when the
+         *     questions are answered (ADR 0048).
          * @enum {string}
          */
         SessionStatus: "planning" | "awaiting_clarification" | "awaiting_approval" | "approved" | "rejected" | "failed";
@@ -1855,6 +1962,62 @@ export interface operations {
                 content?: never;
             };
             /** @description The session is not awaiting approval, the revision is not its latest, or (approve) the revision is infeasible */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Planning is unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    clarify_session_api_sessions__session_id__clarify_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ClarifyRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SessionResponse"];
+                };
+            };
+            /** @description Unknown session */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The session is not awaiting clarification */
             409: {
                 headers: {
                     [name: string]: unknown;

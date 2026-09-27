@@ -4,7 +4,9 @@
 agent graph until the Approval interrupt: the brief is read into a planning request, the
 optimising planner plans it (ADR 0038), the Critic validates it and the Explainer explains it.
 `POST /approve` and `POST /reject` resume the graph from its checkpoint within the request, so
-a decision survives an API restart between planning and deciding.
+a decision survives an API restart between planning and deciding. When the Context agent asks
+questions the graph pauses at Clarify instead; `POST /clarify` keeps the answers and resumes it
+in the background, since planning follows (ADR 0048).
 
 Every step the graph takes is a trace event in Postgres (ADR 0047). `GET /events` streams them
 over SSE: it replays the events after `Last-Event-ID`, then polls for new ones until the
@@ -13,7 +15,7 @@ session is final, and ends with an `end` event.
 
 import asyncio
 import weakref
-from collections.abc import AsyncIterable, AsyncIterator
+from collections.abc import AsyncIterable, AsyncIterator, Awaitable, Callable, Mapping
 from typing import Annotated, Protocol, cast
 from uuid import UUID
 
@@ -29,11 +31,13 @@ from promopilot.agents import (
     PlanningGraph,
     build_graph,
     graph_state,
+    resume_with_answers,
     resume_with_decision,
     start_planning,
 )
 from promopilot.api.schemas import (
     ApproveRequest,
+    ClarifyRequest,
     CreateSessionRequest,
     RejectRequest,
     SessionCreated,
@@ -41,7 +45,13 @@ from promopilot.api.schemas import (
     TraceStreamEnd,
 )
 from promopilot.data import SessionConflictError, SessionStore, TraceRead
-from promopilot.domain import DecisionKind, SessionStatus, SolveStatus, TraceEvent
+from promopilot.domain import (
+    Clarification,
+    DecisionKind,
+    SessionStatus,
+    SolveStatus,
+    TraceEvent,
+)
 from promopilot.llm import LLMError, LLMProvider
 
 log = structlog.get_logger(__name__)
@@ -53,6 +63,10 @@ class SessionNotFoundError(Exception):
 
 class PlanningUnavailableError(Exception):
     """The agent graph's checkpointer could not be opened, so nothing can be planned."""
+
+
+class ClarificationAnswersError(Exception):
+    """The answers do not match the open questions one for one: the API's 422."""
 
 
 class TraceReader(Protocol):
@@ -93,9 +107,11 @@ class SessionService:
     async def start(self, brief: str) -> UUID:
         graph = self._require_graph()
         session_id = await self._store.create(brief)
-        task = asyncio.create_task(self._run(graph, session_id, brief))
-        self._tasks.add(task)
-        task.add_done_callback(self._tasks.discard)
+        self._spawn(
+            self._drive(
+                graph, session_id, lambda: start_planning(graph, str(session_id), session_id, brief)
+            )
+        )
         return session_id
 
     async def get(self, session_id: UUID) -> SessionResponse | None:
@@ -144,6 +160,55 @@ class SessionService:
         """Reject the latest plan revision with a reason; the session stays open for an
         amendment. Raises like `approve`."""
         return await self._decide(session_id, DecisionKind.REJECTED, revision_number, reason)
+
+    async def clarify(self, session_id: UUID, answers: Mapping[str, str]) -> SessionResponse:
+        """Answer every open clarification question; the session is `planning` again and the
+        graph resumes from its checkpoint in the background. Raises `SessionNotFoundError`,
+        `SessionConflictError` when the session is not awaiting clarification, or
+        `ClarificationAnswersError` when the answers do not match the open questions."""
+        graph = self._require_graph()
+        lock = self._locks.setdefault(session_id, asyncio.Lock())
+        with structlog.contextvars.bound_contextvars(session_id=str(session_id)):
+            async with lock:
+                session = await self._store.get(session_id)
+                if session is None:
+                    raise SessionNotFoundError(str(session_id))
+                if session.status is not SessionStatus.AWAITING_CLARIFICATION:
+                    raise SessionConflictError(
+                        f"the session is {session.status.value}: only a session awaiting "
+                        "clarification can be answered"
+                    )
+                thread_id = session.thread_id
+                paused = None if thread_id is None else await graph_state(graph, thread_id)
+                if thread_id is None or paused is None or not paused.awaits_clarification:
+                    raise SessionConflictError(
+                        "the session's agent graph is not waiting for clarification"
+                    )
+                questions = paused.values.questions
+                asked = {question.id for question in questions}
+                missing, unknown = sorted(asked - set(answers)), sorted(set(answers) - asked)
+                if missing or unknown:
+                    raise ClarificationAnswersError(
+                        "answer every open question by its id"
+                        + (f"; unanswered: {', '.join(missing)}" if missing else "")
+                        + (f"; not asked: {', '.join(unknown)}" if unknown else "")
+                    )
+                answered = tuple(
+                    Clarification(question=question, answer=answers[question.id])
+                    for question in questions
+                )
+                await self._store.answer_clarifications(
+                    session_id, session.clarifications + answered
+                )
+                self._spawn(
+                    self._drive(
+                        graph, session_id, lambda: resume_with_answers(graph, thread_id, answers)
+                    )
+                )
+                resumed = await self._store.get(session_id)
+        if resumed is None:
+            raise SessionNotFoundError(str(session_id))
+        return SessionResponse.of(resumed)
 
     async def recover_interrupted(self) -> None:
         """At startup: sessions left `planning` by a previous process can never finish.
@@ -232,15 +297,25 @@ class SessionService:
             raise SessionNotFoundError(str(session_id))
         return SessionResponse.of(decided)
 
-    async def _run(self, graph: PlanningGraph, session_id: UUID, brief: str) -> None:
+    def _spawn(self, run: Awaitable[None]) -> None:
+        task = asyncio.ensure_future(run)
+        self._tasks.add(task)
+        task.add_done_callback(self._tasks.discard)
+
+    async def _drive(
+        self, graph: PlanningGraph, session_id: UUID, run: Callable[[], Awaitable[list[str]]]
+    ) -> None:
+        """Run the graph until it pauses or fails, then record where it paused."""
         # The run is its own task, so the session id stays on every log line it writes.
         structlog.contextvars.bind_contextvars(session_id=str(session_id))
         try:
-            await start_planning(graph, str(session_id), session_id, brief)
-            # Only once the Approval interrupt is checkpointed can anyone decide on it.
+            await run()
+            # Only once an interrupt is checkpointed can anyone answer it.
             paused = await graph_state(graph, str(session_id))
             if paused is not None and paused.awaits_decision:
                 await self._store.await_approval(session_id)
+            elif paused is not None and paused.awaits_clarification:
+                await self._store.await_clarification(session_id, paused.values.questions)
         except BriefError as error:
             await self._store.mark_failed(session_id, f"The brief could not be planned: {error}")
         except PlanningError as error:
@@ -309,6 +384,28 @@ def sessions_router(sessions: SessionService) -> APIRouter:
             else:
                 end = TraceStreamEnd(session_id=session_id, status=item)
                 yield _documented(ServerSentEvent(data=end, event="end"))
+
+    @router.post(
+        "/{session_id}/clarify",
+        status_code=status.HTTP_202_ACCEPTED,
+        responses={
+            status.HTTP_404_NOT_FOUND: {"description": "Unknown session"},
+            status.HTTP_409_CONFLICT: {"description": "The session is not awaiting clarification"},
+            status.HTTP_503_SERVICE_UNAVAILABLE: {"description": "Planning is unavailable"},
+        },
+    )
+    async def clarify_session(session_id: UUID, body: ClarifyRequest) -> SessionResponse:
+        """Answer the open clarification questions; planning resumes in the background."""
+        try:
+            return await sessions.clarify(session_id, body.answers)
+        except SessionNotFoundError as error:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Unknown session") from error
+        except SessionConflictError as error:
+            raise HTTPException(status.HTTP_409_CONFLICT, str(error)) from error
+        except ClarificationAnswersError as error:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(error)) from error
+        except PlanningUnavailableError as error:
+            raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, str(error)) from error
 
     @router.post("/{session_id}/approve", responses=decision_responses)
     async def approve_session(session_id: UUID, body: ApproveRequest) -> SessionResponse:

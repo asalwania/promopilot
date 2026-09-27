@@ -1,14 +1,16 @@
 """Agents: turn a brief into a promo plan a human approves (SPEC §9.6).
 
 `build_graph` compiles the checkpointed agent graph (ADR 0046): the Context agent reads the
-brief, the planner agent plans it through the tools, falling back to the optimising planner
+brief into a planning request with its assumptions, or asks at the Clarify interrupt
+(ADR 0048), the planner agent plans it through the tools, falling back to the optimising planner
 (ADR 0038, ADR 0049), the Critic validates the plan, the Explainer writes grounded
 explanations with a template fallback (ADR 0050), and the Approval interrupt waits for a
 decision.
 """
 
+from promopilot.agents.assumptions import ContextReading
 from promopilot.agents.checkpoints import Checkpoints, MemoryCheckpoints, PostgresCheckpoints
-from promopilot.agents.context import BriefError, BriefReading
+from promopilot.agents.context import BriefError, BriefReading, ClearanceAsk, RegionalCap
 from promopilot.agents.explainer import (
     ExplainerAnswer,
     LineRationale,
@@ -24,6 +26,7 @@ from promopilot.agents.graph import (
     build_graph,
     checkpoint_serializer,
     graph_state,
+    resume_with_answers,
     resume_with_decision,
     start_planning,
 )
@@ -43,10 +46,12 @@ from promopilot.agents.planner_agent import (
     plan_with_tools,
 )
 from promopilot.agents.recording import RecordedPlanning, RecordingError, record_cassettes
-from promopilot.agents.session import BriefData, read_planning_request
+from promopilot.agents.session import BriefData, read_context, read_planning_request
 from promopilot.agents.state import (
     ApprovalAnswer,
     ApprovalRequest,
+    ClarificationAnswer,
+    ClarificationRequest,
     DegradedReason,
     PlanningState,
 )
@@ -70,6 +75,10 @@ __all__ = [
     "BriefError",
     "BriefReading",
     "Checkpoints",
+    "ClarificationAnswer",
+    "ClarificationRequest",
+    "ClearanceAsk",
+    "ContextReading",
     "DefaultSequence",
     "DegradedReason",
     "ExplainerAnswer",
@@ -90,6 +99,7 @@ __all__ = [
     "PostgresCheckpoints",
     "RecordedPlanning",
     "RecordingError",
+    "RegionalCap",
     "RevisionSource",
     "SessionRecorder",
     "StoredRevisions",
@@ -104,8 +114,10 @@ __all__ = [
     "graph_state",
     "loosening",
     "plan_with_tools",
+    "read_context",
     "read_planning_request",
     "record_cassettes",
+    "resume_with_answers",
     "resume_with_decision",
     "start_planning",
     "summarize",

@@ -1,26 +1,30 @@
 """The agent graph (SPEC §9.6, ADR 0046): Context → Planner → Critic → Explainer → Approval
-(interrupt) → Done, checkpointed so an interrupt survives an API restart.
+(interrupt) → Done, checkpointed so an interrupt survives an API restart. Context goes to the
+Clarify interrupt instead when it has questions, and each answer goes back to Context
+(ADR 0048).
 
-In this slice the Context node reads the brief with the LLM (E3), the Planner is the LLM
+In this slice the Context node reads the brief with the LLM into a planning request with its
+assumptions, or clarification questions (ADR 0048), the Planner is the LLM
 planner agent over the tool registry when it is given one (#47, ADR 0049), falling back to
 the deterministic default sequence (option generation → optimiser, with the relaxation when
 the request is infeasible → simulation, ADR 0038/0044), the Critic runs `validate_plan` and
 keeps what it finds as open issues, and the Explainer has the LLM explain the plan, checked
 by numeric grounding, with the template as its fallback (ADR 0050). The Critic
-loop (#48), the Clarify interrupt (#46) and amendments (#50) extend these edges.
+loop (#48) and amendments (#50) extend these edges.
 
 Nodes record the session as they go through a `SessionRecorder` (`promopilot.data.
-SessionStore`): the Planner saves the plan revision, the Critic its open issues, the Explainer its
-explanation, and Approval
-records each decision once the interrupt is answered. The session moves to awaiting approval
-only once `start_planning` returns with the thread paused at Approval, so the interrupt is
-checkpointed before anyone can decide on it. Every step is checkpointed before the next runs
-(durability "sync"). On resume LangGraph re-runs the Approval node from its start, so it does
-nothing before the interrupt.
+SessionStore`): the Context node saves its assumptions, the Planner the plan revision, the
+Critic its open issues, the Explainer its explanation, and Approval each decision once the
+interrupt is answered. The session moves to awaiting approval (or clarification) only once
+`start_planning` returns with the thread paused at the interrupt, so it is checkpointed before
+anyone can answer it. Every step is checkpointed before the next runs (durability "sync"). On
+resume LangGraph re-runs an interrupted node from its start, so Approval and Clarify do
+nothing before their interrupts.
 """
 
 import enum
 import typing
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any, Final, Literal, Protocol
 from uuid import UUID
@@ -36,10 +40,12 @@ from pydantic import BaseModel
 from promopilot.agents.explainer import explain_plan
 from promopilot.agents.planner import PlannedRevision
 from promopilot.agents.planner_agent import AgentTools, plan_with_tools
-from promopilot.agents.session import BriefData, read_planning_request
+from promopilot.agents.session import BriefData, read_context
 from promopilot.agents.state import (
     ApprovalAnswer,
     ApprovalRequest,
+    ClarificationAnswer,
+    ClarificationRequest,
     PlanningState,
 )
 from promopilot.agents.trace import (
@@ -52,6 +58,9 @@ from promopilot.agents.trace import (
     traced_node,
 )
 from promopilot.domain import (
+    Assumption,
+    Clarification,
+    ClarificationAsked,
     CompanyPolicy,
     DecisionKind,
     DecisionMade,
@@ -70,6 +79,7 @@ log = structlog.get_logger(__name__)
 type PlanningGraph = CompiledStateGraph[PlanningState, None, PlanningState, PlanningState]
 
 CONTEXT: Final = "context"
+CLARIFY: Final = "clarify"
 PLANNER: Final = "planner"
 CRITIC: Final = "critic"
 EXPLAINER: Final = "explainer"
@@ -85,6 +95,10 @@ class Planner(Protocol):
 
 class SessionRecorder(Protocol):
     """What the graph records for its planning session (`promopilot.data.SessionStore`)."""
+
+    async def save_assumptions(
+        self, session_id: UUID, assumptions: tuple[Assumption, ...]
+    ) -> None: ...
 
     async def save_revision(
         self, session_id: UUID, request: PlanningRequest, revision: PlanRevision
@@ -137,6 +151,11 @@ class GraphSnapshot:
         """Paused at the Approval interrupt, waiting for approve or reject."""
         return self.paused_at == (APPROVAL,)
 
+    @property
+    def awaits_clarification(self) -> bool:
+        """Paused at the Clarify interrupt, waiting for answers to its questions."""
+        return self.paused_at == (CLARIFY,)
+
 
 def build_graph(
     tools: GraphTools, llm: LLMProvider, checkpointer: BaseCheckpointSaver[Any]
@@ -149,7 +168,37 @@ def build_graph(
     llm = TracedProvider(llm, tools.pricing)
 
     async def context(state: PlanningState) -> dict[str, object]:
-        return {"request": await read_planning_request(state.brief, llm, tools.brief_data)}
+        reading = await read_context(
+            state.brief,
+            llm,
+            tools.brief_data,
+            policy=tools.policy,
+            clarifications=state.clarifications,
+            amendments=state.amendments,
+        )
+        await tools.sessions.save_assumptions(state.session_id, reading.assumptions)
+        if reading.questions:
+            # Emitted here, not in Clarify: an interrupted node re-runs from its start on resume,
+            # which would repeat the event.
+            await emit(ClarificationAsked(questions=tuple(q.question for q in reading.questions)))
+        return {
+            "request": reading.request,
+            "assumptions": reading.assumptions,
+            "questions": reading.questions,
+        }
+
+    def after_context(state: PlanningState) -> Literal["clarify", "planner"]:
+        return CLARIFY if state.questions else PLANNER
+
+    async def clarify(state: PlanningState) -> dict[str, object]:
+        answer = ClarificationAnswer.model_validate(
+            interrupt(ClarificationRequest(questions=state.questions))
+        )
+        answered = tuple(
+            Clarification(question=question, answer=answer.answers[question.id])
+            for question in state.questions
+        )
+        return {"clarifications": (*state.clarifications, *answered), "questions": ()}
 
     async def planner(state: PlanningState) -> dict[str, object]:
         request = _required(state.request, "a planning request")
@@ -251,13 +300,15 @@ def build_graph(
         graph.add_node(name, traced_node(tools.trace, name, node))
 
     add(CONTEXT, context)
+    add(CLARIFY, clarify)
     add(PLANNER, planner)
     add(CRITIC, critic)
     add(EXPLAINER, explainer)
     add(APPROVAL, approval)
     add(DONE, done)
     graph.add_edge(START, CONTEXT)
-    graph.add_edge(CONTEXT, PLANNER)
+    graph.add_conditional_edges(CONTEXT, after_context, [CLARIFY, PLANNER])
+    graph.add_edge(CLARIFY, CONTEXT)
     graph.add_edge(PLANNER, CRITIC)
     graph.add_edge(CRITIC, EXPLAINER)
     graph.add_edge(EXPLAINER, APPROVAL)
@@ -273,7 +324,15 @@ def checkpoint_serializer() -> JsonPlusSerializer:
     lists every pydantic model and enum reachable from the state and the Approval interrupt.
     """
     return JsonPlusSerializer(
-        allowed_msgpack_modules=sorted(_types_of(PlanningState, ApprovalRequest, ApprovalAnswer))
+        allowed_msgpack_modules=sorted(
+            _types_of(
+                PlanningState,
+                ApprovalRequest,
+                ApprovalAnswer,
+                ClarificationRequest,
+                ClarificationAnswer,
+            )
+        )
     )
 
 
@@ -297,6 +356,15 @@ async def resume_with_decision(
 ) -> list[str]:
     """Answer the Approval interrupt of a paused thread; returns the nodes it ran, in order."""
     answer = ApprovalAnswer(decision=decision, revision_number=revision_number, reason=reason)
+    return await _run(graph, thread_id, Command(resume=answer))
+
+
+async def resume_with_answers(
+    graph: PlanningGraph, thread_id: str, answers: Mapping[str, str]
+) -> list[str]:
+    """Answer the Clarify interrupt of a paused thread, one answer per open question id;
+    returns the nodes it ran, in order. The caller checks every question is answered."""
+    answer = ClarificationAnswer(answers=dict(answers))
     return await _run(graph, thread_id, Command(resume=answer))
 
 

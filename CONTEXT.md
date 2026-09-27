@@ -132,7 +132,7 @@ The regions and categories a plan may promote in, optionally narrowed to named S
 _Avoid_: selection, filter
 
 **Assumption**:
-A planning-request field the agent inferred rather than read from the brief, with its source (brief, data or default) and a confidence.
+A planning-request field, or a fact the plan relies on (the objective, the overstocked SKUs in scope), as the agent read or inferred it: its value, its source (brief, data or default) and a confidence. A brief phrase's confidence is its match score; a stated number, data or company policy has 1. It is flagged when the agent did not take the brief at its word, such as a policy finding or a revenue ask (ADR 0048).
 
 **Match score**:
 How closely a brief phrase matches a catalogue entity, from 0 to 1; 1.0 only when every word matches exactly. A phrase is ambiguous when its best match scores below 0.7 or a second reading scores within 0.1 of it (ADR 0032).
@@ -142,7 +142,7 @@ _Avoid_: confidence (which belongs to an assumption)
 A planning-request field the agent must never guess: marketing budget, scope (categories or regions) and promo window. If one is missing, or inferred with confidence below 0.7, the agent asks a clarification.
 
 **Clarification**:
-A specific question the agent asks the user, pausing the planning session until it is answered.
+A specific question the agent asks the user, pausing the planning session until it is answered, together with the user's answer in their own words. The agent asks about a critical field, and about a clearance with no figure or unclear SKUs; it then reads the brief again with every answer so far (ADR 0048).
 
 **Infeasible**:
 A planning request is infeasible when no plan reaches every clearance target within its other constraints; the empty plan keeps every other constraint, so nothing else can make it so. The optimiser says so only when it has proven it: a timeout is `FEASIBLE`, never `INFEASIBLE`. The closest plan still comes back, with its clearance shortfalls and a relaxation (ADR 0044).

@@ -3,8 +3,9 @@ and is answered with.
 
 The state is checkpointed after every step, so it holds only values: the brief, the planning
 request, the plan revision with its plan facts, the Planner's notes (ADR 0049), the Critic's
-findings, the explanations and the latest decision. Assumptions and clarifications (#46) and
-the diff from the previous revision (#50) join it with the tickets that produce them; the
+findings, the explanations and the latest decision, with the Context agent's assumptions,
+open questions and answered clarifications (ADR 0048). The diff from the previous revision
+(#50) joins it with the tickets that produce them; the
 simulation is on the plan revision (ADR 0042). The trace is not state: every step is a trace
 event stored as it happens (ADR 0047).
 """
@@ -15,6 +16,9 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field
 
 from promopilot.domain import (
+    Assumption,
+    Clarification,
+    ClarificationQuestion,
     DecisionKind,
     PlanDecision,
     PlanExplanation,
@@ -44,6 +48,12 @@ class PlanningState(BaseModel):
     brief: str
     amendments: tuple[str, ...] = ()
     request: PlanningRequest | None = None
+    assumptions: tuple[Assumption, ...] = ()
+    """How the Context agent read the brief, from its latest reading (ADR 0048)."""
+    questions: tuple[ClarificationQuestion, ...] = ()
+    """What the Context agent asks before planning; the Clarify interrupt waits on them."""
+    clarifications: tuple[Clarification, ...] = ()
+    """Every question answered so far, oldest first."""
     plan: PlanRevision | None = None
     plan_facts: PlanFacts | None = None
     """The plan-time numbers the plan was chosen on, which the Critic validates."""
@@ -78,3 +88,19 @@ class ApprovalAnswer(BaseModel):
     decision: DecisionKind
     revision_number: int = Field(ge=1)
     reason: str | None = None
+
+
+class ClarificationRequest(BaseModel):
+    """What the Clarify interrupt waits on: answers to these questions (ADR 0048)."""
+
+    model_config = ConfigDict(frozen=True)
+
+    questions: tuple[ClarificationQuestion, ...]
+
+
+class ClarificationAnswer(BaseModel):
+    """What resumes the Clarify interrupt: an answer, in the manager's words, per question id."""
+
+    model_config = ConfigDict(frozen=True)
+
+    answers: dict[str, str]

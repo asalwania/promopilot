@@ -1,6 +1,6 @@
 """The session API over HTTP, with a FakeProvider and the optimising planner on the small
 world's fitted models, against real Postgres and the agent graph's Postgres checkpoints (E3
-seam 1, E6 seam 5, E8 #44)."""
+seam 1, E6 seam 5, E8 #44, #46)."""
 
 import asyncio
 from collections.abc import AsyncIterator, Callable, Iterator, Sequence
@@ -41,6 +41,8 @@ from promopilot.data import (
 )
 from promopilot.datagen import GeneratedDataset, write
 from promopilot.domain import (
+    Clarification,
+    ClarificationQuestion,
     ClearanceShortfall,
     ClearanceTarget,
     CompanyPolicy,
@@ -53,6 +55,7 @@ from promopilot.domain import (
     PlanningRequest,
     PlanRevision,
     PromoWindow,
+    QuestionReason,
     Region,
     Relaxation,
     RelaxedConstraint,
@@ -273,6 +276,14 @@ async def test_a_session_goes_from_planning_to_awaiting_approval_with_an_optimis
     explanation = revision["explanation"]
     assert explanation["source"] == "template"
     assert explanation["fallback_reason"] == "llm_unavailable"
+    # How the Context agent read the brief (ADR 0048).
+    assumed = {a["field"]: a for a in done["assumptions"]}
+    assert (assumed["marketing_budget"]["source"], assumed["marketing_budget"]["confidence"]) == (
+        "brief",
+        1.0,
+    )
+    assert assumed["min_margin"]["source"] == "default"
+    assert (done["questions"], done["clarifications"]) == ([], [])
     assert explanation["summary"].startswith("Plan revision 1.")
     assert len(explanation["rationales"]) == len(revision["lines"])
 
@@ -321,20 +332,6 @@ async def test_an_llm_error_fails_the_session(postgres_url: str, running_api: Ap
     assert done["plan_revision"] is None
 
 
-async def test_a_brief_missing_its_budget_fails_the_session_saying_so(
-    postgres_url: str, running_api: Api
-) -> None:
-    unbudgeted = READING.model_copy(update={"marketing_budget": None})
-    async with running_api(postgres_url, FakeProvider([unbudgeted])) as client:
-        session_id = (await client.post("/api/sessions", json={"brief": BRIEF})).json()[
-            "session_id"
-        ]
-        done = await settled(client, session_id)
-
-    assert done["status"] == "failed"
-    assert "marketing budget" in done["error"]
-
-
 async def test_an_unknown_session_is_404(postgres_url: str) -> None:
     async with api_process(postgres_url, FakeProvider([]), None) as client:
         response = await client.get("/api/sessions/00000000-0000-0000-0000-000000000000")
@@ -350,6 +347,151 @@ async def test_an_empty_or_oversized_brief_is_422(postgres_url: str, brief: str)
 
     assert response.status_code == 422
     assert llm.calls == []
+
+
+# --- clarification (E8 #46, ADR 0048) ---------------------------------------------------------
+
+UNBUDGETED = READING.model_copy(update={"marketing_budget": None})
+
+
+async def clarifying_session(client: AsyncClient) -> str:
+    session_id: str = (await client.post("/api/sessions", json={"brief": BRIEF})).json()[
+        "session_id"
+    ]
+    waiting = await settled(client, session_id)
+    assert waiting["status"] == "awaiting_clarification", waiting
+    return session_id
+
+
+async def test_a_brief_missing_its_budget_asks_and_the_answer_resumes_planning(
+    postgres_url: str, running_api: Api
+) -> None:
+    async with running_api(
+        postgres_url, FakeProvider([UNBUDGETED, READING, explainer_down()])
+    ) as client:
+        session_id = await clarifying_session(client)
+        waiting = (await client.get(f"/api/sessions/{session_id}")).json()
+        answered = await client.post(
+            f"/api/sessions/{session_id}/clarify", json={"answers": {"marketing_budget": "₹20k"}}
+        )
+        done = await settled(client, session_id)
+
+    [question] = waiting["questions"]
+    assert (question["id"], question["field"], question["reason"]) == (
+        "marketing_budget",
+        "marketing_budget",
+        "missing",
+    )
+    assert "budget" in question["question"]
+    assert waiting["planning_request"] is None
+    assert waiting["plan_revision"] is None
+    assert "scope.regions" in {a["field"] for a in waiting["assumptions"]}
+    assert answered.status_code == 202, answered.text
+    body = answered.json()
+    assert body["status"] == "planning"
+    assert body["questions"] == []
+    assert [(c["question"]["id"], c["answer"]) for c in body["clarifications"]] == [
+        ("marketing_budget", "₹20k")
+    ]
+    assert done["status"] == "awaiting_approval", done
+    assert done["planning_request"]["marketing_budget"] == BUDGET
+    assert done["plan_revision"]["number"] == 1
+    assert done["clarifications"] == body["clarifications"]
+    budget = {a["field"]: a for a in done["assumptions"]}["marketing_budget"]
+    assert budget["source"] == "brief"
+
+
+async def test_a_clarification_survives_a_restart_and_resumes_from_its_checkpoint(
+    postgres_url: str, running_api: Api
+) -> None:
+    async with running_api(postgres_url, FakeProvider([UNBUDGETED])) as client:
+        session_id = await clarifying_session(client)
+
+    # A new API process: its own engine, checkpointer pool and graph. The session is still
+    # waiting (only `planning` sessions fail at startup), and answering resumes it.
+    async with running_api(postgres_url, FakeProvider([READING, explainer_down()])) as client:
+        waiting = (await client.get(f"/api/sessions/{session_id}")).json()
+        answered = await client.post(
+            f"/api/sessions/{session_id}/clarify", json={"answers": {"marketing_budget": "₹20k"}}
+        )
+        done = await settled(client, session_id)
+
+    assert waiting["status"] == "awaiting_clarification"
+    assert answered.status_code == 202, answered.text
+    assert done["status"] == "awaiting_approval", done
+    assert done["plan_revision"]["number"] == 1
+
+
+async def test_answering_a_session_not_awaiting_clarification_is_409(
+    postgres_url: str, running_api: Api
+) -> None:
+    async with running_api(postgres_url, FakeProvider([READING, explainer_down()])) as client:
+        session_id = await planned_session(client)
+        response = await client.post(
+            f"/api/sessions/{session_id}/clarify", json={"answers": {"marketing_budget": "₹20k"}}
+        )
+        after = (await client.get(f"/api/sessions/{session_id}")).json()
+
+    assert response.status_code == 409
+    assert "awaiting clarification" in response.json()["detail"]
+    assert after["status"] == "awaiting_approval"
+    assert after["clarifications"] == []
+
+
+async def test_answering_twice_is_409(postgres_url: str, running_api: Api) -> None:
+    llm = GatedProvider(FakeProvider([UNBUDGETED, READING, explainer_down()]))
+    llm.gate.set()
+    async with running_api(postgres_url, llm) as client:
+        session_id = await clarifying_session(client)
+        llm.gate.clear()  # hold the re-read, so the session stays `planning`
+        first = await client.post(
+            f"/api/sessions/{session_id}/clarify", json={"answers": {"marketing_budget": "₹20k"}}
+        )
+        second = await client.post(
+            f"/api/sessions/{session_id}/clarify", json={"answers": {"marketing_budget": "₹30k"}}
+        )
+        llm.gate.set()
+        done = await settled(client, session_id)
+
+    assert first.status_code == 202
+    assert second.status_code == 409
+    assert [c["answer"] for c in done["clarifications"]] == ["₹20k"]
+
+
+async def test_answering_an_unknown_session_is_404(postgres_url: str, running_api: Api) -> None:
+    async with running_api(postgres_url, FakeProvider([])) as client:
+        response = await client.post(
+            "/api/sessions/00000000-0000-0000-0000-000000000000/clarify",
+            json={"answers": {"marketing_budget": "₹20k"}},
+        )
+
+    assert response.status_code == 404
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        {},
+        {"answers": {}},
+        {"answers": {"marketing_budget": "   "}},
+        {"answers": {"marketing_budget": "x" * 2001}},
+        {"answers": {"marketing_budget": "₹20k"}, "extra": 1},
+        {"answers": {"regions": "North"}},
+        {"answers": {"marketing_budget": "₹20k", "regions": "North"}},
+    ],
+    ids=["no-answers", "empty", "blank", "oversized", "extra-field", "unanswered", "not-asked"],
+)
+async def test_an_invalid_clarify_body_is_422(
+    postgres_url: str, running_api: Api, body: dict[str, object]
+) -> None:
+    async with running_api(postgres_url, FakeProvider([UNBUDGETED])) as client:
+        session_id = await clarifying_session(client)
+        response = await client.post(f"/api/sessions/{session_id}/clarify", json=body)
+        after = (await client.get(f"/api/sessions/{session_id}")).json()
+
+    assert response.status_code == 422, response.text
+    assert after["status"] == "awaiting_clarification"
+    assert after["clarifications"] == []
 
 
 async def test_finished_sessions_survive_a_restart_and_interrupted_ones_fail(
@@ -391,6 +533,10 @@ async def test_a_brief_that_would_loosen_policy_is_flagged_on_the_plan_revision(
         for finding in revision["policy_findings"]
     ] == [("min_margin", 0.05, FREE.margin_floor)]
     assert revision["clearance_shortfalls"] == []
+    # The Context agent flags it too: the floor applies (ADR 0048).
+    margin = {a["field"]: a for a in done["assumptions"]}["min_margin"]
+    assert margin["flagged"]
+    assert margin["value"].startswith("10.0%")
 
 
 class Clearing:
@@ -843,6 +989,37 @@ async def test_the_store_refuses_a_decision_the_session_cannot_take(postgres_url
     assert saved.decisions == (decided,)
 
 
+async def test_the_store_keeps_answers_only_for_a_session_awaiting_clarification(
+    postgres_url: str,
+) -> None:
+    engine = create_async_engine(postgres_url)
+    store = SessionStore(engine)
+    question = ClarificationQuestion(
+        id="marketing_budget",
+        field="marketing_budget",
+        question="What marketing budget?",
+        reason=QuestionReason.MISSING,
+    )
+    answered = (Clarification(question=question, answer="₹20k"),)
+    try:
+        session_id = await store.create(BRIEF)
+        with pytest.raises(SessionConflictError):  # still planning
+            await store.answer_clarifications(session_id, answered)
+        await store.await_clarification(session_id, (question,))
+        waiting = await store.get(session_id)
+        await store.answer_clarifications(session_id, answered)
+        with pytest.raises(SessionConflictError):  # answered already
+            await store.answer_clarifications(session_id, answered)
+        saved = await store.get(session_id)
+    finally:
+        await engine.dispose()
+
+    assert waiting is not None
+    assert (waiting.status, waiting.questions) == ("awaiting_clarification", (question,))
+    assert saved is not None
+    assert (saved.status, saved.questions, saved.clarifications) == ("planning", (), answered)
+
+
 async def test_without_checkpoints_a_new_session_is_503(postgres_url: str) -> None:
     engine = create_async_engine(postgres_url)
     store = SessionStore(engine)
@@ -887,8 +1064,20 @@ class NeverRead:
     async def default_as_of_week(self) -> int:
         raise AssertionError("never read")
 
+    async def stores(self) -> Any:
+        raise AssertionError("never read")
+
+    async def inventory(self, as_of_week: int) -> Any:
+        raise AssertionError("never read")
+
+    async def latest_competitor_prices(self, as_of_week: int) -> Any:
+        raise AssertionError("never read")
+
 
 class NeverRecords:
+    async def save_assumptions(self, *args: object) -> None:
+        raise AssertionError("never records")
+
     async def save_revision(self, *args: object) -> None:
         raise AssertionError("never records")
 

@@ -3,6 +3,7 @@ import { LoaderCircle } from "lucide-react";
 import { PlanTable } from "@/components/plan-table";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type {
+  ClarificationQuestion,
   PlanDecision,
   PlanningRequest,
   Session,
@@ -39,6 +40,9 @@ export function SessionDetails({ session }: { session: Session }) {
         <CardContent className="flex flex-col gap-2">
           <p className="text-muted-foreground text-sm">{session.brief}</p>
           {decision && <DecisionNote decision={decision} />}
+          {session.questions.length > 0 && (
+            <OpenQuestions questions={session.questions} />
+          )}
           {session.error && (
             <p role="alert" className="text-destructive text-sm">
               {session.error}
@@ -92,6 +96,21 @@ function DecisionNote({ decision }: { decision: PlanDecision }) {
         ? `${revision} was approved.`
         : `${revision} was rejected: ${decision.reason ?? ""}`}
     </p>
+  );
+}
+
+// Answering them, and the assumptions panel, arrive in E10 (ADR 0048).
+function OpenQuestions({ questions }: { questions: ClarificationQuestion[] }) {
+  return (
+    <ul aria-label="Clarification questions" className="list-disc pl-5 text-sm">
+      {questions.map((question) => (
+        <li key={question.id}>
+          {question.question}
+          {question.suggestions.length > 0 &&
+            ` (${question.suggestions.join(", ")}?)`}
+        </li>
+      ))}
+    </ul>
   );
 }
 
