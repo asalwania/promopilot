@@ -20,6 +20,7 @@ from promopilot.agents.tools.holidays import get_holidays_tool
 from promopilot.agents.tools.inventory_status import get_inventory_status_tool
 from promopilot.agents.tools.run_optimizer import run_optimizer_tool
 from promopilot.agents.tools.scope_data import get_scope_data_tool
+from promopilot.agents.tools.simulate_plan import simulate_plan_tool
 from promopilot.api.catalog import CatalogService, catalog_router
 from promopilot.api.competitors import CompetitorService, competitors_router
 from promopilot.api.models import ModelService, models_router
@@ -36,6 +37,7 @@ from promopilot.models.registry import LatestModel, ModelKind, ModelRegistry
 from promopilot.models.relations import Relations
 from promopilot.models.serving import LiveRelations
 from promopilot.optimizer import CandidateStore, SolverSettings
+from promopilot.simulator import SimulationSettings
 
 log = structlog.get_logger(__name__)
 
@@ -126,6 +128,9 @@ def build_app() -> FastAPI:
         workers=settings.optimizer_workers,
         binding_time_limit_seconds=settings.optimizer_binding_time_limit_seconds,
     )
+    simulation_settings = SimulationSettings(
+        n_runs=settings.simulation_runs, seed=settings.simulation_seed
+    )
     # Sessions plan with the latest demand model and the live relations model (ADR 0038).
     sessions = SessionService(
         store=SessionStore(engine),
@@ -138,6 +143,7 @@ def build_app() -> FastAPI:
             policy=policy,
             settings=solver_settings,
             seed=settings.optimizer_seed,
+            simulation=simulation_settings,
         ),
     )
     app = create_app(
@@ -151,7 +157,8 @@ def build_app() -> FastAPI:
     )
     # The agents' tools (ADR 0025): the model is resolved per call, so a retrain is picked up,
     # and so is the as-of week, so newly loaded data moves the data tools' clock (ADR 0032).
-    # Generated promo options wait here for the optimiser (ADR 0035, ADR 0036).
+    # Generated promo options wait here for the optimiser (ADR 0035, ADR 0036); the simulator
+    # samples with the session's seed and default runs (ADR 0042).
     app.state.candidates = CandidateStore()
     app.state.tools = ToolRegistry(
         [
@@ -181,6 +188,13 @@ def build_app() -> FastAPI:
                 data,
                 data.default_as_of_week,
                 policy=policy,
+            ),
+            simulate_plan_tool(
+                demand_model,
+                data,
+                data.default_as_of_week,
+                policy=policy,
+                defaults=simulation_settings,
             ),
         ]
     )

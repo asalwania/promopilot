@@ -203,6 +203,14 @@ _Avoid_: strategy, schedule, plan (when a specific revision is meant)
 One numbered version of the promo plan within a planning session; every amendment produces a new revision, and a diff compares consecutive revisions. Each of its plan lines carries the expected units, promo cost and expected incremental profit computed by the tool that planned it.
 _Avoid_: version, iteration
 
+**Simulation**:
+The Monte Carlo runs of a promo plan: each run samples the demand model's terms within their uncertainty and weekly demand noise, and caps units at available stock. It reports P10/P50/P90 of each plan line's and the plan's outcomes (ADR 0042).
+_Avoid_: forecast, scenario (which belongs to evals)
+
+**Stock-out probability**:
+The share of a simulation's runs in which a plan line's demand reached the available stock of its SKU (or of a BUNDLE's partner); for a region, the share in which at least one of its plan lines did.
+_Avoid_: stock-out risk (as a number)
+
 **Planning session**:
 One conversation from brief to decision: brief, amendments, clarifications, plan revisions and the approval decision.
 _Avoid_: run, conversation, job

@@ -53,3 +53,8 @@ class Settings(BaseSettings):
     # Wall-clock seconds for proving which constraints bind, after the solve (ADR 0038). A
     # constraint left unsettled when the time runs out is reported as unproven.
     optimizer_binding_time_limit_seconds: float = Field(default=8.0, ge=0)
+
+    # The Monte Carlo simulation of every plan revision (ADR 0042): runs per simulation, within
+    # the simulator's MIN_RUNS..MAX_RUNS, and the seed that makes it reproducible.
+    simulation_runs: int = Field(default=1_000, ge=100, le=5_000)
+    simulation_seed: int = Field(default=0, ge=0)

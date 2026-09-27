@@ -423,6 +423,62 @@
         "title": "InventoryRow",
         "type": "object"
       },
+      "LineSimulation": {
+        "description": "One plan line's simulated ranges, identified by its SKU and region.",
+        "properties": {
+          "gross_profit": {
+            "$ref": "#/components/schemas/Percentiles"
+          },
+          "margin": {
+            "$ref": "#/components/schemas/Percentiles"
+          },
+          "promo_spend": {
+            "$ref": "#/components/schemas/Percentiles"
+          },
+          "region": {
+            "$ref": "#/components/schemas/Region"
+          },
+          "revenue": {
+            "$ref": "#/components/schemas/Percentiles"
+          },
+          "sell_through": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Percentiles"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "sku_id": {
+            "title": "Sku Id",
+            "type": "string"
+          },
+          "stockout_probability": {
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Stockout Probability",
+            "type": "number"
+          },
+          "units": {
+            "$ref": "#/components/schemas/Percentiles"
+          }
+        },
+        "required": [
+          "units",
+          "revenue",
+          "gross_profit",
+          "margin",
+          "promo_spend",
+          "sell_through",
+          "sku_id",
+          "region",
+          "stockout_probability"
+        ],
+        "title": "LineSimulation",
+        "type": "object"
+      },
       "Mechanism": {
         "enum": [
           "PCT_OFF",
@@ -723,6 +779,30 @@
         "title": "NotSelectedReason",
         "type": "string"
       },
+      "Percentiles": {
+        "description": "The 10th, 50th and 90th percentiles of one simulated metric across the runs.",
+        "properties": {
+          "p10": {
+            "title": "P10",
+            "type": "number"
+          },
+          "p50": {
+            "title": "P50",
+            "type": "number"
+          },
+          "p90": {
+            "title": "P90",
+            "type": "number"
+          }
+        },
+        "required": [
+          "p10",
+          "p50",
+          "p90"
+        ],
+        "title": "Percentiles",
+        "type": "object"
+      },
       "PlanLine": {
         "description": "A promo option selected into a promo plan: one (SKU, region) decision (ADR 0004).",
         "properties": {
@@ -823,6 +903,16 @@
             ],
             "title": "Objective"
           },
+          "simulation": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PlanSimulation"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "solver_status": {
             "anyOf": [
               {
@@ -886,6 +976,46 @@
           "expected_incremental_profit"
         ],
         "title": "PlanRevisionLine",
+        "type": "object"
+      },
+      "PlanSimulation": {
+        "description": "What `simulate` returns for a promo plan, and what a plan revision stores.",
+        "properties": {
+          "lines": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/LineSimulation"
+            },
+            "title": "Lines",
+            "type": "array"
+          },
+          "n_runs": {
+            "minimum": 1.0,
+            "title": "N Runs",
+            "type": "integer"
+          },
+          "regions": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/RegionStockout"
+            },
+            "title": "Regions",
+            "type": "array"
+          },
+          "seed": {
+            "title": "Seed",
+            "type": "integer"
+          },
+          "total": {
+            "$ref": "#/components/schemas/SimulatedOutcomes"
+          }
+        },
+        "required": [
+          "n_runs",
+          "seed",
+          "total"
+        ],
+        "title": "PlanSimulation",
         "type": "object"
       },
       "PlanningRequest": {
@@ -1057,6 +1187,25 @@
           "regions"
         ],
         "title": "RegionList",
+        "type": "object"
+      },
+      "RegionStockout": {
+        "properties": {
+          "region": {
+            "$ref": "#/components/schemas/Region"
+          },
+          "stockout_probability": {
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Stockout Probability",
+            "type": "number"
+          }
+        },
+        "required": [
+          "region",
+          "stockout_probability"
+        ],
+        "title": "RegionStockout",
         "type": "object"
       },
       "RegionStores": {
@@ -1270,6 +1419,46 @@
         ],
         "title": "SessionStatus",
         "type": "string"
+      },
+      "SimulatedOutcomes": {
+        "description": "Ranges over the promo weeks, units capped at pooled available stock (ADR 0004, 0011).\n\nUnits and sell-through are the anchor SKU's; revenue, gross profit and promo spend\ninclude a BUNDLE's partner (ADR 0017). Margin is gross profit over revenue in each run\n(0 in a run with no revenue). Sell-through is None when there is no available stock.",
+        "properties": {
+          "gross_profit": {
+            "$ref": "#/components/schemas/Percentiles"
+          },
+          "margin": {
+            "$ref": "#/components/schemas/Percentiles"
+          },
+          "promo_spend": {
+            "$ref": "#/components/schemas/Percentiles"
+          },
+          "revenue": {
+            "$ref": "#/components/schemas/Percentiles"
+          },
+          "sell_through": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Percentiles"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "units": {
+            "$ref": "#/components/schemas/Percentiles"
+          }
+        },
+        "required": [
+          "units",
+          "revenue",
+          "gross_profit",
+          "margin",
+          "promo_spend",
+          "sell_through"
+        ],
+        "title": "SimulatedOutcomes",
+        "type": "object"
       },
       "SolveStatus": {
         "enum": [

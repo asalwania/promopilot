@@ -23,10 +23,12 @@ from promopilot.models.demand import DemandModel
 from promopilot.models.registry import ModelKind
 from promopilot.models.relations import Relations
 from promopilot.optimizer import SolverSettings
+from promopilot.simulator import SimulationSettings
 from tests.unit.agents.fakes import InMemoryRetailData
 from tests.unit.agents.test_generate_candidates import Fixed, entry
 
 HISTORY_WEEKS = 52  # small_config
+SIMULATION = SimulationSettings(n_runs=200, seed=5)
 FREE = CompanyPolicy(margin_floor=0.10, fixed_cost_per_line_week=dict.fromkeys(Mechanism, 0.0))
 """Without fixed marketing costs, some of the small world's options pay for themselves."""
 
@@ -55,6 +57,7 @@ def planner_of(
         policy=policy,
         settings=SolverSettings(),
         seed=0,
+        simulation=SIMULATION,
     )
 
 
@@ -129,6 +132,27 @@ async def test_every_plan_line_carries_a_comparison_of_mechanisms(
                     line.sku_id,
                     line.region,
                 )
+
+
+async def test_every_plan_revision_is_simulated_with_the_default_settings(
+    data: InMemoryRetailData, planner: OptimisingPlanner
+) -> None:
+    llm = FakeProvider([reading()])
+
+    result = await plan_session("Snacks push in the North, ₹20k, weeks 54-55", llm, data, planner)
+
+    revision = result.revision
+    simulation = revision.simulation
+    assert simulation is not None
+    assert (simulation.n_runs, simulation.seed) == (200, 5)
+    assert [(s.sku_id, s.region) for s in simulation.lines] == [
+        (planned.line.sku_id, planned.line.region) for planned in revision.lines
+    ]
+    assert [r.region for r in simulation.regions] == [Region.NORTH]
+    for simulated, planned in zip(simulation.lines, revision.lines, strict=True):
+        assert simulated.units.p10 <= planned.expected_units * 1.5
+        assert simulated.units.p90 >= planned.expected_units * 0.5
+        assert 0.0 <= simulated.stockout_probability <= 1.0
 
 
 async def test_a_tight_budget_is_reported_as_binding(

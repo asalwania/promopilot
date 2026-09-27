@@ -368,3 +368,59 @@ def test_a_bundle_reports_its_partners_units_and_splits_discount_funding_by_base
     assert second["anchor_discount_funding"] + fixed_marketing_cost(
         Mechanism.PCT_OFF, 2, policy
     ) == pytest.approx(second["promo_cost"])
+
+
+def test_response_rows_rebuild_each_predictions_promo_week_numbers(
+    small_dataset: GeneratedDataset, model: DemandModel, skus: list[str]
+) -> None:
+    anchor, partner = small_dataset.ground_truth.complement_pairs[0]
+    options = [
+        option(skus[0], target_segment=TargetSegment.FAMILIES),
+        option(anchor, mechanism=Mechanism.BUNDLE, depth_pct=15, bundle_partner_sku_id=partner),
+        option(skus[1], region=Region.SOUTH, duration_weeks=3, start_week=START + 1),
+    ]
+
+    prediction = model.predict(options, CONTEXT).options
+    response = model.response_rows(options, CONTEXT)
+
+    rows = response.rows
+    assert list(response.design.columns) == list(response.estimate.columns)
+    assert list(response.std_error.columns) == list(response.estimate.columns)
+    assert len(response.design) == len(rows)
+    assert set(rows["sku_id"]) <= set(response.estimate.index)
+    assert set(response.dispersion.index) == set(response.estimate.index)
+    # Only promo weeks: each option's weeks x the region's stores x every segment.
+    for n, planned in enumerate(options):
+        weeks = set(rows.loc[rows["option"] == n, "week_id"])
+        assert weeks == set(range(planned.start_week, planned.start_week + planned.duration_weeks))
+    # At the estimates, the rows sum back to predict's units and money.
+    effect = (response.design.to_numpy() * response.estimate.loc[rows["sku_id"]].to_numpy()).sum(
+        axis=1
+    )
+    units = rows["baseline_units"].to_numpy() * np.exp(effect)
+    option_of = rows["option"].to_numpy()
+    anchor_rows = rows["anchor"].to_numpy(dtype=bool)
+    np.testing.assert_allclose(
+        np.bincount(option_of[anchor_rows], weights=units[anchor_rows]),
+        prediction["units"],
+        rtol=1e-9,
+    )
+    np.testing.assert_allclose(
+        np.bincount(option_of, weights=units * rows["price"].to_numpy()),
+        prediction["revenue"],
+        rtol=1e-9,
+    )
+    np.testing.assert_allclose(
+        np.bincount(option_of, weights=units * (rows["price"] - rows["unit_cost"]).to_numpy()),
+        prediction["gross_profit"],
+        rtol=1e-9,
+    )
+    # The terms are the model's coefficients.
+    coefficients = model.coefficients()
+    beta = coefficients[
+        (coefficients["sku_id"] == skus[0])
+        & (coefficients["parameter"] == "beta")
+        & (coefficients["level"] == Segment.FAMILIES.value)
+    ].iloc[0]
+    assert response.estimate.loc[skus[0], "beta:Families"] == pytest.approx(beta["estimate"])
+    assert response.std_error.loc[skus[0], "beta:Families"] == pytest.approx(beta["std_error"])

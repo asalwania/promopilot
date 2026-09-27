@@ -4,9 +4,10 @@ For a planning request it generates every promo option of the scope and promo wi
 latest demand model and the live relations model (ADR 0035), selects the plan with `solve`
 (ADR 0036) and turns the result into plan revision 1: each plan line with its expected
 numbers, why it was chosen and how the other mechanisms compare (ADR 0041), the solver status
-and objective, the binding constraints and the best options left out (ADR 0038). E8's
-planner agent drives the same work through the `generate_candidates`, `run_optimizer` and
-`compare_mechanisms` tools instead.
+and objective, the binding constraints and the best options left out (ADR 0038). The plan is
+then simulated with the session's simulation settings and the result stored on the revision
+(ADR 0042). E8's planner agent drives the same work through the `generate_candidates`,
+`run_optimizer`, `compare_mechanisms` and `simulate_plan` tools instead.
 """
 
 import asyncio
@@ -26,6 +27,7 @@ from promopilot.optimizer import (
     generate_options,
     solve,
 )
+from promopilot.simulator import SimulationInputs, SimulationSettings, simulate
 
 
 class PlanningError(Exception):
@@ -52,6 +54,7 @@ class OptimisingPlanner:
         policy: CompanyPolicy,
         settings: SolverSettings,
         seed: int,
+        simulation: SimulationSettings,
     ) -> None:
         self._demand_models = demand_models
         self._relations_models = relations_models
@@ -59,6 +62,7 @@ class OptimisingPlanner:
         self._policy = policy
         self._settings = settings
         self._seed = seed
+        self._simulation = simulation
 
     async def plan(self, request: PlanningRequest) -> PlanRevision:
         """Plan revision 1 for the request. Raises `PlanningError` when no model is trained
@@ -93,6 +97,14 @@ class OptimisingPlanner:
             settings=self._settings,
             seed=self._seed,
         )
+        # Simulation is CPU-bound too; it samples the plan's own SKUs on the same demand model.
+        simulation = await asyncio.to_thread(
+            simulate,
+            result.plan,
+            SimulationInputs(demand=demand[1], stock=context.stock, policy=self._policy),
+            n_runs=self._simulation.n_runs,
+            seed=self._simulation.seed,
+        )
         table = options.table
         # Each line's mechanisms are compared on the same options the optimiser chose from.
         comparing = ComparisonContext(
@@ -118,4 +130,5 @@ class OptimisingPlanner:
             objective=result.objective,
             binding_constraints=result.binding_constraints,
             not_selected=result.not_selected,
+            simulation=simulation,
         )

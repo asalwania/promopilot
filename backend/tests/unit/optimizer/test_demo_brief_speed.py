@@ -11,19 +11,7 @@ import time
 
 import pytest
 
-from promopilot.agents.tools.inventory_status import pooled_stock
-from promopilot.datagen import GeneratedDataset
-from promopilot.domain import (
-    BindingEvidence,
-    CompanyPolicy,
-    ConstraintKind,
-    PlanningRequest,
-    PromoWindow,
-    Region,
-    Scope,
-)
-from promopilot.models import demand, relations
-from promopilot.models.training import DEFAULT_SEED
+from promopilot.domain import BindingEvidence, ConstraintKind
 from promopilot.optimizer import (
     FittedOptionFacts,
     OptionContext,
@@ -32,39 +20,10 @@ from promopilot.optimizer import (
     generate_options,
     solve,
 )
-from tests.conftest import history_of
+from tests.conftest import DEMO_BRIEF
 
-AS_OF = 104
 BUDGET_SECONDS = 10.0
 RUNS = 2
-
-DEMO_BRIEF = PlanningRequest(
-    as_of_week=AS_OF,
-    scope=Scope(regions=(Region.NORTH, Region.WEST), categories=("Snacks", "Beverages")),
-    promo_window=PromoWindow(start_week=108, end_week=109),
-    marketing_budget=200_000.0,
-)
-"""The demo brief's scope, Diwali window and ₹2 lakh budget (ADR 0036, ADR 0037)."""
-
-
-@pytest.fixture(scope="module")
-def demo_context(default_dataset: GeneratedDataset) -> OptionContext:
-    history = history_of(default_dataset)
-    model = demand.fit(history, AS_OF, DEFAULT_SEED)
-    found = relations.fit(
-        history, default_dataset.baskets, model, as_of_week=AS_OF, seed=DEFAULT_SEED
-    )
-    inventory = default_dataset.inventory
-    policy = CompanyPolicy()
-    return OptionContext(
-        demand_model=model,
-        relations=found,
-        products=default_dataset.products,
-        stock=pooled_stock(
-            inventory[inventory["snapshot_week"] == AS_OF - 1], default_dataset.stores, policy
-        ),
-        policy=policy,
-    )
 
 
 @pytest.mark.model

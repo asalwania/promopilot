@@ -40,6 +40,8 @@ TERMS: list[tuple[str, str | None]] = [
     ("phi", None),
 ]
 """(parameter, level) for every term; beta's level is a segment, mu's a mechanism."""
+TERM_NAMES = [f"{parameter}:{level or ''}" for parameter, level in TERMS]
+"""Each term as one name, e.g. `beta:Families` or `gamma:`, in TERMS order."""
 UNSHRUNK = {"alpha"}
 """alpha only recalibrates the baseline for its SKU; it has no subcategory prior."""
 NON_NEGATIVE = {"phi"}
@@ -151,12 +153,15 @@ class PromoResponse:
             + np.bincount(groups, weights=noise, minlength=size)
         )
 
-    def _matrix(self, column: str, rows: pd.DataFrame) -> np.ndarray:
+    def wide(self, column: str) -> pd.DataFrame:
+        """`estimate` or `std_error` per SKU (the index) and term (TERM_NAMES columns)."""
         wide = self.coefficients.assign(
             term=self.coefficients["parameter"] + ":" + self.coefficients["level"].fillna("")
         ).pivot(index="sku_id", columns="term", values=column)
-        wide = wide[[f"{parameter}:{level or ''}" for parameter, level in TERMS]]
-        return np.asarray(wide.loc[rows["sku_id"]].to_numpy(dtype=float))
+        return wide[TERM_NAMES].astype(float)
+
+    def _matrix(self, column: str, rows: pd.DataFrame) -> np.ndarray:
+        return np.asarray(self.wide(column).loc[rows["sku_id"]].to_numpy(dtype=float))
 
 
 def _glm(rows: pd.DataFrame) -> tuple[np.ndarray, np.ndarray, np.ndarray | None]:

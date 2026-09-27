@@ -147,6 +147,17 @@ On the seed-42 demo brief, 1,935 options are eligible with 3,796 pairwise terms.
 
 The `compare_mechanisms` tool takes a planning request, a SKU id and a region in the request's scope. It generates that SKU and region's options, as `generate_candidates` would, and returns the comparison with the models' versions and the as-of week. It needs no candidate set. The planning session compares every plan line on the options it already generated, and stores the comparison on the line (`mechanism_comparison`).
 
+`promopilot.simulator.simulate(plan, inputs, *, n_runs, seed)` runs a promo plan through Monte Carlo (SPEC §9.5, ADR 0042). Each run draws every promo response term of every SKU from N(estimate, std error), once per SKU and run. It then draws units per store × segment × promo week from a negative binomial with the SKU's fitted dispersion, around `DemandModel.response_rows`' means. Each line is simulated on its own SKUs, as `predict` predicts it. Within a run, a SKU sells at most its pooled available stock in the region, the oracle's stock basis (ADR 0004, ADR 0011), and money follows the units sold.
+
+The result, `PlanSimulation`, has P10/P50/P90 for each plan line and for the plan total: units, revenue, gross profit, margin, sell-through and promo spend. It also has each line's stock-out probability (demand reached its available stock) and each region's (at least one of its lines ran out). The same seed gives identical results. The `simulate_plan` tool takes 1 to 200 plan lines and an optional `n_runs` (100–5,000). Its seed, default run count and as-of week are bound, not set by the LLM.
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `SIMULATION_RUNS` | `1000` | Runs per simulation of a plan revision, and the `simulate_plan` default (100–5,000) |
+| `SIMULATION_SEED` | `0` | Seed of every simulation, so the same plan always simulates the same way |
+
+On the seed-42 demo plan (35 lines), 1,000 runs take about 0.8 s. Units P10–P90 are 12,478–13,269 (expected 12,852), and gross profit is ₹4.45–4.81 lakh. A 100-line plan takes about 1.3 s, and a `model`-marker test asserts that it stays under 10 s.
+
 ## LLM providers
 
 Agents reach an LLM only through `promopilot.llm` (ADR 0001, ADR 0019, ADR 0027). `LLM_PROVIDER` picks the provider:
@@ -180,7 +191,7 @@ make up                 # rebuild the api image with the new cassettes
 | Method | Path | Response |
 |---|---|---|
 | POST | `/api/sessions` | Start a planning session from `{"brief": "..."}` (1–2000 characters, not blank; otherwise `422`). Returns `202 {"session_id"}` at once; planning runs in the background |
-| GET | `/api/sessions/{id}` | `{session_id, status, brief, planning_request, plan_revision, error}`; `404` if unknown. `status` is `planning`, then `awaiting_approval` with plan revision 1, or `failed` with an `error` saying why. The revision has `solver_status`, `objective`, `binding_constraints`, `not_selected`, and `why_chosen` and `mechanism_comparison` on each line (ADR 0038, ADR 0041) |
+| GET | `/api/sessions/{id}` | `{session_id, status, brief, planning_request, plan_revision, error}`; `404` if unknown. `status` is `planning`, then `awaiting_approval` with plan revision 1, or `failed` with an `error` saying why. The revision has `solver_status`, `objective`, `binding_constraints`, `not_selected`, and `why_chosen` and `mechanism_comparison` on each line (ADR 0038, ADR 0041), plus its `simulation`: P10/P50/P90 per line and in total, and stock-out probabilities per line and region (ADR 0042) |
 | GET | `/api/models` | `{"models": [{model_id, kind, version, trained_at, as_of_week, metrics, live}]}`, newest first. `live` marks the model this API process is serving (ADR 0026) |
 | POST | `/api/models/retrain` | Retrain the demand and relations models as `make train` does by default (the as-of week after the history, seed 42). The request stays open while it fits (60 to 110 seconds on the default world), then returns `201` with the new demand entry, which is now the latest and live, as is the new relations version. `409` if a retrain is already running or no data is loaded |
 | GET | `/api/catalog/products` | `{"products": [{sku_id, name, brand, category, subcategory, pack_size, base_price, unit_cost, is_kvi}]}` in SKU order (ADR 0034). Optional filters `category` and `kvi_only`. `422` for an unknown category |
@@ -190,7 +201,7 @@ make up                 # rebuild the api image with the new cassettes
 | GET | `/api/relations/{sku_id}` | `{model: {model_id, version, as_of_week}, sku_id, substitutes: [{sku_id, theta, std_error, q_value}], complements: [{sku_id, lift, support, theta, std_error}]}`; θ is null where not estimable. `404` for an unknown SKU, `503` when no relations model fitted on the live demand model is registered (ADR 0033) |
 | GET | `/health`, `/api/health` | Always `200` while the process runs. `/health` is for the container healthcheck; the web app uses `/api/health` through its proxy. `{"status": "ok" \| "degraded", "version", "checks": {"database": "ok" \| "error", "model_registry": "ok" \| "missing"}}`. `status` is `degraded` if the database is unreachable or no demand model is loaded |
 
-A minimal Context agent reads the brief into a planning request (ADR 0020): scope, a promo window chosen from the weeks after the as-of week, and a marketing budget in rupees. If any of these is missing, the session fails and the error names it. The optimising planner then generates every promo option on the latest demand model and the live relations model, and the optimiser selects plan revision 1 with its status, binding constraints, not-selected list and a "why chosen" per line (ADR 0038). Each line also carries a comparison of the mechanisms for its SKU and region (ADR 0041). With no trained model the session fails and says to run `make train`. On the seed-42 demo brief planning takes about 25 s: about 9 s generating the options (#113), about 6 s solving and 8 s proving binding constraints. E8's agent graph replaces this fixed pipeline. The as-of week is the first week after the loaded sales history.
+A minimal Context agent reads the brief into a planning request (ADR 0020): scope, a promo window chosen from the weeks after the as-of week, and a marketing budget in rupees. If any of these is missing, the session fails and the error names it. The optimising planner then generates every promo option on the latest demand model and the live relations model, and the optimiser selects plan revision 1 with its status, binding constraints, not-selected list and a "why chosen" per line (ADR 0038). Each line also carries a comparison of the mechanisms for its SKU and region (ADR 0041). The revision is then simulated with `SIMULATION_RUNS` runs and `SIMULATION_SEED`, and the simulation is stored with it (ADR 0042). With no trained model the session fails and says to run `make train`. On the seed-42 demo brief planning takes about 25 s: about 9 s generating the options (#113), about 6 s solving, 8 s proving binding constraints and under 1 s simulating. E8's agent graph replaces this fixed pipeline. The as-of week is the first week after the loaded sales history.
 
 `promopilot.guardrails` holds the E8 checks that need no LLM (ADR 0028):
 
@@ -251,6 +262,7 @@ docs/agents/ Agent workflow config (issue tracker, triage labels, domain docs)
 - [ADR 0037: Promotions can pay in the synthetic world: stronger mechanism effects, a smaller pull-forward dip floored at 0 when fitted, ₹500 fixed cost per line-week](docs/adr/0037-demo-world-promo-economics.md)
 - [ADR 0038: Planning sessions use the optimiser, with proven binding constraints and structured reasons for each plan line and each rejected option](docs/adr/0038-sessions-use-the-optimiser.md)
 - [ADR 0041: Mechanisms are compared on the candidate set's expected numbers, by value, with the plan line standing for its own mechanism](docs/adr/0041-mechanism-comparison.md)
+- [ADR 0042: Every plan revision is simulated: one term draw per SKU and run, negative binomial noise per store, units capped at pooled regional stock](docs/adr/0042-monte-carlo-simulation-of-plan-revisions.md)
 
 The domain glossary is [CONTEXT.md](CONTEXT.md).
 
