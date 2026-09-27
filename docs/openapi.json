@@ -46,6 +46,17 @@
               }
             ]
           },
+          "sku_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sku Id"
+          },
           "source": {
             "$ref": "#/components/schemas/ConstraintSource"
           }
@@ -69,6 +80,60 @@
         ],
         "title": "BindingEvidence",
         "type": "string"
+      },
+      "ClearanceShortfall": {
+        "description": "A clearance target the plan misses: no plan within the other constraints reaches it,\nso the optimiser returned the plan that comes closest and reports by how much it falls\nshort (SPEC \u00a79.4, F-06 AC2, ADR 0040).",
+        "properties": {
+          "expected_sell_through": {
+            "title": "Expected Sell Through",
+            "type": "number"
+          },
+          "region": {
+            "$ref": "#/components/schemas/Region"
+          },
+          "shortfall_units": {
+            "title": "Shortfall Units",
+            "type": "number"
+          },
+          "sku_id": {
+            "title": "Sku Id",
+            "type": "string"
+          },
+          "target": {
+            "title": "Target",
+            "type": "number"
+          }
+        },
+        "required": [
+          "sku_id",
+          "region",
+          "target",
+          "expected_sell_through",
+          "shortfall_units"
+        ],
+        "title": "ClearanceShortfall",
+        "type": "object"
+      },
+      "ClearanceTarget": {
+        "description": "The minimum sell-through the brief asks for a SKU it names for clearance, in every\nregion of the scope (ADR 0014, ADR 0040).",
+        "properties": {
+          "sell_through": {
+            "exclusiveMinimum": 0.0,
+            "maximum": 1.0,
+            "title": "Sell Through",
+            "type": "number"
+          },
+          "sku_id": {
+            "title": "Sku Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "sku_id",
+          "sell_through"
+        ],
+        "title": "ClearanceTarget",
+        "type": "object"
       },
       "CompetitorGap": {
         "description": "One SKU in one region against the competitor's latest price before the as-of week.",
@@ -241,7 +306,10 @@
           "marketing_budget",
           "minimum_margin",
           "margin_floor",
-          "max_promoted_skus"
+          "max_promoted_skus",
+          "regional_budget",
+          "clearance_target",
+          "kvi_price_tolerance"
         ],
         "title": "ConstraintKind",
         "type": "string"
@@ -771,8 +839,11 @@
           "out_of_stock",
           "breaks_policy",
           "over_budget",
+          "over_regional_budget",
           "breaks_margin",
           "max_promoted_skus",
+          "misses_clearance_target",
+          "breaks_kvi_tolerance",
           "cannibalises",
           "time_limit"
         ],
@@ -871,6 +942,14 @@
             "title": "Binding Constraints",
             "type": "array"
           },
+          "clearance_shortfalls": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/ClearanceShortfall"
+            },
+            "title": "Clearance Shortfalls",
+            "type": "array"
+          },
           "lines": {
             "default": [],
             "items": {
@@ -902,6 +981,14 @@
               }
             ],
             "title": "Objective"
+          },
+          "policy_findings": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/PolicyFinding"
+            },
+            "title": "Policy Findings",
+            "type": "array"
           },
           "simulation": {
             "anyOf": [
@@ -1019,17 +1106,50 @@
         "type": "object"
       },
       "PlanningRequest": {
-        "description": "Money is in rupees (ADR 0015).",
+        "description": "Money is in rupees (ADR 0015). The brief's optional constraints may only tighten\ncompany policy; a value that would loosen it is kept here as read, and planning applies\nthe policy value instead and flags it (ADR 0007, ADR 0040).",
         "properties": {
           "as_of_week": {
             "minimum": 0.0,
             "title": "As Of Week",
             "type": "integer"
           },
+          "clearance_targets": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/ClearanceTarget"
+            },
+            "title": "Clearance Targets",
+            "type": "array"
+          },
+          "kvi_price_tolerance": {
+            "anyOf": [
+              {
+                "exclusiveMaximum": 1.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Kvi Price Tolerance"
+          },
           "marketing_budget": {
             "exclusiveMinimum": 0.0,
             "title": "Marketing Budget",
             "type": "number"
+          },
+          "max_promoted_skus_per_category_per_region": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Promoted Skus Per Category Per Region"
           },
           "min_margin": {
             "anyOf": [
@@ -1047,6 +1167,16 @@
           "promo_window": {
             "$ref": "#/components/schemas/PromoWindow"
           },
+          "regional_budget_caps": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "propertyNames": {
+              "$ref": "#/components/schemas/Region"
+            },
+            "title": "Regional Budget Caps",
+            "type": "object"
+          },
           "scope": {
             "$ref": "#/components/schemas/Scope"
           }
@@ -1058,6 +1188,35 @@
           "marketing_budget"
         ],
         "title": "PlanningRequest",
+        "type": "object"
+      },
+      "PolicyFinding": {
+        "description": "A brief value that would loosen company policy: planning keeps the policy value and\nflags it (ADR 0007, ADR 0040).",
+        "properties": {
+          "applied": {
+            "title": "Applied",
+            "type": "number"
+          },
+          "field": {
+            "title": "Field",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "requested": {
+            "title": "Requested",
+            "type": "number"
+          }
+        },
+        "required": [
+          "field",
+          "requested",
+          "applied",
+          "message"
+        ],
+        "title": "PolicyFinding",
         "type": "object"
       },
       "Product": {
@@ -1326,11 +1485,12 @@
         "type": "object"
       },
       "SelectionReasonCode": {
-        "description": "A positive part of a plan line's value (ADR 0005, ADR 0035).",
+        "description": "A positive part of a plan line's value (ADR 0005, ADR 0035), or the clearance target it\nhelps meet (ADR 0040).",
         "enum": [
           "incremental_profit",
           "clearance_value",
-          "halo"
+          "halo",
+          "clearance_target"
         ],
         "title": "SelectionReasonCode",
         "type": "string"

@@ -34,11 +34,16 @@ export const planLineSchema = z.object({
   bundle_partner_sku_id: z.string().nullable().optional(),
 }) satisfies z.ZodType<Schemas["PlanLine"]>;
 
-// Why the optimiser chose each plan line and left the others out (ADR 0038).
+// Why the optimiser chose each plan line and left the others out (ADR 0038, ADR 0040).
 export const whyChosenSchema = z.object({
   reasons: z.array(
     z.object({
-      code: z.enum(["incremental_profit", "clearance_value", "halo"]),
+      code: z.enum([
+        "incremental_profit",
+        "clearance_value",
+        "halo",
+        "clearance_target",
+      ]),
       amount: z.number(),
     }),
   ),
@@ -52,11 +57,15 @@ export const bindingConstraintSchema = z.object({
     "minimum_margin",
     "margin_floor",
     "max_promoted_skus",
+    "regional_budget",
+    "clearance_target",
+    "kvi_price_tolerance",
   ]),
   source: z.enum(["brief", "company_policy"]),
   limit: z.number(),
   category: z.string().nullable().optional(),
   region: regionSchema.nullable().optional(),
+  sku_id: z.string().nullable().optional(),
   evidence: z.enum(["exact", "lower_bound", "unproven"]),
   objective_gain: z.number().nullable(),
 }) satisfies z.ZodType<Schemas["BindingConstraint"]>;
@@ -70,8 +79,11 @@ export const notSelectedOptionSchema = z.object({
       "out_of_stock",
       "breaks_policy",
       "over_budget",
+      "over_regional_budget",
       "breaks_margin",
       "max_promoted_skus",
+      "misses_clearance_target",
+      "breaks_kvi_tolerance",
       "cannibalises",
       "time_limit",
     ]),
@@ -114,6 +126,22 @@ export const mechanismOutcomeSchema = z.object({
     ]),
   ),
 }) satisfies z.ZodType<Schemas["MechanismOutcome"]>;
+
+// A clearance target no plan reaches, and a brief value company policy overrode (ADR 0040).
+export const clearanceShortfallSchema = z.object({
+  sku_id: z.string(),
+  region: regionSchema,
+  target: z.number(),
+  expected_sell_through: z.number(),
+  shortfall_units: z.number(),
+}) satisfies z.ZodType<Schemas["ClearanceShortfall"]>;
+
+export const policyFindingSchema = z.object({
+  field: z.string(),
+  requested: z.number(),
+  applied: z.number(),
+  message: z.string(),
+}) satisfies z.ZodType<Schemas["PolicyFinding"]>;
 
 export const planRevisionLineSchema = z.object({
   line: planLineSchema,
@@ -173,6 +201,8 @@ export const planRevisionSchema = z.object({
   binding_constraints: z.array(bindingConstraintSchema),
   not_selected: z.array(notSelectedOptionSchema),
   simulation: planSimulationSchema.nullable().optional(),
+  clearance_shortfalls: z.array(clearanceShortfallSchema),
+  policy_findings: z.array(policyFindingSchema),
 }) satisfies z.ZodType<Schemas["PlanRevision"]>;
 
 export const planningRequestSchema = z.object({
@@ -185,6 +215,12 @@ export const planningRequestSchema = z.object({
   promo_window: z.object({ start_week: z.number(), end_week: z.number() }),
   marketing_budget: z.number(),
   min_margin: z.number().nullable().optional(),
+  clearance_targets: z.array(
+    z.object({ sku_id: z.string(), sell_through: z.number() }),
+  ),
+  regional_budget_caps: z.record(z.string(), z.number()).optional(),
+  kvi_price_tolerance: z.number().nullable().optional(),
+  max_promoted_skus_per_category_per_region: z.number().nullable().optional(),
 }) satisfies z.ZodType<Schemas["PlanningRequest"]>;
 
 export const sessionSchema = z.object({
