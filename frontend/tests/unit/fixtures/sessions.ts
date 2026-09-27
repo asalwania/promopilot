@@ -147,6 +147,10 @@ export const awaitingApprovalSession: SessionResponse = {
     promo_window: { start_week: 105, end_week: 108 },
     marketing_budget: 200000,
     min_margin: null,
+    clearance_targets: [],
+    regional_budget_caps: {},
+    kvi_price_tolerance: null,
+    max_promoted_skus_per_category_per_region: null,
   },
   plan_revision: {
     number: 1,
@@ -219,6 +223,8 @@ export const awaitingApprovalSession: SessionResponse = {
         { region: "West", stockout_probability: 0 },
       ],
     },
+    clearance_shortfalls: [],
+    policy_findings: [],
   },
 };
 

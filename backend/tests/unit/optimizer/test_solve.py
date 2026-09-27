@@ -28,10 +28,18 @@ from promopilot.domain import (
     TargetSegment,
 )
 from promopilot.economics import effective_unit_price
-from promopilot.guardrails import LineFacts, PlanFacts, SkuFacts, ViolationCode, validate_plan
+from promopilot.guardrails import (
+    ClearanceFacts,
+    LineFacts,
+    PlanFacts,
+    SkuFacts,
+    ViolationCode,
+    validate_plan,
+)
 from promopilot.models.demand import OPTION_COLUMNS, Prediction, PredictionContext
 from promopilot.optimizer import (
     TABLE_COLUMNS,
+    ClearanceBaseline,
     OptimisationResult,
     OptionContext,
     PromoOptions,
@@ -45,16 +53,20 @@ from promopilot.optimizer import (
 WINDOW = PromoWindow(start_week=60, end_week=61)
 SEED = 0
 PER_LINE = {ViolationCode.STOCK, ViolationCode.MAX_DISCOUNT, ViolationCode.BELOW_COST}
-PER_LINE |= {ViolationCode.WINDOW}
+PER_LINE |= {ViolationCode.WINDOW, ViolationCode.KVI_TOLERANCE}
 
 
-def request(budget: float = 100_000.0, min_margin: float | None = None) -> PlanningRequest:
+def request(
+    budget: float = 100_000.0, min_margin: float | None = None, **brief: Any
+) -> PlanningRequest:
+    """The brief's optional constraints (ADR 0040) come in `brief`."""
     return PlanningRequest(
         as_of_week=58,
         scope=Scope(regions=(Region.NORTH, Region.SOUTH), categories=("Snacks", "Beverages")),
         promo_window=WINDOW,
         marketing_budget=budget,
         min_margin=min_margin,
+        **brief,
     )
 
 
@@ -84,9 +96,11 @@ class Row:
     available_stock: float = 1_000.0
     partner_p90_units: float = 0.0
     partner_available_stock: float = 0.0
+    window_uplift: float = 0.0
+    partner_window_uplift: float = 0.0
 
 
-def options_of(rows: Sequence[Row]) -> PromoOptions:
+def options_of(rows: Sequence[Row], clearance: Sequence[ClearanceBaseline] = ()) -> PromoOptions:
     table = pd.DataFrame(0.0, index=range(len(rows)), columns=TABLE_COLUMNS)
     for n, row in enumerate(rows):
         for column in (
@@ -98,6 +112,8 @@ def options_of(rows: Sequence[Row]) -> PromoOptions:
             "available_stock",
             "partner_p90_units",
             "partner_available_stock",
+            "window_uplift",
+            "partner_window_uplift",
         ):
             table.loc[n, column] = getattr(row, column)
         table.loc[n, "units"] = row.p90_units * 0.8
@@ -107,6 +123,7 @@ def options_of(rows: Sequence[Row]) -> PromoOptions:
         table=table,
         enumerated=len(rows),
         pruned=dict.fromkeys(PruneReason, 0),
+        clearance=tuple(clearance),
     )
 
 
@@ -120,11 +137,13 @@ CATALOGUE = {
 
 @dataclass
 class FakeFacts:
-    """SKU facts from CATALOGUE, and pinned pairwise terms (0 for any other pair)."""
+    """SKU facts from CATALOGUE, and pinned pairwise terms (0 for any other pair). `kvis`
+    holds the competitor price of each KVI in a region."""
 
     overstocked: set[tuple[str, Region]] = field(default_factory=set)
     pairwise: dict[frozenset[PlanLine], float] = field(default_factory=dict)
     asked: list[tuple[PlanLine, PlanLine]] = field(default_factory=list)
+    kvis: dict[tuple[str, Region], float] = field(default_factory=dict)
 
     def sku(self, sku_id: str, region: Region) -> SkuFacts:
         category, base_price, unit_cost = CATALOGUE[sku_id]
@@ -133,6 +152,8 @@ class FakeFacts:
             base_price=base_price,
             unit_cost=unit_cost,
             overstocked=(sku_id, region) in self.overstocked,
+            is_kvi=(sku_id, region) in self.kvis,
+            competitor_price=self.kvis.get((sku_id, region)),
         )
 
     def pairwise_cannibalisation(
@@ -146,11 +167,13 @@ def run(
     rows: Sequence[Row],
     facts: FakeFacts | None = None,
     policy: CompanyPolicy | None = None,
+    *,
+    clearance: Sequence[ClearanceBaseline] = (),
     **changes: Any,
 ) -> OptimisationResult:
     return solve(
         request(**changes),
-        options_of(rows),
+        options_of(rows, clearance),
         facts or FakeFacts(),
         policy or CompanyPolicy(),
         seed=SEED,
@@ -161,7 +184,23 @@ def chosen(result: OptimisationResult) -> list[PlanLine]:
     return list(result.plan.lines)
 
 
-def plan_facts(rows: Sequence[Row], picked: Iterable[int], facts: FakeFacts) -> PlanFacts:
+def uplift(row: Row, target: ClearanceBaseline) -> float:
+    """The units a row adds towards a clearance target over the promo window."""
+    if row.line.region is not target.region:
+        return 0.0
+    added = row.window_uplift if row.line.sku_id == target.sku_id else 0.0
+    if row.line.bundle_partner_sku_id == target.sku_id:
+        added += row.partner_window_uplift
+    return added
+
+
+def plan_facts(
+    rows: Sequence[Row],
+    picked: Iterable[int],
+    facts: FakeFacts,
+    clearance: Sequence[ClearanceBaseline] = (),
+) -> PlanFacts:
+    picked = list(picked)
     lines = []
     for n in picked:
         row = rows[n]
@@ -179,7 +218,18 @@ def plan_facts(rows: Sequence[Row], picked: Iterable[int], facts: FakeFacts) -> 
                 promo_cost=row.promo_cost,
             )
         )
-    return PlanFacts(lines=tuple(lines))
+    return PlanFacts(
+        lines=tuple(lines),
+        clearance=tuple(
+            ClearanceFacts(
+                sku_id=target.sku_id,
+                region=target.region,
+                available_stock=target.available_stock,
+                expected_units=target.baseline_units + sum(uplift(rows[n], target) for n in picked),
+            )
+            for target in clearance
+        ),
+    )
 
 
 def objective_of(rows: Sequence[Row], picked: Sequence[int], facts: FakeFacts) -> int:
@@ -229,6 +279,8 @@ def rows_(draw: st.DrawFn) -> Row:
         available_stock=stock,
         partner_p90_units=draw(st.sampled_from([0.0, 40.0, 100.0])),
         partner_available_stock=draw(st.sampled_from([50.0, 1_000.0])),
+        window_uplift=draw(st.sampled_from([0.0, 60.0, 150.0, 400.0, -30.0])),
+        partner_window_uplift=draw(st.sampled_from([0.0, 80.0, -10.0])),
     )
 
 
@@ -239,19 +291,56 @@ class Instance:
     budget: float
     min_margin: float | None
     policy: CompanyPolicy
+    targets: tuple[tuple[str, float], ...] = ()
+    """(SKU, sell-through) the brief names for clearance (ADR 0040)."""
+    clearance: tuple[ClearanceBaseline, ...] = ()
+    """Each target's window baseline and stock, per region."""
+    caps: dict[Region, float] = field(default_factory=dict)
+    kvi_tolerance: float | None = None
+    brief_cap: int | None = None
+
+    def planning(
+        self, budget: float | None = None, min_margin: float | None = None
+    ) -> PlanningRequest:
+        return request(
+            budget or self.budget,
+            min_margin if min_margin is not None else self.min_margin,
+            clearance_targets=[
+                {"sku_id": sku_id, "sell_through": share} for sku_id, share in self.targets
+            ],
+            regional_budget_caps=self.caps,
+            kvi_price_tolerance=self.kvi_tolerance,
+            max_promoted_skus_per_category_per_region=self.brief_cap,
+        )
 
     def solve(
         self, budget: float | None = None, min_margin: float | None = None
     ) -> OptimisationResult:
         return solve(
-            request(
-                budget or self.budget, min_margin if min_margin is not None else self.min_margin
-            ),
-            options_of(self.rows),
+            self.planning(budget, min_margin),
+            options_of(self.rows, self.clearance),
             self.facts,
             self.policy,
             seed=SEED,
         )
+
+    def facts_of(self, picked: Iterable[int]) -> PlanFacts:
+        return plan_facts(self.rows, picked, self.facts, self.clearance)
+
+    def helps(self, n: int) -> bool:
+        """Whether row n sells more of a SKU towards its clearance target."""
+        return any(uplift(self.rows[n], target) > 0 for target in self.clearance)
+
+    def shortfall(self, picked: Iterable[int]) -> float:
+        """Stock left short of the clearance targets, in paise of unit cost."""
+        picked = list(picked)
+        share = dict(self.targets)
+        total = 0.0
+        for target in self.clearance:
+            sold = target.baseline_units + sum(uplift(self.rows[n], target) for n in picked)
+            short = max(0.0, share[target.sku_id] * target.available_stock - sold)
+            total += short * round(CATALOGUE[target.sku_id][2] * 100)
+        return total
 
 
 def together(a: PlanLine, b: PlanLine) -> bool:
@@ -269,62 +358,138 @@ def together(a: PlanLine, b: PlanLine) -> bool:
     )
 
 
+REGIONS = [Region.NORTH, Region.SOUTH]
+
+
 @st.composite
 def instances(draw: st.DrawFn) -> Instance:
+    """Random small instances; about half also carry the brief's optional constraints."""
     rows = draw(st.lists(rows_(), min_size=1, max_size=8))
-    overstocked = draw(
-        st.sets(st.tuples(st.sampled_from(SKUS), st.sampled_from([Region.NORTH, Region.SOUTH])))
-    )
+    overstocked = draw(st.sets(st.tuples(st.sampled_from(SKUS), st.sampled_from(REGIONS))))
     pairwise = {
         frozenset((a.line, b.line)): draw(st.integers(-1_000_00, 3_000_00)) / 100
         for a, b in combinations(rows, 2)
         if together(a.line, b.line) and draw(st.booleans())
     }
+    kvis: dict[tuple[str, Region], float] = {}
+    targets: list[tuple[str, float]] = []
+    clearance: list[ClearanceBaseline] = []
+    caps: dict[Region, float] = {}
+    kvi_tolerance, brief_cap = None, None
+    if draw(st.booleans()):
+        promoted = sorted({sku_id for row in rows for sku_id in row.line.skus})
+        named = draw(st.lists(st.sampled_from(promoted), min_size=1, max_size=2, unique=True))
+        targets = [(sku_id, draw(st.sampled_from([0.1, 0.2, 0.3]))) for sku_id in named]
+        clearance = [
+            ClearanceBaseline(
+                sku_id=sku_id,
+                region=region,
+                available_stock=draw(st.sampled_from([200.0, 500.0])),
+                baseline_units=float(draw(st.integers(0, 150))),
+            )
+            for sku_id in named
+            for region in REGIONS
+            if draw(st.booleans())
+        ]
+        caps = {
+            region: draw(st.integers(1, 1_000_000)) / 100
+            for region in REGIONS
+            if draw(st.booleans())
+        }
+        kvis = {
+            (sku_id, region): CATALOGUE[sku_id][1] * draw(st.sampled_from([0.6, 0.8, 0.95]))
+            for sku_id, region in draw(
+                st.sets(st.tuples(st.sampled_from(SKUS), st.sampled_from(REGIONS)))
+            )
+        }
+        kvi_tolerance = draw(st.sampled_from([None, 0.0, 0.02]))
+        brief_cap = draw(st.one_of(st.none(), st.integers(1, 3)))
     return Instance(
         rows=rows,
-        facts=FakeFacts(overstocked=set(overstocked), pairwise=pairwise),
+        facts=FakeFacts(overstocked=set(overstocked), pairwise=pairwise, kvis=kvis),
         budget=draw(st.integers(1, 1_500_000)) / 100,
         min_margin=draw(st.one_of(st.none(), st.integers(0, 40).map(lambda p: p / 100))),
         policy=CompanyPolicy(
             margin_floor=draw(st.integers(0, 30)) / 100,
             max_promoted_skus_per_category_per_region=draw(st.integers(1, 3)),
         ),
+        targets=tuple(targets),
+        clearance=tuple(clearance),
+        caps=caps,
+        kvi_tolerance=kvi_tolerance,
+        brief_cap=brief_cap,
     )
 
 
-def best_by_brute_force(instance: Instance) -> tuple[int, int | None]:
-    """The best objective (paise) over every plan of positive-value options that break no
-    per-line rule: first among the plans `validate_plan` accepts, then among those that also
-    keep 10 paise clear of the budget and of the margin line (None if there are none)."""
-    rows, facts = instance.rows, instance.facts
-    planning = request(instance.budget, instance.min_margin)
+@dataclass(frozen=True)
+class BruteForce:
+    least_shortfall: float
+    """The least stock any plan leaves short of the clearance targets (paise of unit cost)."""
+    loose: int
+    """The best objective (paise) of the plans that leave that least shortfall."""
+    tight: int | None
+    """The same among plans that keep 10 paise clear of every budget and the margin line,
+    and a hundredth of a unit clear of each clearance target (None if none, or if no plan
+    reaches every target)."""
+
+
+def best_by_brute_force(instance: Instance) -> BruteForce:
+    """Every plan of eligible options that `validate_plan` accepts but for its clearance
+    targets: options worth a paisa or selling towards a target, breaking no per-line rule."""
+    rows = instance.rows
+    planning = instance.planning()
     lone = [
         n
         for n, row in enumerate(rows)
-        if round(row.value * 100) >= 1
+        if (round(row.value * 100) >= 1 or instance.helps(n))
         and not (
             row.line.bundle_partner_sku_id is not None
             and row.partner_p90_units > row.partner_available_stock
         )
         and not any(
             violation.code in PER_LINE
-            for violation in validate_plan(plan_facts(rows, [n], facts), planning, instance.policy)
+            for violation in validate_plan(instance.facts_of([n]), planning, instance.policy)
         )
     ]
     minimum = max(instance.min_margin or 0.0, instance.policy.margin_floor)
-    loose = 0
-    tight: int | None = None
+    share = dict(instance.targets)
+    found: list[tuple[float, int, bool]] = []
     for size in range(len(lone) + 1):
         for picked in combinations(lone, size):
-            if validate_plan(plan_facts(rows, picked, facts), planning, instance.policy):
+            violations = validate_plan(instance.facts_of(picked), planning, instance.policy)
+            if any(v.code is not ViolationCode.CLEARANCE_TARGET for v in violations):
                 continue
-            score = objective_of(rows, picked, facts)
-            loose = max(loose, score)
-            clear = sum(rows[n].promo_cost for n in picked) <= instance.budget - 0.10
+            spent = {
+                region: sum(rows[n].promo_cost for n in picked if rows[n].line.region is region)
+                for region in REGIONS
+            }
             short = sum(minimum * rows[n].revenue - rows[n].gross_profit for n in picked)
-            if clear and (not picked or short <= -0.10):
-                tight = score if tight is None else max(tight, score)
-    return loose, tight
+            clear = (
+                sum(rows[n].promo_cost for n in picked) <= instance.budget - 0.10
+                and all(spent[region] <= cap - 0.10 for region, cap in instance.caps.items())
+                and (not picked or short <= -0.10)
+                and all(
+                    target.baseline_units + sum(uplift(rows[n], target) for n in picked)
+                    >= share[target.sku_id] * target.available_stock + 0.01
+                    or instance.shortfall(picked) > 0
+                    for target in instance.clearance
+                )
+            )
+            found.append(
+                (
+                    instance.shortfall(picked),
+                    objective_of(rows, list(picked), instance.facts),
+                    clear,
+                )
+            )
+    least = min(shortfall for shortfall, _, _ in found)
+    closest = [(score, clear) for shortfall, score, clear in found if shortfall <= least + 1e-6]
+    tight = [score for score, clear in closest if clear]
+    return BruteForce(
+        least_shortfall=least,
+        loose=max(score for score, _ in closest),
+        tight=max(tight) if tight and least == 0 else None,
+    )
 
 
 PROPERTY = settings(max_examples=100, deadline=None, suppress_health_check=[HealthCheck.too_slow])
@@ -338,9 +503,14 @@ def test_every_returned_plan_satisfies_every_hard_constraint(instance: Instance)
     assert result.status is SolveStatus.OPTIMAL
     picked = list(result.selected)
     assert [instance.rows[n].line for n in picked] == list(result.plan.lines)
-    plan = plan_facts(instance.rows, picked, instance.facts)
-    assert validate_plan(plan, request(instance.budget, instance.min_margin), instance.policy) == ()
-    assert all(round(instance.rows[n].value * 100) >= 1 for n in picked)
+    violations = validate_plan(instance.facts_of(picked), instance.planning(), instance.policy)
+    # A clearance target no plan reaches is the only one a plan may miss, and it is reported.
+    assert all(v.code is ViolationCode.CLEARANCE_TARGET for v in violations)
+    assert {(v.sku_id, v.region) for v in violations} == {
+        (s.sku_id, s.region) for s in result.clearance_shortfalls
+    }
+    assert len(violations) == len(result.clearance_shortfalls)
+    assert all(round(instance.rows[n].value * 100) >= 1 or instance.helps(n) for n in picked)
     assert round(result.objective * 100) == objective_of(instance.rows, picked, instance.facts)
 
 
@@ -349,10 +519,24 @@ def test_every_returned_plan_satisfies_every_hard_constraint(instance: Instance)
 def test_the_plan_is_optimal_up_to_rounding_at_the_constraint_lines(instance: Instance) -> None:
     result = instance.solve()
 
-    loose, tight = best_by_brute_force(instance)
+    best = best_by_brute_force(instance)
+    assert instance.shortfall(result.selected) == pytest.approx(best.least_shortfall)
+    assert bool(result.clearance_shortfalls) == (best.least_shortfall > 0)
     objective = round(result.objective * 100)
-    assert objective <= loose
-    assert tight is None or objective >= tight
+    assert objective <= best.loose
+    assert best.tight is None or objective >= best.tight
+
+
+def never_worse(
+    tighter: OptimisationResult, looser: OptimisationResult, instance: Instance
+) -> None:
+    """A tighter request never leaves less stock short of the clearance targets, and when
+    both reach every target, never gains objective."""
+    short_tighter = instance.shortfall(tighter.selected)
+    short_looser = instance.shortfall(looser.selected)
+    assert short_tighter >= short_looser - 1e-6
+    if short_tighter == short_looser == 0:
+        assert tighter.objective <= looser.objective
 
 
 @PROPERTY
@@ -360,7 +544,7 @@ def test_the_plan_is_optimal_up_to_rounding_at_the_constraint_lines(instance: In
 def test_tightening_the_budget_never_increases_the_objective(instance: Instance, cut: int) -> None:
     tighter = max(0.01, round(instance.budget * cut / 100, 2))
 
-    assert instance.solve(budget=tighter).objective <= instance.solve().objective
+    never_worse(instance.solve(budget=tighter), instance.solve(), instance)
 
 
 @PROPERTY
@@ -371,9 +555,7 @@ def test_raising_the_minimum_margin_never_increases_the_objective(
     before = instance.min_margin or 0.0
     higher = min(0.99, before + raise_by / 100)
 
-    assert (
-        instance.solve(min_margin=higher).objective <= instance.solve(min_margin=before).objective
-    )
+    never_worse(instance.solve(min_margin=higher), instance.solve(min_margin=before), instance)
 
 
 # --- the depth of a single (SKU, region) -----------------------------------------------

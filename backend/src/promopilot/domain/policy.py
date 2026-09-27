@@ -30,3 +30,16 @@ class CompanyPolicy(BaseModel):
     write_off_rate: float = Field(default=0.30, ge=0, le=1)
     fixed_cost_per_line_week: dict[Mechanism, float] = Field(default_factory=_default_fixed_costs)
     max_promoted_skus_per_category_per_region: int = Field(default=10, ge=1)
+
+
+class PolicyFinding(BaseModel):
+    """A brief value that would loosen company policy: planning keeps the policy value and
+    flags it (ADR 0007, ADR 0040)."""
+
+    model_config = ConfigDict(frozen=True)
+
+    field: str
+    """The planning-request field, e.g. min_margin."""
+    requested: float
+    applied: float
+    message: str

@@ -2,12 +2,13 @@
 
 from promopilot.domain.comparison import MechanismOption, MechanismOutcome
 from promopilot.domain.plan import PlanLine, PromoPlan
-from promopilot.domain.policy import CompanyPolicy
-from promopilot.domain.request import PlanningRequest, PromoWindow, Scope
+from promopilot.domain.policy import CompanyPolicy, PolicyFinding
+from promopilot.domain.request import ClearanceTarget, PlanningRequest, PromoWindow, Scope
 from promopilot.domain.revision import PlanRevision, PlanRevisionLine
 from promopilot.domain.selection import (
     BindingConstraint,
     BindingEvidence,
+    ClearanceShortfall,
     ConstraintKind,
     ConstraintSource,
     NotSelectedOption,
@@ -31,6 +32,8 @@ from promopilot.domain.vocabulary import Mechanism, Region, Segment, TargetSegme
 __all__ = [
     "BindingConstraint",
     "BindingEvidence",
+    "ClearanceShortfall",
+    "ClearanceTarget",
     "CompanyPolicy",
     "ConstraintKind",
     "ConstraintSource",
@@ -47,6 +50,7 @@ __all__ = [
     "PlanSimulation",
     "PlanningRequest",
     "PlanningSession",
+    "PolicyFinding",
     "PromoPlan",
     "PromoWindow",
     "PruneReason",

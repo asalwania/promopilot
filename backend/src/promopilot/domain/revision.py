@@ -6,8 +6,10 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from promopilot.domain.comparison import MechanismOutcome
 from promopilot.domain.plan import PlanLine, PromoPlan
+from promopilot.domain.policy import PolicyFinding
 from promopilot.domain.selection import (
     BindingConstraint,
+    ClearanceShortfall,
     NotSelectedOption,
     SolveStatus,
     WhyChosen,
@@ -48,6 +50,10 @@ class PlanRevision(BaseModel):
     simulation: PlanSimulation | None = None
     """The Monte Carlo simulation of the revision's plan (ADR 0042); None only for revisions
     planned before the simulator (E3-E6)."""
+    clearance_shortfalls: tuple[ClearanceShortfall, ...] = ()
+    """Clearance targets no plan could reach, and by how much this one misses them."""
+    policy_findings: tuple[PolicyFinding, ...] = ()
+    """Brief values that would have loosened company policy, which was kept instead."""
 
     @model_validator(mode="after")
     def _is_a_valid_promo_plan(self) -> Self:

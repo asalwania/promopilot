@@ -5,7 +5,8 @@ in-process `CandidateStore` and returns a summary: counts, pruned counts per rea
 per region and mechanism, the top options by value, and the candidate set's id, which
 `run_optimizer` takes (ADR 0035, ADR 0036). The latest demand model and the live relations model
 are resolved on every call, and the as-of week is bound when the tool is built (ADR 0025,
-ADR 0032); the planning request must be for that week.
+ADR 0032); the planning request must be for that week. The competitor gaps at that week give
+each undercut KVI a price-match option, listed in the summary (ADR 0040).
 """
 
 import asyncio
@@ -47,10 +48,12 @@ DESCRIPTION = (
     "(one segment or All customers); a BUNDLE pairs a SKU with a detected complement. "
     "Options deeper than the company-policy maximum discount, below unit cost (unless "
     "overstocked), or whose P90 units exceed available stock are pruned. The rest are "
-    "predicted, with cannibalisation, halo and clearance value. Returns counts, pruned "
-    "counts per reason, counts per region and mechanism, the top options by value, and a "
-    "candidate_set_id to pass to the optimiser. Narrow by mechanisms, target segments or "
-    "SKU ids to generate fewer."
+    "predicted, with cannibalisation, halo and clearance value. A KVI the competitor "
+    "undercuts also gets a price-match option: PCT_OFF at the smallest whole-percent depth "
+    "that reaches the competitor's price. SKUs the request names for clearance count as "
+    "overstocked. Returns counts, pruned counts per reason, counts per region and mechanism, "
+    "the price matches offered, the top options by value, and a candidate_set_id to pass to "
+    "the optimiser. Narrow by mechanisms, target segments or SKU ids to generate fewer."
 )
 
 
@@ -80,6 +83,17 @@ class RegionMechanismCount(BaseModel):
     region: Region
     mechanism: Mechanism
     count: int
+
+
+class PriceMatchOffer(BaseModel):
+    """A KVI the competitor undercuts, and the PCT_OFF depth that matches its price."""
+
+    model_config = ConfigDict(frozen=True)
+
+    sku_id: str
+    region: Region
+    depth_pct: int
+    competitor_price: float
 
 
 class CandidateOption(BaseModel):
@@ -112,6 +126,9 @@ class GenerateCandidatesOutput(BaseModel):
     kept: int
     pruned: list[PrunedCount]
     by_region_and_mechanism: list[RegionMechanismCount]
+    price_matches: list[PriceMatchOffer] = Field(
+        description="Undercut KVIs in scope and the depth that matches the competitor's price."
+    )
     top: list[CandidateOption] = Field(description=f"Up to {MAX_TOP} options, best value first.")
 
 
@@ -180,6 +197,15 @@ def _summary(
         by_region_and_mechanism=[
             RegionMechanismCount(region=key[0], mechanism=key[1], count=int(counts[key]))
             for key in sorted(counts.index, key=rank.__getitem__)
+        ],
+        price_matches=[
+            PriceMatchOffer(
+                sku_id=match.sku_id,
+                region=match.region,
+                depth_pct=match.depth_pct,
+                competitor_price=match.competitor_price,
+            )
+            for match in options.price_matches
         ],
         top=[
             CandidateOption.model_validate(

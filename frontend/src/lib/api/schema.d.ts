@@ -226,6 +226,8 @@ export interface components {
             /** Objective Gain */
             objective_gain: number | null;
             region?: components["schemas"]["Region"] | null;
+            /** Sku Id */
+            sku_id?: string | null;
             source: components["schemas"]["ConstraintSource"];
         };
         /**
@@ -234,6 +236,34 @@ export interface components {
          * @enum {string}
          */
         BindingEvidence: "exact" | "lower_bound" | "unproven";
+        /**
+         * ClearanceShortfall
+         * @description A clearance target the plan misses: no plan within the other constraints reaches it,
+         *     so the optimiser returned the plan that comes closest and reports by how much it falls
+         *     short (SPEC §9.4, F-06 AC2, ADR 0040).
+         */
+        ClearanceShortfall: {
+            /** Expected Sell Through */
+            expected_sell_through: number;
+            region: components["schemas"]["Region"];
+            /** Shortfall Units */
+            shortfall_units: number;
+            /** Sku Id */
+            sku_id: string;
+            /** Target */
+            target: number;
+        };
+        /**
+         * ClearanceTarget
+         * @description The minimum sell-through the brief asks for a SKU it names for clearance, in every
+         *     region of the scope (ADR 0014, ADR 0040).
+         */
+        ClearanceTarget: {
+            /** Sell Through */
+            sell_through: number;
+            /** Sku Id */
+            sku_id: string;
+        };
         /**
          * CompetitorGap
          * @description One SKU in one region against the competitor's latest price before the as-of week.
@@ -330,7 +360,7 @@ export interface components {
          * @description A plan-level constraint the optimiser enforces (ADR 0036, ADR 0038).
          * @enum {string}
          */
-        ConstraintKind: "marketing_budget" | "minimum_margin" | "margin_floor" | "max_promoted_skus";
+        ConstraintKind: "marketing_budget" | "minimum_margin" | "margin_floor" | "max_promoted_skus" | "regional_budget" | "clearance_target" | "kvi_price_tolerance";
         /**
          * ConstraintSource
          * @description Who set a constraint: only the brief's constraints may be relaxed (ADR 0007).
@@ -561,7 +591,7 @@ export interface components {
          * @description Why a promo option is not in the plan: a rule it breaks alone or added to the plan.
          * @enum {string}
          */
-        NotSelectedReason: "low_uplift" | "out_of_stock" | "breaks_policy" | "over_budget" | "breaks_margin" | "max_promoted_skus" | "cannibalises" | "time_limit";
+        NotSelectedReason: "low_uplift" | "out_of_stock" | "breaks_policy" | "over_budget" | "over_regional_budget" | "breaks_margin" | "max_promoted_skus" | "misses_clearance_target" | "breaks_kvi_tolerance" | "cannibalises" | "time_limit";
         /**
          * Percentiles
          * @description The 10th, 50th and 90th percentiles of one simulated metric across the runs.
@@ -604,6 +634,11 @@ export interface components {
              */
             binding_constraints: components["schemas"]["BindingConstraint"][];
             /**
+             * Clearance Shortfalls
+             * @default []
+             */
+            clearance_shortfalls: components["schemas"]["ClearanceShortfall"][];
+            /**
              * Lines
              * @default []
              */
@@ -617,6 +652,11 @@ export interface components {
             number: number;
             /** Objective */
             objective?: number | null;
+            /**
+             * Policy Findings
+             * @default []
+             */
+            policy_findings: components["schemas"]["PolicyFinding"][];
             simulation?: components["schemas"]["PlanSimulation"] | null;
             solver_status?: components["schemas"]["SolveStatus"] | null;
         };
@@ -662,17 +702,47 @@ export interface components {
         };
         /**
          * PlanningRequest
-         * @description Money is in rupees (ADR 0015).
+         * @description Money is in rupees (ADR 0015). The brief's optional constraints may only tighten
+         *     company policy; a value that would loosen it is kept here as read, and planning applies
+         *     the policy value instead and flags it (ADR 0007, ADR 0040).
          */
         PlanningRequest: {
             /** As Of Week */
             as_of_week: number;
+            /**
+             * Clearance Targets
+             * @default []
+             */
+            clearance_targets: components["schemas"]["ClearanceTarget"][];
+            /** Kvi Price Tolerance */
+            kvi_price_tolerance?: number | null;
             /** Marketing Budget */
             marketing_budget: number;
+            /** Max Promoted Skus Per Category Per Region */
+            max_promoted_skus_per_category_per_region?: number | null;
             /** Min Margin */
             min_margin?: number | null;
             promo_window: components["schemas"]["PromoWindow"];
+            /** Regional Budget Caps */
+            regional_budget_caps?: {
+                [key: string]: number;
+            };
             scope: components["schemas"]["Scope"];
+        };
+        /**
+         * PolicyFinding
+         * @description A brief value that would loosen company policy: planning keeps the policy value and
+         *     flags it (ADR 0007, ADR 0040).
+         */
+        PolicyFinding: {
+            /** Applied */
+            applied: number;
+            /** Field */
+            field: string;
+            /** Message */
+            message: string;
+            /** Requested */
+            requested: number;
         };
         /** Product */
         Product: {
@@ -781,10 +851,11 @@ export interface components {
         };
         /**
          * SelectionReasonCode
-         * @description A positive part of a plan line's value (ADR 0005, ADR 0035).
+         * @description A positive part of a plan line's value (ADR 0005, ADR 0035), or the clearance target it
+         *     helps meet (ADR 0040).
          * @enum {string}
          */
-        SelectionReasonCode: "incremental_profit" | "clearance_value" | "halo";
+        SelectionReasonCode: "incremental_profit" | "clearance_value" | "halo" | "clearance_target";
         /** SessionCreated */
         SessionCreated: {
             /**

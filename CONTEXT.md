@@ -61,10 +61,13 @@ A SKU in a region whose days of cover exceed the company-policy threshold, or th
 The write-off loss a plan avoids by selling overstocked units beyond baseline: those units × unit cost × the policy write-off rate.
 
 **Sell-through**:
-Units sold during the promo window divided by units available at its start.
+The expected units a SKU sells in a region over the promo window, promotions included, divided by its available stock at the as-of week (ADR 0040).
 
 **Clearance target**:
-The minimum sell-through required for an overstocked SKU that the brief names for clearance; SKUs flagged only by days of cover get none (ADR 0014).
+The minimum sell-through required, in every region of the scope, for an overstocked SKU that the brief names for clearance; SKUs flagged only by days of cover get none (ADR 0014).
+
+**Clearance shortfall**:
+How far a plan falls short of a clearance target that no plan within the other constraints reaches. The optimiser then returns the plan closest to every target and reports each shortfall; it is never a silent miss (ADR 0040).
 
 **Competitor price index (CPI)**:
 The competitor's latest price before the as-of week divided by our base price, for a SKU in a region (ADR 0031).
@@ -75,6 +78,9 @@ The competitor's latest price before the as-of week divided by our base price, f
 **Undercut**:
 A KVI whose CPI is below 1 minus the company-policy undercut threshold; it prompts the planner to consider matching the competitor.
 _Avoid_: price war (for a single SKU), competitor gap (when the threshold is breached)
+
+**Price match**:
+The promo option offered for an undercut KVI in a region: PCT_OFF at the smallest whole-percent depth whose price is at or below the competitor's (ADR 0040).
 
 ### Demand and effects
 
@@ -142,12 +148,15 @@ A specific question the agent asks the user, pausing the planning session until 
 The smallest change to the brief's constraints (budget, minimum margin down to the policy floor, clearance target, scope) that would make an infeasible planning request feasible. Company policy is never relaxed.
 
 **Binding constraint**:
-A plan-level constraint (marketing budget, minimum margin or margin floor, promoted-SKU cap per category and region) whose removal would give the optimiser a strictly better objective. It is unproven when the solver ran out of time before settling it (ADR 0038).
+A plan-level constraint (marketing budget, regional budget cap, minimum margin or margin floor, promoted-SKU cap per category and region, clearance target, KVI price tolerance) whose removal would give the optimiser a strictly better objective. It is unproven when the solver ran out of time before settling it (ADR 0038, ADR 0040).
 _Avoid_: active constraint, bottleneck
 
 **Company policy**:
 Standing rules set by the parent company, outside any brief (e.g. margin floor, maximum discount, undercut threshold, KVI price tolerance, overstock threshold, write-off rate, fixed marketing costs). A brief may tighten company policy but never loosen it.
 _Avoid_: global constraints, defaults
+
+**Policy finding**:
+A brief value that would loosen company policy (a minimum margin below the margin floor, a looser promoted-SKU cap or KVI price tolerance). Planning keeps the policy value and reports the finding (ADR 0007, ADR 0040).
 
 **Margin floor**:
 The company-policy lowest value any planning request's minimum margin may take.
@@ -163,6 +172,9 @@ _Avoid_: spend, trade spend, promo investment
 **Marketing budget**:
 The cap on a plan's total expected promo cost, set by the brief.
 _Avoid_: budget (when a regional cap is meant)
+
+**Regional budget cap**:
+An optional cap the brief sets on the promo cost spent in one region, on top of the marketing budget.
 
 **Minimum margin**:
 The lowest blended expected margin the plan lines together may have. Separately, no plan line may sell below unit cost unless its SKU is overstocked.

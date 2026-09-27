@@ -203,3 +203,44 @@ async def test_a_missing_model_is_model_unavailable(
 
     assert isinstance(result, ToolError)
     assert result.code == "model_unavailable"
+
+
+async def test_undercut_kvis_get_price_match_options_listed_for_the_planner(
+    tools: ToolRegistry, store: CandidateStore, small_history: DemandHistory
+) -> None:
+    categories = sorted(small_history.products["category"].unique())
+    scope = {"regions": ["North", "South"], "categories": categories}
+
+    result = await tools.call(
+        "generate_candidates", arguments(small_history, request={"scope": scope})
+    )
+
+    assert isinstance(result, ToolOk), result
+    assert isinstance(result.output, GenerateCandidatesOutput)
+    stored = store.get(result.output.candidate_set_id)
+    assert stored is not None
+    matches = stored.options.price_matches
+    assert matches, "the small world has undercut KVIs"
+    assert [
+        (m.sku_id, m.region, m.depth_pct, m.competitor_price) for m in result.output.price_matches
+    ] == [(m.sku_id, m.region, m.depth_pct, m.competitor_price) for m in matches]
+    # The stored facts carry each KVI's competitor price for the KVI price tolerance.
+    first = matches[0]
+    assert stored.facts.sku(first.sku_id, first.region).competitor_price == first.competitor_price
+
+
+async def test_a_clearance_target_outside_the_scope_is_invalid_input(
+    tools: ToolRegistry, small_history: DemandHistory
+) -> None:
+    products = small_history.products
+    category = sorted(products["category"].unique())[0]
+    outside = str(products.loc[products["category"] != category, "sku_id"].iloc[0])
+    targets = [{"sku_id": outside, "sell_through": 0.5}]
+
+    result = await tools.call(
+        "generate_candidates", arguments(small_history, request={"clearance_targets": targets})
+    )
+
+    assert isinstance(result, ToolError)
+    assert result.code == "invalid_input"
+    assert outside in result.message

@@ -44,5 +44,11 @@ class InMemoryRetailData:
         visible["segment_units"] = visible["segment_units"].map(json.loads)
         return visible.reset_index(drop=True)
 
+    async def latest_competitor_prices(self, as_of_week: int) -> pd.DataFrame:
+        prices = self._dataset.competitor_prices
+        visible = prices[prices["week_id"] < as_of_week].sort_values("week_id")
+        latest = visible.drop_duplicates(["region", "sku_id"], keep="last")
+        return latest.sort_values(["region", "sku_id"]).reset_index(drop=True)
+
     async def default_as_of_week(self) -> int:
         return int(self._dataset.sales_weekly["week_id"].max()) + 1

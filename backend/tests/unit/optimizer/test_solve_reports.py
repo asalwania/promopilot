@@ -10,7 +10,7 @@ from dataclasses import dataclass, replace
 from typing import Any
 
 import pytest
-from hypothesis import given
+from hypothesis import assume, given
 
 from promopilot.domain import (
     BindingConstraint,
@@ -66,6 +66,26 @@ def without_caps(instance: Instance) -> Instance:
     return replace(
         instance,
         policy=instance.policy.model_copy(update={"max_promoted_skus_per_category_per_region": 99}),
+        brief_cap=None,
+    )
+
+
+def without_regional_cap(instance: Instance, region: Region) -> Instance:
+    return replace(instance, caps={r: cap for r, cap in instance.caps.items() if r is not region})
+
+
+def without_kvi_tolerance(instance: Instance) -> Instance:
+    return replace(instance, kvi_tolerance=None)
+
+
+def without_target(instance: Instance, sku_id: str, region: Region) -> Instance:
+    """The clearance target of one SKU in one region dropped: a baseline that meets it."""
+    return replace(
+        instance,
+        clearance=tuple(
+            replace(c, baseline_units=1e9) if (c.sku_id, c.region) == (sku_id, region) else c
+            for c in instance.clearance
+        ),
     )
 
 
@@ -82,6 +102,7 @@ def one_group(instance: Instance) -> Instance:
         return plan_line.model_copy(update={"region": Region.NORTH})
 
     facts = instance.facts
+    first_target = {c.sku_id: c for c in reversed(instance.clearance)}
     return replace(
         instance,
         rows=[replace(row, line=north(row.line)) for row in instance.rows],
@@ -91,7 +112,10 @@ def one_group(instance: Instance) -> Instance:
                 frozenset(north(member) for member in pair): term
                 for pair, term in facts.pairwise.items()
             },
+            kvis={(sku_id, Region.NORTH): price for (sku_id, _), price in facts.kvis.items()},
         ),
+        clearance=tuple(replace(c, region=Region.NORTH) for c in first_target.values()),
+        caps=dict.fromkeys([Region.NORTH], min(instance.caps.values())) if instance.caps else {},
     )
 
 
@@ -108,6 +132,8 @@ def test_the_budget_and_margin_are_reported_binding_exactly_when_dropping_them_g
 ) -> None:
     result = instance.solve()
     assert result.status is SolveStatus.OPTIMAL
+    # A plan short of a clearance target is the closest one, not the best one (ADR 0040).
+    assume(not result.clearance_shortfalls)
 
     budget = gains(result, without_budget(instance).solve())
     margin = gains(result, without_margin(instance).solve())
@@ -125,6 +151,7 @@ def test_the_promoted_sku_cap_is_reported_binding_exactly_when_dropping_it_gains
     instance: Instance,
 ) -> None:
     result = instance.solve()
+    assume(not result.clearance_shortfalls)
 
     capped = [c for c in result.binding_constraints if c.kind is ConstraintKind.MAX_PROMOTED_SKUS]
     assert all(c.evidence is BindingEvidence.EXACT for c in capped)
@@ -138,6 +165,7 @@ def test_the_promoted_sku_cap_is_reported_binding_exactly_when_dropping_it_gains
 @given(instances())
 def test_a_binding_constraint_reports_what_dropping_it_gains(instance: Instance) -> None:
     result = instance.solve()
+    assume(not result.clearance_shortfalls)
     dropped = {
         ConstraintKind.MARKETING_BUDGET: without_budget,
         ConstraintKind.MINIMUM_MARGIN: without_margin,
@@ -150,6 +178,45 @@ def test_a_binding_constraint_reports_what_dropping_it_gains(instance: Instance)
         if constraint.kind in dropped:
             relaxed = dropped[constraint.kind](instance).solve()
             assert constraint.objective_gain == pytest.approx(relaxed.objective - result.objective)
+
+
+@PROPERTY
+@given(instances())
+def test_caps_kvi_tolerance_and_clearance_targets_bind_exactly_when_dropping_them_gains(
+    instance: Instance,
+) -> None:
+    result = instance.solve()
+    assume(not result.clearance_shortfalls)
+    reported = {
+        (c.kind, c.region, c.sku_id): c
+        for c in result.binding_constraints
+        if c.kind
+        in (
+            ConstraintKind.REGIONAL_BUDGET,
+            ConstraintKind.KVI_PRICE_TOLERANCE,
+            ConstraintKind.CLEARANCE_TARGET,
+        )
+    }
+    assert all(c.evidence is BindingEvidence.EXACT for c in reported.values())
+
+    dropping: dict[tuple[ConstraintKind, Region | None, str | None], Instance] = {
+        (ConstraintKind.REGIONAL_BUDGET, region, None): without_regional_cap(instance, region)
+        for region in instance.caps
+    }
+    if instance.kvi_tolerance is not None:
+        dropping[(ConstraintKind.KVI_PRICE_TOLERANCE, None, None)] = without_kvi_tolerance(instance)
+    for c in instance.clearance:
+        dropping[(ConstraintKind.CLEARANCE_TARGET, c.region, c.sku_id)] = without_target(
+            instance, c.sku_id, c.region
+        )
+    assert set(reported) <= set(dropping)
+    for key, relaxed_instance in dropping.items():
+        relaxed = relaxed_instance.solve()
+        assert (key in reported) == gains(result, relaxed), key
+        if key in reported:
+            assert reported[key].objective_gain == pytest.approx(
+                relaxed.objective - result.objective
+            )
 
 
 A = line("A")

@@ -11,10 +11,18 @@ import time
 
 import pytest
 
-from promopilot.domain import BindingEvidence, ConstraintKind
+from promopilot.domain import BindingEvidence, ConstraintKind, PlanningRequest
+from promopilot.guardrails import (
+    ClearanceFacts,
+    LineFacts,
+    PlanFacts,
+    ViolationCode,
+    validate_plan,
+)
 from promopilot.optimizer import (
     FittedOptionFacts,
     OptionContext,
+    PromoOptions,
     SolverSettings,
     SolveStatus,
     generate_options,
@@ -84,3 +92,87 @@ def test_the_binding_analysis_proves_the_demo_budget_binds_within_its_own_time_l
         [BindingEvidence.LOWER_BOUND],
         [BindingEvidence.EXACT],
     )
+
+
+CONSTRAINED = PlanningRequest.model_validate(
+    DEMO_BRIEF.model_dump()
+    | {
+        "clearance_targets": [{"sku_id": "SKU0029", "sell_through": 0.5}],
+        "regional_budget_caps": {"North": 90_000.0},
+        "kvi_price_tolerance": 0.02,
+    }
+)
+"""The demo brief with the brief's optional constraints (ADR 0040): SKU0029 is overstocked in
+both regions, and three North KVIs are undercut."""
+
+
+def plan_facts(options: PromoOptions, rows: list[int], facts: FittedOptionFacts) -> PlanFacts:
+    """The selected rows as `validate_plan` reads them, with each clearance target's expected
+    units over the promo window."""
+    table = options.table
+    lines = []
+    for row in rows:
+        line = options.lines[row]
+        partner = line.bundle_partner_sku_id
+        lines.append(
+            LineFacts(
+                line=line,
+                anchor=facts.sku(line.sku_id, line.region),
+                partner=None if partner is None else facts.sku(partner, line.region),
+                expected_units=float(table["units"].iloc[row]),
+                p90_units=float(table["p90_units"].iloc[row]),
+                available_stock=float(table["available_stock"].iloc[row]),
+                expected_revenue=float(table["revenue"].iloc[row]),
+                expected_gross_profit=float(table["gross_profit"].iloc[row]),
+                promo_cost=float(table["promo_cost"].iloc[row]),
+            )
+        )
+    clearance = []
+    for target in options.clearance:
+        sold = target.baseline_units
+        for row in rows:
+            line = options.lines[row]
+            if line.region is not target.region:
+                continue
+            if line.sku_id == target.sku_id:
+                sold += float(table["window_uplift"].iloc[row])
+            if line.bundle_partner_sku_id == target.sku_id:
+                sold += float(table["partner_window_uplift"].iloc[row])
+        clearance.append(
+            ClearanceFacts(
+                sku_id=target.sku_id,
+                region=target.region,
+                available_stock=target.available_stock,
+                expected_units=sold,
+            )
+        )
+    return PlanFacts(lines=tuple(lines), clearance=tuple(clearance))
+
+
+@pytest.mark.model
+def test_the_demo_brief_with_its_optional_constraints_keeps_them_within_the_budget(
+    demo_context: OptionContext,
+) -> None:
+    options = generate_options(CONSTRAINED, demo_context)
+    facts = FittedOptionFacts(demo_context)
+    plain = SolverSettings(binding_time_limit_seconds=0)
+
+    timings = []
+    results = []
+    for _ in range(RUNS):
+        started = time.perf_counter()
+        results.append(
+            solve(CONSTRAINED, options, facts, demo_context.policy, settings=plain, seed=0)
+        )
+        timings.append(time.perf_counter() - started)
+
+    result = results[0]
+    assert result.status is SolveStatus.OPTIMAL
+    assert options.price_matches
+    plan = plan_facts(options, list(result.selected), facts)
+    violations = validate_plan(plan, CONSTRAINED, demo_context.policy)
+    # Every constraint holds but a clearance target no plan reaches, and that is reported.
+    assert {(v.code, v.sku_id, v.region) for v in violations} == {
+        (ViolationCode.CLEARANCE_TARGET, s.sku_id, s.region) for s in result.clearance_shortfalls
+    }
+    assert min(timings) < BUDGET_SECONDS, f"solve took {', '.join(f'{t:.1f} s' for t in timings)}"

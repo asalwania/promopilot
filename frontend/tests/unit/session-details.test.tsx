@@ -67,6 +67,8 @@ describe("SessionDetails", () => {
             objective: 0,
             binding_constraints: [],
             not_selected: [],
+            clearance_shortfalls: [],
+            policy_findings: [],
           },
         }}
       />,

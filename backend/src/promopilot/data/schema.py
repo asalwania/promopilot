@@ -161,6 +161,9 @@ plan_revisions = Table(
     Column("not_selected", JSONB),
     # E7 (ADR 0042); null for revisions planned before the simulator.
     Column("simulation", JSONB),
+    # E6 #36 (ADR 0040); null for revisions planned before it.
+    Column("clearance_shortfalls", JSONB),
+    Column("policy_findings", JSONB),
 )
 
 plan_lines = Table(
