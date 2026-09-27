@@ -12,7 +12,14 @@ from promopilot.agents.tools.simulate_plan import (
     simulate_plan_tool,
 )
 from promopilot.datagen import GeneratedDataset
-from promopilot.domain import CompanyPolicy, Mechanism, PlanLine, Region, TargetSegment
+from promopilot.domain import (
+    CompanyPolicy,
+    CompetitorReaction,
+    Mechanism,
+    PlanLine,
+    Region,
+    TargetSegment,
+)
 from promopilot.models.demand import DemandModel
 from promopilot.models.registry import ModelKind
 from promopilot.models.relations import Relations
@@ -163,3 +170,51 @@ def test_the_input_takes_plan_lines_only_as_plan_lines(skus: list[str]) -> None:
 
     assert isinstance(parsed.lines[0], PlanLine)
     assert parsed.n_runs is None
+    assert parsed.competitor_reaction is None
+
+
+async def test_the_planner_may_simulate_a_competitor_reaction(
+    tools: ToolRegistry, skus: list[str]
+) -> None:
+    lines = [line(skus[0]), line(skus[1], region=Region.SOUTH.value)]
+
+    calm = await tools.call("simulate_plan", {"lines": lines})
+    never = await tools.call(
+        "simulate_plan", {"lines": lines, "competitor_reaction": {"match_probability": 0.0}}
+    )
+    war = await tools.call(
+        "simulate_plan", {"lines": lines, "competitor_reaction": {"match_probability": 1.0}}
+    )
+
+    assert isinstance(calm, ToolOk)
+    assert isinstance(never, ToolOk)
+    assert isinstance(war, ToolOk)
+    assert isinstance(calm.output, SimulatePlanOutput)
+    assert isinstance(never.output, SimulatePlanOutput)
+    assert isinstance(war.output, SimulatePlanOutput)
+    assert calm.output.simulation.competitor_reaction is None
+    assert never.output.simulation.competitor_reaction == CompetitorReaction(match_probability=0)
+    assert never.output.simulation.lines == calm.output.simulation.lines
+    assert war.output.simulation.competitor_reaction == CompetitorReaction(match_probability=1)
+
+
+@pytest.mark.parametrize(
+    ("reaction", "loc"),
+    [
+        ({"match_probability": 1.5}, "competitor_reaction.match_probability"),
+        ({"match_probability": -0.1}, "competitor_reaction.match_probability"),
+        ({"match_probability": 0.5, "match_share": 0.5}, "competitor_reaction.match_share"),
+        ({}, "competitor_reaction.match_probability"),
+    ],
+    ids=["above-one", "below-zero", "unknown-field", "missing-probability"],
+)
+async def test_an_invalid_competitor_reaction_is_invalid_input(
+    tools: ToolRegistry, skus: list[str], reaction: dict[str, Any], loc: str
+) -> None:
+    result = await tools.call(
+        "simulate_plan", {"lines": [line(skus[0])], "competitor_reaction": reaction}
+    )
+
+    assert isinstance(result, ToolError)
+    assert result.code == "invalid_input"
+    assert [detail.loc for detail in result.details] == [loc]

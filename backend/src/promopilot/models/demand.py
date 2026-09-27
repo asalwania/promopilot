@@ -27,7 +27,7 @@ from promopilot.economics import (
     gross_profit,
     incremental_profit,
 )
-from promopilot.models.response import TERM_NAMES, PromoResponse, design
+from promopilot.models.response import TERM_NAMES, TERMS, PromoResponse, design
 
 HOLDOUT_WEEKS = 12
 """Baseline WAPE is measured on the last 12 weeks before the as-of week (SPEC §9.1)."""
@@ -164,6 +164,10 @@ class Prediction:
     """One row per option and segment: option, segment, units, units_std, baseline_units."""
 
 
+COMPETITOR_TERM = TERM_NAMES[TERMS.index(("gamma", None))]
+"""The design column of the competitor term gamma: log(cp / p) - log r, where cp is the
+competitor's price, p the price the row pays and r the series' reference index (ADR 0024)."""
+
 RESPONSE_ROW_COLUMNS = [
     "option",
     "sku_id",
@@ -194,7 +198,8 @@ class ResponseRows:
     the anchor from the partner, and baseline_units is the store's unpromoted baseline at the
     series' reference competitor index."""
     design: pd.DataFrame
-    """Each row's covariate for each term, aligned with `rows`; columns are term names."""
+    """Each row's covariate for each term, aligned with `rows`; columns are term names, the
+    competitor term's being COMPETITOR_TERM."""
     estimate: pd.DataFrame
     """Per SKU (the index) and term (the columns): the fitted estimate."""
     std_error: pd.DataFrame

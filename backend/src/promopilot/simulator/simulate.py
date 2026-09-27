@@ -11,8 +11,15 @@ the line's promo weeks, the oracle's stock basis (ADR 0004, ADR 0011, ADR 0017).
 stock-out for the line when demand reaches that stock. Money follows the units sold, through
 the shared economics (ADR 0005, ADR 0015).
 
-Randomness comes from one generator seeded with `seed`: terms first, then noise line by line in
-plan order. The same plan, inputs and seed give identical results.
+With a competitor reaction (F-09 AC2, ADR 0045), each run draws, for each plan line on its own,
+whether the competitor matches our discount. A matched competitor cuts its price by the share each
+row's customers get off our base price, so the row's competitor term log(cp / p) - log r loses
+log(base price / p): the promotion no longer gains on the competitor.
+
+Randomness comes from one seed. The terms, then the noise line by line in plan order, come from
+a generator seeded with `seed`; the reaction draws come from a second generator of the same
+seed, so omitting the scenario, or a match probability of 0, leaves every other draw as it was.
+The same plan, inputs, seed and scenario give identical results.
 """
 
 from collections.abc import Sequence
@@ -25,6 +32,7 @@ from numpy.typing import NDArray
 
 from promopilot.domain import (
     CompanyPolicy,
+    CompetitorReaction,
     LineSimulation,
     Percentiles,
     PlanLine,
@@ -35,7 +43,7 @@ from promopilot.domain import (
     SimulatedOutcomes,
 )
 from promopilot.economics import fixed_marketing_cost, gross_profit
-from promopilot.models.demand import PredictionContext, ResponseRows
+from promopilot.models.demand import COMPETITOR_TERM, PredictionContext, ResponseRows
 
 Array = NDArray[np.float64]
 
@@ -45,6 +53,8 @@ MIN_RUNS = 100
 MAX_RUNS = 5_000
 """The run counts the planner's tool and the API accept (ADR 0042)."""
 QUANTILES = (0.1, 0.5, 0.9)
+REACTION_STREAM = 1
+"""The competitor reaction's generator is seeded with (seed, REACTION_STREAM) (ADR 0045)."""
 
 
 class ResponseSource(Protocol):
@@ -85,9 +95,15 @@ class _Runs:
 
 
 def simulate(
-    plan: PromoPlan, inputs: SimulationInputs, *, n_runs: int, seed: int
+    plan: PromoPlan,
+    inputs: SimulationInputs,
+    *,
+    n_runs: int,
+    seed: int,
+    competitor_reaction: CompetitorReaction | None = None,
 ) -> PlanSimulation:
-    """P10/P50/P90 of each plan line's and the plan's outcomes, and stock-out probabilities.
+    """P10/P50/P90 of each plan line's and the plan's outcomes, and stock-out probabilities,
+    optionally with the competitor matching each line's discount at random (ADR 0045).
 
     Raises ValueError for a plan line the demand model cannot predict.
     """
@@ -100,10 +116,13 @@ def simulate(
         return PlanSimulation(
             n_runs=n_runs,
             seed=seed,
+            competitor_reaction=competitor_reaction,
             total=_outcomes(zeros, zeros, zeros, zeros, None),
         )
     response = inputs.demand.response_rows(lines, PredictionContext(policy=inputs.policy))
     terms = _sampled_terms(response, n_runs, rng)
+    matched = _matched(competitor_reaction, n_runs, len(lines), seed)
+    competitor = _competitor_column(response)
     available = _available(inputs.stock)
     groups = response.rows.groupby(["option", "sku_id"], sort=False).indices
     design = response.design.to_numpy(dtype=float)
@@ -114,6 +133,7 @@ def simulate(
             response.rows,
             design,
             terms,
+            None if matched is None or competitor is None else (matched[:, n], competitor),
             available,
             inputs.policy,
             rng,
@@ -123,6 +143,7 @@ def simulate(
     return PlanSimulation(
         n_runs=n_runs,
         seed=seed,
+        competitor_reaction=competitor_reaction,
         lines=tuple(
             LineSimulation(
                 sku_id=planned.sku_id,
@@ -185,6 +206,23 @@ def _sampled_terms(response: ResponseRows, n_runs: int, rng: np.random.Generator
     )
 
 
+def _matched(
+    reaction: CompetitorReaction | None, n_runs: int, n_lines: int, seed: int
+) -> NDArray[np.bool_] | None:
+    """(runs, lines): whether the competitor matches each line's discount in each run, drawn
+    independently per line from the reaction's own generator; None without a scenario."""
+    if reaction is None:
+        return None
+    draws = np.random.default_rng([seed, REACTION_STREAM]).random((n_runs, n_lines))
+    return np.asarray(draws < reaction.match_probability)
+
+
+def _competitor_column(response: ResponseRows) -> int | None:
+    """The competitor term's position among the design columns; None if the model has none."""
+    columns = list(response.design.columns)
+    return columns.index(COMPETITOR_TERM) if COMPETITOR_TERM in columns else None
+
+
 def _available(stock: pd.DataFrame) -> dict[tuple[str, str], float]:
     return {
         (str(sku_id), str(region)): max(float(units), 0.0)
@@ -200,6 +238,7 @@ def _simulate_line(
     rows: pd.DataFrame,
     design: Array,
     terms: _Terms,
+    reaction: tuple[NDArray[np.bool_], int] | None,
     available: dict[tuple[str, str], float],
     policy: CompanyPolicy,
     rng: np.random.Generator,
@@ -212,17 +251,22 @@ def _simulate_line(
         sku = rows.iloc[at]
         k = terms.sku_index[sku_id]
         covariates = design[at]
-        means = sku["baseline_units"].to_numpy(dtype=float) * np.exp(
-            terms.values[:, k, :] @ covariates.T
-        )
+        price = sku["price"].to_numpy(dtype=float)
+        base_price = sku["base_price"].to_numpy(dtype=float)
+        exponent = terms.values[:, k, :] @ covariates.T
+        if reaction is not None:
+            # In a matched run the competitor takes its price down by our discount, so the
+            # competitor term loses gamma x log(base price / p) on every row (ADR 0045).
+            matched, column = reaction
+            gamma = np.where(matched, terms.values[:, k, column], 0.0)
+            exponent = exponent - np.outer(gamma, np.log(base_price / price))
+        means = sku["baseline_units"].to_numpy(dtype=float) * np.exp(exponent)
         size = terms.dispersion[k]
         draws = rng.negative_binomial(size, size / (size + means)).astype(float)
         demand = draws.sum(axis=1)
         stock = available.get((sku_id, planned.region.value), 0.0)
         sold = np.minimum(demand, stock)
         share = np.divide(sold, demand, out=np.zeros_like(sold), where=demand > 0)
-        price = sku["price"].to_numpy(dtype=float)
-        base_price = sku["base_price"].to_numpy(dtype=float)
         unit_cost = sku["unit_cost"].to_numpy(dtype=float)
         revenue = revenue + share * (draws @ price)
         profit = profit + share * (draws @ gross_profit(1.0, price, unit_cost))

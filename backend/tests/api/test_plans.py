@@ -1,4 +1,5 @@
-"""`POST /api/plans/{id}/simulate`: re-simulate a session's latest plan revision (ADR 0043)."""
+"""`POST /api/plans/{id}/simulate`: re-simulate a session's latest plan revision (ADR 0043),
+optionally with a competitor reaction (ADR 0045)."""
 
 from typing import Any
 from uuid import UUID, uuid4
@@ -11,6 +12,7 @@ from promopilot.api.plans import PlanService
 from promopilot.datagen import GeneratedDataset
 from promopilot.domain import (
     CompanyPolicy,
+    CompetitorReaction,
     Mechanism,
     PlanLine,
     PlanningRequest,
@@ -206,12 +208,59 @@ async def test_a_session_without_a_plan_revision_is_404(
     assert response.status_code == 404
 
 
+async def test_a_competitor_reaction_is_simulated_and_stored_with_the_result(
+    small_models: tuple[DemandModel, Relations],
+    small_dataset: GeneratedDataset,
+    revision: PlanRevision,
+) -> None:
+    session = session_with(revision)
+    revisions = InMemoryRevisions(session)
+    async with client_for(revisions, small_models, small_dataset) as client:
+        calm = await simulate(client, session.id, {"n_runs": 200})
+        never = await simulate(
+            client,
+            session.id,
+            {"n_runs": 200, "competitor_reaction": {"match_probability": 0.0}},
+        )
+        war = await simulate(
+            client,
+            session.id,
+            {"n_runs": 200, "competitor_reaction": {"match_probability": 1.0}},
+        )
+
+    assert war.status_code == 200
+    assert calm.json()["simulation"]["competitor_reaction"] is None
+    assert never.json()["simulation"]["competitor_reaction"] == {"match_probability": 0.0}
+    assert never.json()["simulation"]["lines"] == calm.json()["simulation"]["lines"]
+    simulation = PlanSimulation.model_validate(war.json()["simulation"])
+    assert simulation.competitor_reaction == CompetitorReaction(match_probability=1.0)
+    stored = revisions.sessions[session.id].latest_revision
+    assert stored is not None
+    assert stored.simulation == simulation
+
+
 @pytest.mark.parametrize(
     "body",
-    [{"n_runs": 99}, {"n_runs": 5_001}, {"competitor_reaction": {"match_probability": 1.0}}],
-    ids=["too-few-runs", "too-many-runs", "competitor-reaction-reserved"],
+    [
+        {"n_runs": 99},
+        {"n_runs": 5_001},
+        {"competitor_reaction": {"match_probability": 1.5}},
+        {"competitor_reaction": {"match_probability": -0.1}},
+        {"competitor_reaction": {}},
+        {"competitor_reaction": {"match_probability": 0.5, "match_share": 0.5}},
+        {"competitor_reaction": 0.5},
+    ],
+    ids=[
+        "too-few-runs",
+        "too-many-runs",
+        "probability-above-one",
+        "probability-below-zero",
+        "no-probability",
+        "unknown-reaction-field",
+        "bare-probability",
+    ],
 )
-async def test_out_of_range_runs_and_a_competitor_reaction_are_422(
+async def test_out_of_range_runs_and_an_invalid_competitor_reaction_are_422(
     small_models: tuple[DemandModel, Relations],
     small_dataset: GeneratedDataset,
     revision: PlanRevision,

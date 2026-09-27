@@ -4,9 +4,11 @@ from pydantic import ValidationError
 from promopilot.domain import (
     ClearanceTarget,
     CompanyPolicy,
+    CompetitorReaction,
     Mechanism,
     PlanLine,
     PlanningRequest,
+    PlanSimulation,
     PromoPlan,
     PromoWindow,
     Region,
@@ -156,3 +158,31 @@ def test_a_regional_budget_cap_is_positive_and_for_a_region_in_scope() -> None:
         planning_request(regional_budget_caps={"South": 50_000.0})
     with pytest.raises(ValidationError):
         planning_request(regional_budget_caps={"North": 0.0})
+
+
+@pytest.mark.parametrize("probability", [0.0, 0.3, 1.0])
+def test_a_competitor_reaction_is_a_match_probability_from_zero_to_one(probability: float) -> None:
+    assert CompetitorReaction(match_probability=probability).match_probability == probability
+
+
+@pytest.mark.parametrize("probability", [-0.1, 1.01])
+def test_a_competitor_reaction_rejects_a_probability_outside_zero_to_one(
+    probability: float,
+) -> None:
+    with pytest.raises(ValidationError):
+        CompetitorReaction(match_probability=probability)
+
+
+def test_a_competitor_reaction_takes_no_other_field() -> None:
+    with pytest.raises(ValidationError):
+        CompetitorReaction.model_validate({"match_probability": 0.5, "match_share": 0.5})
+
+
+def test_a_stored_simulation_from_before_the_scenario_reads_back_without_one() -> None:
+    outcomes = {
+        metric: {"p10": 0.0, "p50": 0.0, "p90": 0.0}
+        for metric in ("units", "revenue", "gross_profit", "margin", "promo_spend")
+    }
+    stored = {"n_runs": 100, "seed": 0, "total": outcomes | {"sell_through": None}}
+
+    assert PlanSimulation.model_validate(stored).competitor_reaction is None

@@ -353,6 +353,18 @@ export interface components {
             /** Undercut Threshold */
             undercut_threshold: number;
         };
+        /**
+         * CompetitorReaction
+         * @description The competitor-reaction scenario (F-09 AC2, ADR 0045): in each run, each plan line's
+         *     competitor matches its discount with this probability, independently of the other lines.
+         */
+        CompetitorReaction: {
+            /**
+             * Match Probability
+             * @description Chance, per plan line and run, that the competitor matches our discount.
+             */
+            match_probability: number;
+        };
         /** Complement */
         Complement: {
             /**
@@ -704,6 +716,7 @@ export interface components {
          * @description What `simulate` returns for a promo plan, and what a plan revision stores.
          */
         PlanSimulation: {
+            competitor_reaction?: components["schemas"]["CompetitorReaction"] | null;
             /**
              * Lines
              * @default []
@@ -927,14 +940,12 @@ export interface components {
         SessionStatus: "planning" | "awaiting_clarification" | "awaiting_approval" | "approved" | "rejected" | "failed";
         /**
          * SimulatePlanRequest
-         * @description Re-simulate a session's latest plan revision (ADR 0043). The seed is configuration.
+         * @description Re-simulate a session's latest plan revision (ADR 0043), optionally against a
+         *     competitor reaction (ADR 0045). The seed is configuration.
          */
         SimulatePlanRequest: {
-            /**
-             * Competitor Reaction
-             * @description Reserved for the competitor-reaction scenario (#41); only null for now.
-             */
-            competitor_reaction?: null;
+            /** @description The competitor-reaction scenario; omit or null for a competitor that never reacts. */
+            competitor_reaction?: components["schemas"]["CompetitorReaction"] | null;
             /**
              * N Runs
              * @description Runs to simulate; omit for the configured default (SIMULATION_RUNS).

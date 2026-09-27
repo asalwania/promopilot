@@ -1,11 +1,20 @@
-"""`simulate` on a fitted demand model: its ranges agree with `predict` (ADR 0024, ADR 0042)."""
+"""`simulate` on a fitted demand model: its ranges agree with `predict` (ADR 0024, ADR 0042),
+and a competitor matching every discount costs the undercut-sensitive SKUs units (ADR 0045)."""
 
 import pandas as pd
 import pytest
 
 from promopilot.agents.tools.inventory_status import pooled_stock
 from promopilot.datagen import GeneratedDataset
-from promopilot.domain import CompanyPolicy, Mechanism, PlanLine, PromoPlan, Region, TargetSegment
+from promopilot.domain import (
+    CompanyPolicy,
+    CompetitorReaction,
+    Mechanism,
+    PlanLine,
+    PromoPlan,
+    Region,
+    TargetSegment,
+)
 from promopilot.models.demand import DemandModel, PredictionContext
 from promopilot.models.relations import Relations
 from promopilot.simulator import SimulationInputs, simulate
@@ -58,3 +67,50 @@ def test_simulated_units_centre_on_predict_with_its_spread(
         assert spread == pytest.approx(row["units_std"], rel=0.25)
         assert simulated.revenue.p50 == pytest.approx(row["revenue"], rel=0.06)
         assert simulated.stockout_probability == 0.0
+
+
+def test_a_competitor_matching_every_discount_lowers_p50_units_on_undercut_sensitive_skus(
+    small_models: tuple[DemandModel, Relations],
+    small_dataset: GeneratedDataset,
+    stock: pd.DataFrame,
+) -> None:
+    model = small_models[0]
+    coefficients = model.coefficients()
+    gamma = coefficients[coefficients["parameter"] == "gamma"].set_index("sku_id")["estimate"]
+    sensitive = sorted(gamma[gamma > 0.2].index)[:3]
+    assert len(sensitive) == 3
+    lines = tuple(
+        PlanLine(
+            sku_id=sku_id,
+            region=Region.NORTH,
+            mechanism=Mechanism.PCT_OFF,
+            depth_pct=25,
+            duration_weeks=2,
+            start_week=SMALL_AS_OF + 2,
+            target_segment=TargetSegment.ALL_CUSTOMERS,
+        )
+        for sku_id in sensitive
+    )
+    inputs = SimulationInputs(demand=model, stock=stock, policy=CompanyPolicy())
+
+    calm = simulate(PromoPlan(lines=lines), inputs, n_runs=1_000, seed=2)
+    never = simulate(
+        PromoPlan(lines=lines),
+        inputs,
+        n_runs=1_000,
+        seed=2,
+        competitor_reaction=CompetitorReaction(match_probability=0.0),
+    )
+    war = simulate(
+        PromoPlan(lines=lines),
+        inputs,
+        n_runs=1_000,
+        seed=2,
+        competitor_reaction=CompetitorReaction(match_probability=1.0),
+    )
+
+    assert never.lines == calm.lines
+    assert never.total == calm.total
+    for peace, fought in zip(calm.lines, war.lines, strict=True):
+        assert fought.units.p50 < peace.units.p50
+    assert war.total.units.p50 < calm.total.units.p50
