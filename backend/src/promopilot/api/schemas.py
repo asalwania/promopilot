@@ -4,12 +4,19 @@ from datetime import datetime
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from promopilot.agents.tools.estimate_demand import ModelVersion
 from promopilot.agents.tools.get_relations import Complement, Substitute
-from promopilot.domain import PlanningRequest, PlanningSession, PlanRevision, SessionStatus
+from promopilot.domain import (
+    PlanningRequest,
+    PlanningSession,
+    PlanRevision,
+    PlanSimulation,
+    SessionStatus,
+)
 from promopilot.models.registry import ModelKind, RegisteredModel
+from promopilot.simulator import MAX_RUNS, MIN_RUNS
 
 
 class ModelEntry(BaseModel):
@@ -100,3 +107,32 @@ class SessionResponse(BaseModel):
             plan_revision=session.latest_revision,
             error=session.error,
         )
+
+
+class SimulatePlanRequest(BaseModel):
+    """Re-simulate a session's latest plan revision (ADR 0043). The seed is configuration."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    n_runs: int | None = Field(
+        default=None,
+        ge=MIN_RUNS,
+        le=MAX_RUNS,
+        description="Runs to simulate; omit for the configured default (SIMULATION_RUNS).",
+    )
+    competitor_reaction: None = Field(
+        default=None,
+        description="Reserved for the competitor-reaction scenario (#41); only null for now.",
+    )
+
+
+class PlanSimulationResponse(BaseModel):
+    """A plan revision's new simulation, now stored against it in place of the old one."""
+
+    session_id: UUID
+    revision_number: int
+    demand_model: ModelVersion
+    """The demand model simulated: the latest one (ADR 0043)."""
+    as_of_week: int
+    """The week whose inventory snapshot caps the units: the planning request's."""
+    simulation: PlanSimulation

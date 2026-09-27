@@ -16,6 +16,7 @@ from testcontainers.community.postgres import PostgresContainer
 
 from promopilot.agents import BriefReading, OptimisingPlanner
 from promopilot.api.main import create_app
+from promopilot.api.plans import PlanService
 from promopilot.api.sessions import SessionService
 from promopilot.data import RetailData, SessionStore, load_dataset
 from promopilot.datagen import GeneratedDataset, write
@@ -115,18 +116,24 @@ async def api_process(
     """One API process: its own engine, startup and shutdown, like a uvicorn worker."""
     engine = create_async_engine(url)
     data = RetailData(engine)
+    demand = Fixed(None if models is None else (entry(ModelKind.DEMAND, 1), models[0]))
+    simulation = SimulationSettings(n_runs=200, seed=0)
     planner = OptimisingPlanner(
-        Fixed(None if models is None else (entry(ModelKind.DEMAND, 1), models[0])),
+        demand,
         Fixed(None if models is None else (entry(ModelKind.RELATIONS, 1), models[1])),
         data,
         policy=FREE,
         settings=SolverSettings(),
         seed=0,
-        simulation=SimulationSettings(n_runs=200, seed=0),
+        simulation=simulation,
     )
-    sessions = SessionService(store=SessionStore(engine), data=data, llm=llm, planner=planner)
+    store = SessionStore(engine)
+    sessions = SessionService(store=store, data=data, llm=llm, planner=planner)
+    plans = PlanService(
+        revisions=store, demand_models=demand, data=data, policy=FREE, defaults=simulation
+    )
     app: FastAPI = create_app(
-        database_probe=HealthyProbe(), model_status=NoModel(), sessions=sessions
+        database_probe=HealthyProbe(), model_status=NoModel(), sessions=sessions, plans=plans
     )
     try:
         async with app.router.lifespan_context(app):
@@ -350,3 +357,36 @@ async def test_a_plan_revision_keeps_its_clearance_shortfalls_and_the_briefs_con
     assert saved is not None
     assert saved.planning_request == request
     assert saved.latest_revision == revision
+
+
+async def test_a_resimulation_replaces_the_stored_simulation_in_the_session_read_model(
+    postgres_url: str, running_api: Api
+) -> None:
+    async with running_api(postgres_url, FakeProvider([READING])) as client:
+        session_id = (await client.post("/api/sessions", json={"brief": BRIEF})).json()[
+            "session_id"
+        ]
+        planned = await settled(client, session_id)
+        response = await client.post(f"/api/plans/{session_id}/simulate", json={"n_runs": 300})
+        after = (await client.get(f"/api/sessions/{session_id}")).json()
+
+    assert response.status_code == 200
+    body = response.json()
+    assert (body["session_id"], body["revision_number"]) == (session_id, 1)
+    assert body["as_of_week"] == HISTORY_WEEKS
+    simulation = body["simulation"]
+    assert (simulation["n_runs"], simulation["seed"]) == (300, 0)
+    assert planned["plan_revision"]["simulation"]["n_runs"] == 200
+    # The same revision now carries the new result; nothing else about it changes (ADR 0043).
+    revision = after["plan_revision"]
+    assert revision["simulation"] == simulation
+    assert {**revision, "simulation": None} == {**planned["plan_revision"], "simulation": None}
+
+
+async def test_resimulating_an_unknown_plan_is_404(postgres_url: str, running_api: Api) -> None:
+    async with running_api(postgres_url, FakeProvider([])) as client:
+        response = await client.post(
+            "/api/plans/00000000-0000-0000-0000-000000000000/simulate", json={"n_runs": 300}
+        )
+
+    assert response.status_code == 404

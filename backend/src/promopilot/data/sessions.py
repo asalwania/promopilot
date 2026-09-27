@@ -135,6 +135,20 @@ class SessionStore:
                 )
             )
 
+    async def save_simulation(
+        self, session_id: UUID, revision_number: int, simulation: PlanSimulation
+    ) -> None:
+        """Replace a plan revision's stored simulation (ADR 0043); the revision is unchanged."""
+        async with self._engine.begin() as connection:
+            await connection.execute(
+                update(plan_revisions)
+                .where(
+                    plan_revisions.c.session_id == session_id,
+                    plan_revisions.c.number == revision_number,
+                )
+                .values(simulation=simulation.model_dump(mode="json"))
+            )
+
     async def mark_failed(self, session_id: UUID, error: str) -> None:
         async with self._engine.begin() as connection:
             await connection.execute(

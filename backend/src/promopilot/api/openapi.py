@@ -11,6 +11,7 @@ from promopilot.api.catalog import CatalogService
 from promopilot.api.competitors import CompetitorService
 from promopilot.api.main import create_app
 from promopilot.api.models import ModelService
+from promopilot.api.plans import PlanService
 from promopilot.api.relations import RelationsService
 from promopilot.api.sessions import SessionService
 from promopilot.data import RetailData, SessionStore
@@ -63,6 +64,13 @@ def main() -> None:
         competitors=CompetitorService(RetailData(engine), policy=CompanyPolicy()),
         relations=RelationsService(relations, RetailData(engine)),
         catalog=CatalogService(RetailData(engine), policy=CompanyPolicy()),
+        plans=PlanService(
+            revisions=SessionStore(engine),
+            demand_models=demand,
+            data=RetailData(engine),
+            policy=CompanyPolicy(),
+            defaults=SimulationSettings(n_runs=DEFAULT_RUNS, seed=0),
+        ),
     )
     document = json.dumps(app.openapi(), indent=2, sort_keys=True) + "\n"
     # Write bytes so Windows doesn't emit CRLF; CI diffs this file on Linux.

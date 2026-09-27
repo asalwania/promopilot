@@ -153,11 +153,11 @@ The `compare_mechanisms` tool takes a planning request, a SKU id and a region in
 
 `promopilot.simulator.simulate(plan, inputs, *, n_runs, seed)` runs a promo plan through Monte Carlo (SPEC §9.5, ADR 0042). Each run draws every promo response term of every SKU from N(estimate, std error), once per SKU and run. It then draws units per store × segment × promo week from a negative binomial with the SKU's fitted dispersion, around `DemandModel.response_rows`' means. Each line is simulated on its own SKUs, as `predict` predicts it. Within a run, a SKU sells at most its pooled available stock in the region, the oracle's stock basis (ADR 0004, ADR 0011), and money follows the units sold.
 
-The result, `PlanSimulation`, has P10/P50/P90 for each plan line and for the plan total: units, revenue, gross profit, margin, sell-through and promo spend. It also has each line's stock-out probability (demand reached its available stock) and each region's (at least one of its lines ran out). The same seed gives identical results. The `simulate_plan` tool takes 1 to 200 plan lines and an optional `n_runs` (100–5,000). Its seed, default run count and as-of week are bound, not set by the LLM.
+The result, `PlanSimulation`, has P10/P50/P90 for each plan line and for the plan total: units, revenue, gross profit, margin, sell-through and promo spend. It also has each line's stock-out probability (demand reached its available stock) and each region's (at least one of its lines ran out). The same seed gives identical results. The `simulate_plan` tool takes 1 to 200 plan lines and an optional `n_runs` (100–5,000). Its seed, default run count and as-of week are bound, not set by the LLM. `POST /api/plans/{id}/simulate` re-simulates a session's stored plan revision the same way, with the same bounds and seed (ADR 0043).
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `SIMULATION_RUNS` | `1000` | Runs per simulation of a plan revision, and the `simulate_plan` default (100–5,000) |
+| `SIMULATION_RUNS` | `1000` | Runs per simulation of a plan revision, and the default of `simulate_plan` and of re-simulation (100–5,000) |
 | `SIMULATION_SEED` | `0` | Seed of every simulation, so the same plan always simulates the same way |
 
 On the seed-42 demo plan (35 lines), 1,000 runs take about 0.8 s. Units P10–P90 are 12,478–13,269 (expected 12,852), and gross profit is ₹4.45–4.81 lakh. A 100-line plan takes about 1.3 s, and a `model`-marker test asserts that it stays under 10 s.
@@ -196,6 +196,7 @@ make up                 # rebuild the api image with the new cassettes
 |---|---|---|
 | POST | `/api/sessions` | Start a planning session from `{"brief": "..."}` (1–2000 characters, not blank; otherwise `422`). Returns `202 {"session_id"}` at once; planning runs in the background |
 | GET | `/api/sessions/{id}` | `{session_id, status, brief, planning_request, plan_revision, error}`; `404` if unknown. `status` is `planning`, then `awaiting_approval` with plan revision 1, or `failed` with an `error` saying why. The revision has `solver_status`, `objective`, `binding_constraints`, `not_selected`, and `why_chosen` and `mechanism_comparison` on each line (ADR 0038, ADR 0041), plus its `simulation`: P10/P50/P90 per line and in total, and stock-out probabilities per line and region (ADR 0042) |
+| POST | `/api/plans/{id}/simulate` | Re-simulate the latest plan revision of session `{id}` from `{"n_runs": 100–5000, "competitor_reaction": null}` (both optional; `n_runs` defaults to `SIMULATION_RUNS`, `competitor_reaction` is reserved for #41 and only `null` for now). Returns `{session_id, revision_number, demand_model, as_of_week, simulation}` and stores the new simulation on the revision in place of the old one, so `GET /api/sessions/{id}` shows it. The latest demand model and `SIMULATION_SEED` are used, and units are capped at the stock of the planning request's as-of week (ADR 0043). `404` for an unknown session or one without a plan revision, `422` for out-of-range `n_runs`, `503` with no trained demand model or no inventory snapshot, `409` if the latest model cannot simulate the stored plan |
 | GET | `/api/models` | `{"models": [{model_id, kind, version, trained_at, as_of_week, metrics, live}]}`, newest first. `live` marks the model this API process is serving (ADR 0026) |
 | POST | `/api/models/retrain` | Retrain the demand and relations models as `make train` does by default (the as-of week after the history, seed 42). The request stays open while it fits (60 to 110 seconds on the default world), then returns `201` with the new demand entry, which is now the latest and live, as is the new relations version. `409` if a retrain is already running or no data is loaded |
 | GET | `/api/catalog/products` | `{"products": [{sku_id, name, brand, category, subcategory, pack_size, base_price, unit_cost, is_kvi}]}` in SKU order (ADR 0034). Optional filters `category` and `kvi_only`. `422` for an unknown category |
@@ -268,6 +269,7 @@ docs/agents/ Agent workflow config (issue tracker, triage labels, domain docs)
 - [ADR 0040: Clearance targets solve in two phases; regional caps, the KVI tolerance and a tighter SKU cap are plan-level constraints; a brief only tightens policy](docs/adr/0040-clearance-targets-regional-caps-and-kvi-tolerance.md)
 - [ADR 0041: Mechanisms are compared on the candidate set's expected numbers, by value, with the plan line standing for its own mechanism](docs/adr/0041-mechanism-comparison.md)
 - [ADR 0042: Every plan revision is simulated: one term draw per SKU and run, negative binomial noise per store, units capped at pooled regional stock](docs/adr/0042-monte-carlo-simulation-of-plan-revisions.md)
+- [ADR 0043: A stored plan is re-simulated through its session: the latest plan revision, on the latest demand model, replacing its stored simulation](docs/adr/0043-re-simulate-the-latest-plan-revision.md)
 
 The domain glossary is [CONTEXT.md](CONTEXT.md).
 

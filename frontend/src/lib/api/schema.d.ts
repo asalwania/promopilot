@@ -139,6 +139,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/plans/{session_id}/simulate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Simulate Plan
+         * @description Re-simulate the session's latest plan revision and store the result against it.
+         */
+        post: operations["simulate_plan_api_plans__session_id__simulate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/relations/{sku_id}": {
         parameters: {
             query?: never;
@@ -701,6 +721,23 @@ export interface components {
             total: components["schemas"]["SimulatedOutcomes"];
         };
         /**
+         * PlanSimulationResponse
+         * @description A plan revision's new simulation, now stored against it in place of the old one.
+         */
+        PlanSimulationResponse: {
+            /** As Of Week */
+            as_of_week: number;
+            demand_model: components["schemas"]["ModelVersion"];
+            /** Revision Number */
+            revision_number: number;
+            /**
+             * Session Id
+             * Format: uuid
+             */
+            session_id: string;
+            simulation: components["schemas"]["PlanSimulation"];
+        };
+        /**
          * PlanningRequest
          * @description Money is in rupees (ADR 0015). The brief's optional constraints may only tighten
          *     company policy; a value that would loosen it is kept here as read, and planning applies
@@ -888,6 +925,22 @@ export interface components {
          * @enum {string}
          */
         SessionStatus: "planning" | "awaiting_clarification" | "awaiting_approval" | "approved" | "rejected" | "failed";
+        /**
+         * SimulatePlanRequest
+         * @description Re-simulate a session's latest plan revision (ADR 0043). The seed is configuration.
+         */
+        SimulatePlanRequest: {
+            /**
+             * Competitor Reaction
+             * @description Reserved for the competitor-reaction scenario (#41); only null for now.
+             */
+            competitor_reaction?: null;
+            /**
+             * N Runs
+             * @description Runs to simulate; omit for the configured default (SIMULATION_RUNS).
+             */
+            n_runs?: number | null;
+        };
         /**
          * SimulatedOutcomes
          * @description Ranges over the promo weeks, units capped at pooled available stock (ADR 0004, 0011).
@@ -1171,6 +1224,62 @@ export interface operations {
             };
             /** @description A retrain is running or no data */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    simulate_plan_api_plans__session_id__simulate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SimulatePlanRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlanSimulationResponse"];
+                };
+            };
+            /** @description Unknown session, or a session without a plan revision yet */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The latest demand model cannot simulate the stored plan */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description No trained demand model, or no inventory snapshot for the planning request's as-of week */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };
