@@ -2,11 +2,15 @@ import pytest
 from pydantic import ValidationError
 
 from promopilot.domain import (
+    ClearanceTarget,
     CompanyPolicy,
     Mechanism,
     PlanLine,
+    PlanningRequest,
     PromoPlan,
+    PromoWindow,
     Region,
+    Scope,
     TargetSegment,
 )
 
@@ -100,3 +104,55 @@ def test_company_policy_is_immutable() -> None:
 
     with pytest.raises(ValidationError):
         policy.margin_floor = 0.10  # type: ignore[misc]
+
+
+def planning_request(**changes: object) -> PlanningRequest:
+    fields: dict[str, object] = {
+        "as_of_week": 104,
+        "scope": Scope(regions=(Region.NORTH, Region.WEST), categories=("Snacks",)),
+        "promo_window": PromoWindow(start_week=108, end_week=109),
+        "marketing_budget": 200_000.0,
+    }
+    return PlanningRequest.model_validate(fields | changes)
+
+
+def test_a_planning_request_sets_no_optional_constraint_by_default() -> None:
+    request = planning_request()
+
+    assert request.clearance_targets == ()
+    assert request.regional_budget_caps == {}
+    assert request.kvi_price_tolerance is None
+    assert request.max_promoted_skus_per_category_per_region is None
+
+
+def test_a_planning_request_carries_the_briefs_optional_constraints() -> None:
+    request = planning_request(
+        clearance_targets=[{"sku_id": "SKU0001", "sell_through": 0.6}],
+        regional_budget_caps={"North": 120_000.0},
+        kvi_price_tolerance=0.01,
+        max_promoted_skus_per_category_per_region=6,
+    )
+
+    assert request.clearance_targets == (ClearanceTarget(sku_id="SKU0001", sell_through=0.6),)
+    assert request.regional_budget_caps == {Region.NORTH: 120_000.0}
+    assert request.kvi_price_tolerance == 0.01
+    assert request.max_promoted_skus_per_category_per_region == 6
+
+
+@pytest.mark.parametrize("sell_through", [0.0, -0.1, 1.01])
+def test_a_clearance_target_is_a_sell_through_above_zero_up_to_one(sell_through: float) -> None:
+    with pytest.raises(ValidationError):
+        ClearanceTarget(sku_id="SKU0001", sell_through=sell_through)
+
+
+def test_a_sku_has_at_most_one_clearance_target() -> None:
+    target = {"sku_id": "SKU0001", "sell_through": 0.5}
+    with pytest.raises(ValidationError, match="one clearance target"):
+        planning_request(clearance_targets=[target, target])
+
+
+def test_a_regional_budget_cap_is_positive_and_for_a_region_in_scope() -> None:
+    with pytest.raises(ValidationError, match="not in the scope"):
+        planning_request(regional_budget_caps={"South": 50_000.0})
+    with pytest.raises(ValidationError):
+        planning_request(regional_budget_caps={"North": 0.0})

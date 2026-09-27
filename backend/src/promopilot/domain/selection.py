@@ -26,7 +26,14 @@ class ConstraintKind(StrEnum):
     MARGIN_FLOOR = "margin_floor"
     """The company-policy margin floor, where the brief sets no higher minimum margin."""
     MAX_PROMOTED_SKUS = "max_promoted_skus"
-    """The company-policy maximum number of promoted SKUs in one category and region."""
+    """The maximum number of promoted SKUs in one category and region: company policy's, or
+    the brief's where it is tighter."""
+    REGIONAL_BUDGET = "regional_budget"
+    """The brief's cap on the promo cost spent in one region."""
+    CLEARANCE_TARGET = "clearance_target"
+    """The sell-through the brief asks for a SKU it names for clearance, in one region."""
+    KVI_PRICE_TOLERANCE = "kvi_price_tolerance"
+    """No KVI promo price more than the tolerance above the competitor price (ADR 0031)."""
 
 
 class ConstraintSource(StrEnum):
@@ -57,11 +64,14 @@ class BindingConstraint(BaseModel):
     kind: ConstraintKind
     source: ConstraintSource
     limit: float
-    """Rupees for the budget, a fraction for a margin, a SKU count for the promoted-SKU cap."""
+    """Rupees for a budget, a fraction for a margin, a sell-through or the KVI price
+    tolerance, a SKU count for the promoted-SKU cap."""
     category: str | None = None
     """The category, for the promoted-SKU cap."""
     region: Region | None = None
-    """The region, for the promoted-SKU cap."""
+    """The region, for the promoted-SKU cap, a regional budget cap or a clearance target."""
+    sku_id: str | None = None
+    """The SKU, for a clearance target."""
     evidence: BindingEvidence
     objective_gain: float | None
     """Rupees the objective gains when the constraint is dropped: exact, or at least this
@@ -106,8 +116,13 @@ class NotSelectedReason(StrEnum):
     BREAKS_POLICY = "breaks_policy"
     """Outside the promo window, deeper than the maximum discount, or below unit cost."""
     OVER_BUDGET = "over_budget"
+    OVER_REGIONAL_BUDGET = "over_regional_budget"
     BREAKS_MARGIN = "breaks_margin"
     MAX_PROMOTED_SKUS = "max_promoted_skus"
+    MISSES_CLEARANCE_TARGET = "misses_clearance_target"
+    """Adding it would leave a clearance target the plan meets unmet."""
+    BREAKS_KVI_TOLERANCE = "breaks_kvi_tolerance"
+    """A KVI it promotes would stay priced above the competitor beyond the tolerance."""
     CANNIBALISES = "cannibalises"
     """What it loses together with plan lines outweighs its value."""
     TIME_LIMIT = "time_limit"
@@ -138,3 +153,21 @@ class PruneReason(StrEnum):
     DUPLICATE_PRICE = "duplicate_price"
     STOCK = "stock"
     PARTNER_STOCK = "partner_stock"
+
+
+class ClearanceShortfall(BaseModel):
+    """A clearance target the plan misses: no plan within the other constraints reaches it,
+    so the optimiser returned the plan that comes closest and reports by how much it falls
+    short (SPEC §9.4, F-06 AC2, ADR 0040)."""
+
+    model_config = ConfigDict(frozen=True)
+
+    sku_id: str
+    region: Region
+    target: float
+    """The sell-through the brief asked for."""
+    expected_sell_through: float
+    """What the plan is expected to reach: units sold over the promo window / available
+    stock."""
+    shortfall_units: float
+    """Units short of the target."""

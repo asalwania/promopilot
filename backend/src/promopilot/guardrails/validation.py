@@ -8,6 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from promopilot.domain import CompanyPolicy, Mechanism, PlanLine, PlanningRequest, Region
 from promopilot.economics import blended_margin, effective_unit_price
+from promopilot.guardrails.limits import plan_limits
 
 ONE_PAISA = 0.01
 _EPSILON = 1e-9
@@ -22,7 +23,11 @@ class SkuFacts(BaseModel):
     base_price: float = Field(gt=0)
     unit_cost: float = Field(ge=0)
     overstocked: bool
-    """Overstocked in the line's region: it may then sell below unit cost (ADR 0007)."""
+    """Overstocked in the line's region by days of cover: it may then sell below unit cost
+    (ADR 0007). A SKU the brief names for clearance is overstocked too (ADR 0040)."""
+    is_kvi: bool = False
+    competitor_price: float | None = None
+    """The competitor's latest price in the line's region (ADR 0031), if known."""
 
 
 class LineFacts(BaseModel):
@@ -52,6 +57,19 @@ class LineFacts(BaseModel):
         return self
 
 
+class ClearanceFacts(BaseModel):
+    """What the plan is expected to sell of a SKU with a clearance target, in one region."""
+
+    model_config = ConfigDict(frozen=True)
+
+    sku_id: str
+    region: Region
+    available_stock: float = Field(gt=0)
+    expected_units: float
+    """Expected units sold over the promo window, the plan's promotions included (ADR
+    0040)."""
+
+
 class PlanFacts(BaseModel):
     """A plan under validation. Unlike `PromoPlan` it may hold two lines for one SKU in one
     region, so that validation can report it instead of failing to build the plan."""
@@ -59,10 +77,13 @@ class PlanFacts(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     lines: tuple[LineFacts, ...]
+    clearance: tuple[ClearanceFacts, ...] = ()
+    """One per SKU with a clearance target and region with available stock."""
 
 
 class ViolationCode(StrEnum):
     BUDGET = "BUDGET"
+    REGIONAL_BUDGET = "REGIONAL_BUDGET"
     MIN_MARGIN = "MIN_MARGIN"
     MARGIN_FLOOR = "MARGIN_FLOOR"
     STOCK = "STOCK"
@@ -71,6 +92,8 @@ class ViolationCode(StrEnum):
     WINDOW = "WINDOW"
     MAX_SKUS = "MAX_SKUS"
     DUPLICATE_LINE = "DUPLICATE_LINE"
+    CLEARANCE_TARGET = "CLEARANCE_TARGET"
+    KVI_TOLERANCE = "KVI_TOLERANCE"
 
 
 class Violation(BaseModel):
@@ -91,16 +114,25 @@ def validate_plan(
 ) -> tuple[Violation, ...]:
     """Every hard-constraint violation of a plan on its own plan-time numbers; () if none.
 
-    Plan-level violations (budget, margins) come first, then per-line ones in line order,
-    then max promoted SKUs and duplicate lines.
+    Plan-level violations (budget, regional caps, margins) come first, then per-line ones in
+    line order, then max promoted SKUs, duplicate lines and clearance targets. The brief may
+    only tighten company policy (`plan_limits`, ADR 0007).
     """
-    violations = [*_budget(plan, request), *_margins(plan, request, policy)]
+    limits = plan_limits(request, policy)
+    cleared = {target.sku_id for target in request.clearance_targets}
+    violations = [
+        *_budget(plan, request),
+        *_regional_budgets(plan, request),
+        *_margins(plan, request, policy),
+    ]
     for fact in plan.lines:
         violations += _stock(fact)
-        violations += _discount_and_cost(fact, policy)
+        violations += _discount_and_cost(fact, policy, cleared)
         violations += _window(fact, request)
-    violations += _max_skus(plan, policy)
+        violations += _kvi_tolerance(fact, limits.kvi_price_tolerance)
+    violations += _max_skus(plan, limits.max_promoted_skus)
     violations += _duplicates(plan)
+    violations += _clearance(plan, request)
     return tuple(violations)
 
 
@@ -118,6 +150,26 @@ def _budget(plan: PlanFacts, request: PlanningRequest) -> list[Violation]:
             actual=total,
             limit=request.marketing_budget,
         )
+    ]
+
+
+def _regional_budgets(plan: PlanFacts, request: PlanningRequest) -> list[Violation]:
+    spent: defaultdict[Region, float] = defaultdict(float)
+    for fact in plan.lines:
+        spent[fact.line.region] += fact.promo_cost
+    return [
+        Violation(
+            code=ViolationCode.REGIONAL_BUDGET,
+            message=(
+                f"promo cost in {region} {_rupees(spent[region])} exceeds the brief's "
+                f"regional budget cap {_rupees(cap)}"
+            ),
+            region=region,
+            actual=spent[region],
+            limit=cap,
+        )
+        for region, cap in request.regional_budget_caps.items()
+        if round(spent[region] - cap, 6) > ONE_PAISA
     ]
 
 
@@ -161,7 +213,9 @@ def _stock(fact: LineFacts) -> list[Violation]:
     ]
 
 
-def _discount_and_cost(fact: LineFacts, policy: CompanyPolicy) -> list[Violation]:
+def _discount_and_cost(
+    fact: LineFacts, policy: CompanyPolicy, cleared: set[str]
+) -> list[Violation]:
     line = fact.line
     violations: list[Violation] = []
     anchor_price = effective_unit_price(line.mechanism, fact.anchor.base_price, line.depth_pct)
@@ -188,7 +242,8 @@ def _discount_and_cost(fact: LineFacts, policy: CompanyPolicy) -> list[Violation
         )
         priced.append((line.bundle_partner_sku_id, fact.partner, partner_price))
     for sku_id, sku, price in priced:
-        if price < sku.unit_cost - _EPSILON and not sku.overstocked:
+        overstocked = sku.overstocked or sku_id in cleared
+        if price < sku.unit_cost - _EPSILON and not overstocked:
             violations.append(
                 Violation(
                     code=ViolationCode.BELOW_COST,
@@ -224,7 +279,40 @@ def _window(fact: LineFacts, request: PlanningRequest) -> list[Violation]:
     ]
 
 
-def _max_skus(plan: PlanFacts, policy: CompanyPolicy) -> list[Violation]:
+def _kvi_tolerance(fact: LineFacts, tolerance: float | None) -> list[Violation]:
+    """Each KVI the line promotes priced at most the tolerance above the competitor (ADR
+    0031); off when the tolerance is None."""
+    if tolerance is None:
+        return []
+    line = fact.line
+    skus = [(line.sku_id, fact.anchor)]
+    if fact.partner is not None and line.bundle_partner_sku_id is not None:
+        skus.append((line.bundle_partner_sku_id, fact.partner))
+    violations = []
+    for sku_id, sku in skus:
+        if not sku.is_kvi or sku.competitor_price is None:
+            continue
+        price = effective_unit_price(line.mechanism, sku.base_price, line.depth_pct)
+        highest = sku.competitor_price * (1 + tolerance)
+        if price > highest + _EPSILON:
+            violations.append(
+                Violation(
+                    code=ViolationCode.KVI_TOLERANCE,
+                    message=(
+                        f"KVI {sku_id} in {line.region} sells at {_rupees(price)}, more than "
+                        f"{tolerance:.1%} above the competitor price "
+                        f"{_rupees(sku.competitor_price)}"
+                    ),
+                    sku_id=sku_id,
+                    region=line.region,
+                    actual=price,
+                    limit=highest,
+                )
+            )
+    return violations
+
+
+def _max_skus(plan: PlanFacts, limit: int) -> list[Violation]:
     # A BUNDLE partner is promoted too, so it counts in its own category (ADR 0028).
     promoted: defaultdict[tuple[str, Region], set[str]] = defaultdict(set)
     for fact in plan.lines:
@@ -232,13 +320,12 @@ def _max_skus(plan: PlanFacts, policy: CompanyPolicy) -> list[Violation]:
         promoted[(fact.anchor.category, region)].add(fact.line.sku_id)
         if fact.partner is not None and fact.line.bundle_partner_sku_id is not None:
             promoted[(fact.partner.category, region)].add(fact.line.bundle_partner_sku_id)
-    limit = policy.max_promoted_skus_per_category_per_region
     return [
         Violation(
             code=ViolationCode.MAX_SKUS,
             message=(
-                f"{len(skus)} {category} SKUs are promoted in {region}; company policy allows "
-                f"at most {limit} per category per region"
+                f"{len(skus)} {category} SKUs are promoted in {region}; at most {limit} are "
+                f"allowed per category per region"
             ),
             region=region,
             actual=len(skus),
@@ -269,6 +356,34 @@ def _duplicates(plan: PlanFacts) -> list[Violation]:
         for (sku_id, region), count in occupied.items()
         if count > 1
     ]
+
+
+def _clearance(plan: PlanFacts, request: PlanningRequest) -> list[Violation]:
+    targets = {target.sku_id: target.sell_through for target in request.clearance_targets}
+    violations = []
+    for fact in plan.clearance:
+        target = targets.get(fact.sku_id)
+        if target is None:
+            continue
+        sell_through = fact.expected_units / fact.available_stock
+        if sell_through >= target - _EPSILON:
+            continue
+        short = target * fact.available_stock - fact.expected_units
+        violations.append(
+            Violation(
+                code=ViolationCode.CLEARANCE_TARGET,
+                message=(
+                    f"{fact.sku_id} in {fact.region} is expected to sell through "
+                    f"{sell_through:.1%} of its stock, below the clearance target "
+                    f"{target:.1%}: short by {short:,.0f} units"
+                ),
+                sku_id=fact.sku_id,
+                region=fact.region,
+                actual=sell_through,
+                limit=target,
+            )
+        )
+    return violations
 
 
 def _rupees(amount: float) -> str:

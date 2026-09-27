@@ -15,6 +15,7 @@ from promopilot.domain import (
     TargetSegment,
 )
 from promopilot.guardrails import (
+    ClearanceFacts,
     LineFacts,
     PlanFacts,
     SkuFacts,
@@ -337,3 +338,115 @@ def test_violations_are_immutable() -> None:
 
     with pytest.raises(ValueError, match="frozen"):
         violation.code = ViolationCode.BUDGET  # type: ignore[misc]
+
+
+# --- the brief's optional constraints (ADR 0040) ---------------------------------------------
+
+
+def brief(**changes: Any) -> PlanningRequest:
+    """The default request with some of the brief's optional constraints set."""
+    return PlanningRequest.model_validate(request().model_dump() | changes)
+
+
+def test_promo_cost_over_a_regional_budget_cap_is_flagged_per_region() -> None:
+    plan = PlanFacts(
+        lines=(
+            fact("S1", promo_cost=20_000.0),
+            fact("S2", promo_cost=10_000.02),
+            fact("S3", Region.WEST, promo_cost=50_000.0),
+        )
+    )
+
+    (violation,) = validate_plan(plan, brief(regional_budget_caps={"North": 30_000.0}), POLICY)
+
+    assert violation.code is ViolationCode.REGIONAL_BUDGET
+    assert violation.region is Region.NORTH
+    assert violation.actual == pytest.approx(30_000.02)
+    assert violation.limit == 30_000.0
+
+
+def test_a_regional_budget_cap_allows_one_paisa_of_float_error() -> None:
+    plan = PlanFacts(lines=(fact("S1", promo_cost=30_000.01),))
+
+    assert validate_plan(plan, brief(regional_budget_caps={"North": 30_000.0}), POLICY) == ()
+
+
+def clearance(expected_units: float, sku_id: str = "S1", region: Region = Region.NORTH) -> Any:
+    return ClearanceFacts(
+        sku_id=sku_id, region=region, available_stock=2_000.0, expected_units=expected_units
+    )
+
+
+def test_expected_sell_through_under_a_clearance_target_is_flagged() -> None:
+    target = brief(clearance_targets=[{"sku_id": "S1", "sell_through": 0.6}])
+    plan = PlanFacts(
+        lines=(fact("S1"),),
+        clearance=(clearance(1_100.0), clearance(1_300.0, region=Region.WEST)),
+    )
+
+    (violation,) = validate_plan(plan, target, POLICY)
+
+    assert violation.code is ViolationCode.CLEARANCE_TARGET
+    assert (violation.sku_id, violation.region) == ("S1", Region.NORTH)
+    assert violation.actual == pytest.approx(0.55)
+    assert violation.limit == 0.6
+    assert "short by 100 units" in violation.message
+
+
+def test_a_clearance_target_met_by_the_expected_sell_through_passes() -> None:
+    target = brief(clearance_targets=[{"sku_id": "S1", "sell_through": 0.6}])
+    plan = PlanFacts(lines=(), clearance=(clearance(1_200.0),))
+
+    assert validate_plan(plan, target, POLICY) == ()
+
+
+def test_a_sku_the_brief_names_for_clearance_may_sell_below_unit_cost() -> None:
+    target = brief(clearance_targets=[{"sku_id": "S1", "sell_through": 0.1}])
+    plan = PlanFacts(lines=(fact(depth_pct=50),))
+
+    assert validate_plan(plan, target, POLICY) == ()
+
+
+def kvi(competitor_price: float) -> SkuFacts:
+    return sku().model_copy(update={"is_kvi": True, "competitor_price": competitor_price})
+
+
+def test_a_kvi_priced_above_the_competitor_beyond_the_tolerance_is_flagged_when_enabled() -> None:
+    # 20% off ₹100 is ₹80; the competitor sells at ₹75, so ₹80 is 6.7% above it.
+    plan = PlanFacts(lines=(fact(anchor=kvi(75.0)),))
+
+    assert validate_plan(plan, request(), POLICY) == ()
+    (violation,) = validate_plan(plan, brief(kvi_price_tolerance=0.02), POLICY)
+    assert violation.code is ViolationCode.KVI_TOLERANCE
+    assert violation.sku_id == "S1"
+    assert violation.actual == 80.0
+    assert violation.limit == pytest.approx(76.5)
+    enabled = CompanyPolicy(kvi_price_tolerance_enabled=True)
+    assert codes(validate_plan(plan, request(), enabled)) == [ViolationCode.KVI_TOLERANCE]
+
+
+def test_a_kvi_priced_within_the_tolerance_or_a_non_kvi_passes() -> None:
+    within = PlanFacts(lines=(fact(anchor=kvi(79.0)),))
+    not_kvi = PlanFacts(lines=(fact(anchor=sku().model_copy(update={"competitor_price": 50.0})),))
+
+    assert validate_plan(within, brief(kvi_price_tolerance=0.02), POLICY) == ()
+    assert validate_plan(not_kvi, brief(kvi_price_tolerance=0.02), POLICY) == ()
+
+
+def test_the_briefs_tighter_promoted_sku_cap_is_checked() -> None:
+    plan = PlanFacts(lines=(fact("S1"), fact("S2"), fact("S3")))
+
+    tighter = brief(max_promoted_skus_per_category_per_region=2, marketing_budget=1_000_000.0)
+    (violation,) = validate_plan(plan, tighter, POLICY)
+
+    assert violation.code is ViolationCode.MAX_SKUS
+    assert violation.limit == 2
+
+
+def test_a_brief_value_that_would_loosen_policy_is_ignored() -> None:
+    plan = PlanFacts(lines=(fact("S1"), fact("S2"), fact("S3")))
+    policy = CompanyPolicy(max_promoted_skus_per_category_per_region=2)
+
+    looser = brief(max_promoted_skus_per_category_per_region=5, marketing_budget=1_000_000.0)
+
+    assert codes(validate_plan(plan, looser, policy)) == [ViolationCode.MAX_SKUS]
