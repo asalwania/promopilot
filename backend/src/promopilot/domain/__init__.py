@@ -1,5 +1,6 @@
 """Shared domain value types (ADR 0009): immutable, logic-free, named from CONTEXT.md."""
 
+from promopilot.domain.comparison import MechanismOption, MechanismOutcome
 from promopilot.domain.plan import PlanLine, PromoPlan
 from promopilot.domain.policy import CompanyPolicy
 from promopilot.domain.request import PlanningRequest, PromoWindow, Scope
@@ -11,6 +12,7 @@ from promopilot.domain.selection import (
     ConstraintSource,
     NotSelectedOption,
     NotSelectedReason,
+    PruneReason,
     SelectionReason,
     SelectionReasonCode,
     SolveStatus,
@@ -26,6 +28,8 @@ __all__ = [
     "ConstraintKind",
     "ConstraintSource",
     "Mechanism",
+    "MechanismOption",
+    "MechanismOutcome",
     "NotSelectedOption",
     "NotSelectedReason",
     "PlanLine",
@@ -35,6 +39,7 @@ __all__ = [
     "PlanningSession",
     "PromoPlan",
     "PromoWindow",
+    "PruneReason",
     "Region",
     "Scope",
     "Segment",

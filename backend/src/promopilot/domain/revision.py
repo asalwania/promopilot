@@ -4,6 +4,7 @@ from typing import Self
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from promopilot.domain.comparison import MechanismOutcome
 from promopilot.domain.plan import PlanLine, PromoPlan
 from promopilot.domain.selection import (
     BindingConstraint,
@@ -24,6 +25,9 @@ class PlanRevisionLine(BaseModel):
     expected_incremental_profit: float
     why_chosen: WhyChosen | None = None
     """None only for revisions planned before the optimiser (E3)."""
+    mechanism_comparison: tuple[MechanismOutcome, ...] = ()
+    """Each mechanism's best option for the line's SKU and region, the line's own mechanism
+    shown with the line itself (F-02, ADR 0041); empty for revisions planned before E7."""
 
 
 class PlanRevision(BaseModel):
