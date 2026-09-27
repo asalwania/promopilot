@@ -19,9 +19,11 @@ Planner node (ADR 0046), and it also returns the revision's plan facts for the C
 import asyncio
 from dataclasses import dataclass
 from typing import Protocol
+from uuid import UUID
 
 import pandas as pd
 
+from promopilot.agents.state import DegradedReason
 from promopilot.agents.tools.estimate_demand import DemandModelSource
 from promopilot.agents.tools.get_relations import RelationsSource
 from promopilot.agents.tools.inventory_status import pooled_stock
@@ -29,9 +31,14 @@ from promopilot.competitors import read_competitor_gaps
 from promopilot.domain import CompanyPolicy, PlanningRequest, PlanRevision, PlanRevisionLine
 from promopilot.guardrails import PlanFacts
 from promopilot.mechanisms import ComparisonContext, compare
+from promopilot.models.demand import DemandModel
 from promopilot.optimizer import (
+    CandidateStore,
     FittedOptionFacts,
+    OptimisationResult,
     OptionContext,
+    OptionFacts,
+    PromoOptions,
     SolverSettings,
     generate_options,
     plan_facts,
@@ -51,6 +58,10 @@ class PlannedRevision:
 
     revision: PlanRevision
     facts: PlanFacts
+    notes: tuple[str, ...] = ()
+    """The planner's explanation of the plan, from tool outputs only (ADR 0049)."""
+    degraded: DegradedReason | None = None
+    """Why the default sequence planned it instead of the planner agent (ADR 0049)."""
 
 
 class PlannerData(Protocol):
@@ -88,6 +99,37 @@ class OptimisingPlanner:
         """Plan revision 1 for the request, with its plan facts. Raises `PlanningError` when
         no model is trained, the as-of week has no inventory snapshot, or the request names a
         clearance target outside its scope."""
+        loaded = await self._load(request)
+        # Generation and solving are CPU-bound: keep the event loop free (ADR 0025).
+        try:
+            options = await asyncio.to_thread(generate_options, request, loaded.context)
+        except ValueError as error:
+            raise PlanningError(str(error)) from error
+        facts = FittedOptionFacts(loaded.context)
+        result = await asyncio.to_thread(
+            solve,
+            request,
+            options,
+            facts,
+            self._policy,
+            settings=self._settings,
+            seed=self._seed,
+        )
+        return await self._revision(loaded, options, facts, result)
+
+    async def revise(
+        self,
+        request: PlanningRequest,
+        options: PromoOptions,
+        facts: OptionFacts,
+        result: OptimisationResult,
+    ) -> PlannedRevision:
+        """Plan revision 1 from an optimiser result already found on these options (the
+        planner agent's `run_optimizer`, ADR 0049): compared and simulated as `plan` does,
+        without solving again. Raises `PlanningError` as `plan` does."""
+        return await self._revision(await self._load(request), options, facts, result)
+
+    async def _load(self, request: PlanningRequest) -> "_Loaded":
         demand = await self._demand_models.get()
         relations = await self._relations_models.get()
         if demand is None or relations is None:
@@ -113,26 +155,21 @@ class OptimisingPlanner:
                 regions=request.scope.regions,
             ),
         )
-        # Generation and solving are CPU-bound: keep the event loop free (ADR 0025).
-        try:
-            options = await asyncio.to_thread(generate_options, request, context)
-        except ValueError as error:
-            raise PlanningError(str(error)) from error
-        facts = FittedOptionFacts(context)
-        result = await asyncio.to_thread(
-            solve,
-            request,
-            options,
-            facts,
-            self._policy,
-            settings=self._settings,
-            seed=self._seed,
-        )
+        return _Loaded(context=context, demand=demand[1])
+
+    async def _revision(
+        self,
+        loaded: "_Loaded",
+        options: PromoOptions,
+        facts: OptionFacts,
+        result: OptimisationResult,
+    ) -> PlannedRevision:
+        context = loaded.context
         # Simulation is CPU-bound too; it samples the plan's own SKUs on the same demand model.
         simulation = await asyncio.to_thread(
             simulate,
             result.plan,
-            SimulationInputs(demand=demand[1], stock=context.stock, policy=self._policy),
+            SimulationInputs(demand=loaded.demand, stock=context.stock, policy=self._policy),
             n_runs=self._simulation.n_runs,
             seed=self._simulation.seed,
         )
@@ -167,3 +204,27 @@ class OptimisingPlanner:
             relaxation=result.relaxation,
         )
         return PlannedRevision(revision, plan_facts(options, result.selected, facts))
+
+
+@dataclass(frozen=True)
+class _Loaded:
+    context: OptionContext
+    demand: DemandModel
+
+
+class StoredRevisions:
+    """The plan revision of a stored candidate set's latest optimiser solution: the planner
+    agent's final plan (ADR 0049), built in process, never from the tool's JSON."""
+
+    def __init__(self, store: CandidateStore, planner: OptimisingPlanner) -> None:
+        self._store = store
+        self._planner = planner
+
+    async def revision(self, candidate_set_id: UUID) -> PlannedRevision | None:
+        """None when the set is no longer stored or `run_optimizer` never solved it. Raises
+        `PlanningError` when no model is trained or the inventory snapshot is missing."""
+        stored = self._store.get(candidate_set_id)
+        solution = self._store.solution(candidate_set_id)
+        if stored is None or solution is None:
+            return None
+        return await self._planner.revise(stored.request, stored.options, stored.facts, solution)

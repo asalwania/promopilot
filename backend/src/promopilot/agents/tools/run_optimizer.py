@@ -145,6 +145,8 @@ def run_optimizer_tool(
         result = await asyncio.to_thread(
             solve, request, options, stored.facts, policy, settings=settings, seed=seed
         )
+        # The planner builds its plan revision from this solution (ADR 0049).
+        store.record_solution(stored.candidate_set_id, result)
         table = options.table.iloc[list(result.selected)]
         lines = [
             OptimizedLine.model_validate(

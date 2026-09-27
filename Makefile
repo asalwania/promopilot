@@ -109,7 +109,7 @@ data: db ## Generate the seeded synthetic dataset + ground truth into DATA_DIR a
 	$(BACKEND) uv run python -m promopilot.datagen --out $(DATA_DIR) --load
 
 .PHONY: record-cassettes
-record-cassettes: db ## Re-record the LLM cassettes live (OPENAI_API_KEY, OPENAI_MODEL; run make data first)
+record-cassettes: db ## Re-record the LLM cassettes live (OPENAI_API_KEY, OPENAI_MODEL; run make data and make train first)
 	$(BACKEND) LLM_PROVIDER=openai uv run python -m promopilot.cassettes --briefs cassettes/briefs.json
 
 .PHONY: train

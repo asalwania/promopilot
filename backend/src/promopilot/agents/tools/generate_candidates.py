@@ -3,14 +3,16 @@
 Tens of thousands of options never reach the LLM. The tool keeps the full set in the
 in-process `CandidateStore` and returns a summary: counts, pruned counts per reason, counts
 per region and mechanism, the top options by value, and the candidate set's id, which
-`run_optimizer` takes (ADR 0035, ADR 0036). The latest demand model and the live relations model
-are resolved on every call, and the as-of week is bound when the tool is built (ADR 0025,
-ADR 0032); the planning request must be for that week. The competitor gaps at that week give
-each undercut KVI a price-match option, listed in the summary (ADR 0040).
+`run_optimizer` takes (ADR 0035, ADR 0036). The id is derived from the call and the model
+versions, so the same call gets the same id (ADR 0049). The latest demand model and the live
+relations model are resolved on every call, and the as-of week is bound when the tool is built
+(ADR 0025, ADR 0032); the planning request must be for that week. The competitor gaps at that
+week give each undercut KVI a price-match option, listed in the summary (ADR 0040).
 """
 
 import asyncio
-from uuid import UUID
+import json
+from uuid import UUID, uuid5
 
 import pandas as pd
 from pydantic import BaseModel, ConfigDict, Field
@@ -159,7 +161,12 @@ def generate_candidates_tool(
             )
         except ValueError as error:
             raise ToolCallError("invalid_input", str(error)) from error
-        stored = store.put(request, options, FittedOptionFacts(context))
+        stored = store.put(
+            request,
+            options,
+            FittedOptionFacts(context),
+            candidate_set_id=candidate_set_id(arguments, loaded),
+        )
         return _summary(stored.candidate_set_id, options, loaded)
 
     return Tool(
@@ -169,6 +176,22 @@ def generate_candidates_tool(
         output_type=GenerateCandidatesOutput,
         handler=generate_candidates,
     )
+
+
+CANDIDATE_SET_NAMESPACE = UUID("6f1c3b0e-47a1-4c55-9d1e-5a2d3c4b7e81")
+
+
+def candidate_set_id(arguments: GenerateCandidatesInput, loaded: LoadedOptionContext) -> UUID:
+    """The same call on the same model versions gets the same id, so a replayed tool round can
+    pass a recorded id back to `run_optimizer` (ADR 0049). The model ids are left out: they
+    change with every retrain of the same data, and the version numbers do not."""
+    key = {
+        "arguments": arguments.model_dump(mode="json"),
+        "as_of_week": loaded.as_of_week,
+        "demand_model_version": loaded.demand_model.version,
+        "relations_model_version": loaded.relations_model.version,
+    }
+    return uuid5(CANDIDATE_SET_NAMESPACE, json.dumps(key, sort_keys=True, separators=(",", ":")))
 
 
 def _summary(

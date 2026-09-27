@@ -169,6 +169,23 @@ async def test_a_call_returns_the_selected_plan_with_its_numbers(store: Candidat
     ]
 
 
+async def test_the_solution_is_kept_with_its_candidate_set_for_the_plan_revision(
+    store: CandidateStore,
+) -> None:
+    # The planner builds its plan revision from this, never from the tool's JSON (ADR 0049).
+    stored = store.put(REQUEST, hand_built(), Facts())
+
+    result = await registry(store).call(
+        "run_optimizer", {"candidate_set_id": str(stored.candidate_set_id)}
+    )
+
+    assert isinstance(result, ToolOk), result
+    solved = store.solution(stored.candidate_set_id)
+    assert solved is not None
+    assert [stored.options.lines[n] for n in solved.selected] == [line("A"), line("B")]
+    assert solved.objective == pytest.approx(750.0)
+
+
 async def test_a_binding_budget_is_reported_in_domain_terms(store: CandidateStore) -> None:
     tight = REQUEST.model_copy(update={"marketing_budget": 1_000.0})
     stored = store.put(tight, hand_built(), Facts())
