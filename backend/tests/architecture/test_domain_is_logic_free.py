@@ -3,7 +3,8 @@ from pathlib import Path
 
 import promopilot.domain
 
-ALLOWED_IMPORTS = {"collections", "enum", "pydantic", "typing", "uuid", "promopilot"}
+# datetime: a decision records when it was made (ADR 0046).
+ALLOWED_IMPORTS = {"collections", "datetime", "enum", "pydantic", "typing", "uuid", "promopilot"}
 
 
 def test_domain_imports_nothing_that_could_do_io_or_numerics() -> None:

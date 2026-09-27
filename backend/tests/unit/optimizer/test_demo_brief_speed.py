@@ -13,19 +13,16 @@ import pytest
 
 from promopilot.domain import BindingEvidence, ConstraintKind, PlanningRequest
 from promopilot.guardrails import (
-    ClearanceFacts,
-    LineFacts,
-    PlanFacts,
     ViolationCode,
     validate_plan,
 )
 from promopilot.optimizer import (
     FittedOptionFacts,
     OptionContext,
-    PromoOptions,
     SolverSettings,
     SolveStatus,
     generate_options,
+    plan_facts,
     solve,
 )
 from tests.conftest import DEMO_BRIEF
@@ -108,49 +105,6 @@ CONSTRAINED = PlanningRequest.model_validate(
 )
 """The demo brief with the brief's optional constraints (ADR 0040): SKU0029 is overstocked in
 both regions, and three North KVIs are undercut."""
-
-
-def plan_facts(options: PromoOptions, rows: list[int], facts: FittedOptionFacts) -> PlanFacts:
-    """The selected rows as `validate_plan` reads them, with each clearance target's expected
-    units over the promo window."""
-    table = options.table
-    lines = []
-    for row in rows:
-        line = options.lines[row]
-        partner = line.bundle_partner_sku_id
-        lines.append(
-            LineFacts(
-                line=line,
-                anchor=facts.sku(line.sku_id, line.region),
-                partner=None if partner is None else facts.sku(partner, line.region),
-                expected_units=float(table["units"].iloc[row]),
-                p90_units=float(table["p90_units"].iloc[row]),
-                available_stock=float(table["available_stock"].iloc[row]),
-                expected_revenue=float(table["revenue"].iloc[row]),
-                expected_gross_profit=float(table["gross_profit"].iloc[row]),
-                promo_cost=float(table["promo_cost"].iloc[row]),
-            )
-        )
-    clearance = []
-    for target in options.clearance:
-        sold = target.baseline_units
-        for row in rows:
-            line = options.lines[row]
-            if line.region is not target.region:
-                continue
-            if line.sku_id == target.sku_id:
-                sold += float(table["window_uplift"].iloc[row])
-            if line.bundle_partner_sku_id == target.sku_id:
-                sold += float(table["partner_window_uplift"].iloc[row])
-        clearance.append(
-            ClearanceFacts(
-                sku_id=target.sku_id,
-                region=target.region,
-                available_stock=target.available_stock,
-                expected_units=sold,
-            )
-        )
-    return PlanFacts(lines=tuple(lines), clearance=tuple(clearance))
 
 
 @pytest.mark.model

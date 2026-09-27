@@ -10,6 +10,7 @@ from promopilot.agents.tools.estimate_demand import ModelVersion
 from promopilot.agents.tools.get_relations import Complement, Substitute
 from promopilot.domain import (
     CompetitorReaction,
+    PlanDecision,
     PlanningRequest,
     PlanningSession,
     PlanRevision,
@@ -97,6 +98,9 @@ class SessionResponse(BaseModel):
     planning_request: PlanningRequest | None
     plan_revision: PlanRevision | None
     error: str | None
+    decisions: list[PlanDecision] = Field(
+        description="Every approval and rejection, oldest first: the session's audit trail."
+    )
 
     @classmethod
     def of(cls, session: PlanningSession) -> "SessionResponse":
@@ -107,7 +111,35 @@ class SessionResponse(BaseModel):
             planning_request=session.planning_request,
             plan_revision=session.latest_revision,
             error=session.error,
+            decisions=list(session.decisions),
         )
+
+
+class ApproveRequest(BaseModel):
+    """Approve a plan revision: it must be the session's latest (ADR 0046)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    revision_number: int = Field(ge=1, description="The plan revision being approved.")
+
+
+REASON_MAX_CHARS = 2000
+
+
+class RejectRequest(BaseModel):
+    """Reject a plan revision, the session's latest, with the reason (ADR 0046)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    revision_number: int = Field(ge=1, description="The plan revision being rejected.")
+    reason: str = Field(max_length=REASON_MAX_CHARS, description="Why, in plain English.")
+
+    @field_validator("reason")
+    @classmethod
+    def _not_blank(cls, reason: str) -> str:
+        if not reason.strip():
+            raise ValueError("a rejection needs a reason")
+        return reason
 
 
 class SimulatePlanRequest(BaseModel):

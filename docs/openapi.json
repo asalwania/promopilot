@@ -1,6 +1,23 @@
 {
   "components": {
     "schemas": {
+      "ApproveRequest": {
+        "additionalProperties": false,
+        "description": "Approve a plan revision: it must be the session's latest (ADR 0046).",
+        "properties": {
+          "revision_number": {
+            "description": "The plan revision being approved.",
+            "minimum": 1.0,
+            "title": "Revision Number",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "revision_number"
+        ],
+        "title": "ApproveRequest",
+        "type": "object"
+      },
       "BindingConstraint": {
         "description": "A constraint that limits the plan: dropping it gives a strictly better objective, or,\nwhen time ran out, one that may.",
         "properties": {
@@ -356,6 +373,14 @@
         ],
         "title": "CreateSessionRequest",
         "type": "object"
+      },
+      "DecisionKind": {
+        "enum": [
+          "approved",
+          "rejected"
+        ],
+        "title": "DecisionKind",
+        "type": "string"
       },
       "HTTPValidationError": {
         "properties": {
@@ -893,6 +918,42 @@
         "title": "Percentiles",
         "type": "object"
       },
+      "PlanDecision": {
+        "description": "One human decision on one plan revision: an approval or a rejection with its reason.\nEvery decision is kept, in order, as the session's audit trail (SF-04, ADR 0046).",
+        "properties": {
+          "decided_at": {
+            "format": "date-time",
+            "title": "Decided At",
+            "type": "string"
+          },
+          "decision": {
+            "$ref": "#/components/schemas/DecisionKind"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "revision_number": {
+            "minimum": 1.0,
+            "title": "Revision Number",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "decision",
+          "revision_number",
+          "decided_at"
+        ],
+        "title": "PlanDecision",
+        "type": "object"
+      },
       "PlanLine": {
         "description": "A promo option selected into a promo plan: one (SKU, region) decision (ADR 0004).",
         "properties": {
@@ -1000,6 +1061,14 @@
               }
             ],
             "title": "Objective"
+          },
+          "open_issues": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/Violation"
+            },
+            "title": "Open Issues",
+            "type": "array"
           },
           "policy_findings": {
             "default": [],
@@ -1459,6 +1528,30 @@
         "title": "RegionStores",
         "type": "object"
       },
+      "RejectRequest": {
+        "additionalProperties": false,
+        "description": "Reject a plan revision, the session's latest, with the reason (ADR 0046).",
+        "properties": {
+          "reason": {
+            "description": "Why, in plain English.",
+            "maxLength": 2000,
+            "title": "Reason",
+            "type": "string"
+          },
+          "revision_number": {
+            "description": "The plan revision being rejected.",
+            "minimum": 1.0,
+            "title": "Revision Number",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "revision_number",
+          "reason"
+        ],
+        "title": "RejectRequest",
+        "type": "object"
+      },
       "RelationsResponse": {
         "description": "A SKU's substitutes (strongest first) and complements (highest lift first).",
         "properties": {
@@ -1686,6 +1779,14 @@
             "title": "Brief",
             "type": "string"
           },
+          "decisions": {
+            "description": "Every approval and rejection, oldest first: the session's audit trail.",
+            "items": {
+              "$ref": "#/components/schemas/PlanDecision"
+            },
+            "title": "Decisions",
+            "type": "array"
+          },
           "error": {
             "anyOf": [
               {
@@ -1732,13 +1833,14 @@
           "brief",
           "planning_request",
           "plan_revision",
-          "error"
+          "error",
+          "decisions"
         ],
         "title": "SessionResponse",
         "type": "object"
       },
       "SessionStatus": {
-        "description": "Every status a planning session can have. E3 uses planning, awaiting_approval, failed.",
+        "description": "Every status a planning session can have (ADR 0046).\n\nplanning -> awaiting_approval -> approved (final) or rejected (open for amendments); any\nfailure while planning -> failed. awaiting_clarification arrives with the Context agent\n(#46).",
         "enum": [
           "planning",
           "awaiting_clarification",
@@ -1941,6 +2043,85 @@
         ],
         "title": "ValidationError",
         "type": "object"
+      },
+      "Violation": {
+        "description": "One broken hard constraint, specific enough for the planner to fix.",
+        "properties": {
+          "actual": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actual"
+          },
+          "code": {
+            "$ref": "#/components/schemas/ViolationCode"
+          },
+          "limit": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Limit"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "region": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Region"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "sku_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sku Id"
+          }
+        },
+        "required": [
+          "code",
+          "message"
+        ],
+        "title": "Violation",
+        "type": "object"
+      },
+      "ViolationCode": {
+        "enum": [
+          "BUDGET",
+          "REGIONAL_BUDGET",
+          "MIN_MARGIN",
+          "MARGIN_FLOOR",
+          "STOCK",
+          "MAX_DISCOUNT",
+          "BELOW_COST",
+          "WINDOW",
+          "MAX_SKUS",
+          "DUPLICATE_LINE",
+          "CLEARANCE_TARGET",
+          "KVI_TOLERANCE"
+        ],
+        "title": "ViolationCode",
+        "type": "string"
       },
       "WhyChosen": {
         "description": "Why a plan line was chosen: the positive parts of its value, what it is worth alone,\nand whether it is the best option the optimiser could pick for its SKU and region.",
@@ -2359,7 +2540,7 @@
             "description": "Unknown session, or a session without a plan revision yet"
           },
           "409": {
-            "description": "The latest demand model cannot simulate the stored plan"
+            "description": "The session is approved, so its plan is final, or the latest demand model cannot simulate the stored plan"
           },
           "422": {
             "content": {
@@ -2462,6 +2643,9 @@
               }
             },
             "description": "Validation Error"
+          },
+          "503": {
+            "description": "Planning is unavailable"
           }
         },
         "summary": "Create Session",
@@ -2511,6 +2695,132 @@
           }
         },
         "summary": "Get Session",
+        "tags": [
+          "sessions"
+        ]
+      }
+    },
+    "/api/sessions/{session_id}/approve": {
+      "post": {
+        "description": "Approve the session's latest plan revision, which makes it final (SF-04).",
+        "operationId": "approve_session_api_sessions__session_id__approve_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApproveRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "description": "Unknown session"
+          },
+          "409": {
+            "description": "The session is not awaiting approval, the revision is not its latest, or (approve) the revision is infeasible"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "503": {
+            "description": "Planning is unavailable"
+          }
+        },
+        "summary": "Approve Session",
+        "tags": [
+          "sessions"
+        ]
+      }
+    },
+    "/api/sessions/{session_id}/reject": {
+      "post": {
+        "description": "Reject the session's latest plan revision with a reason; the session stays open.",
+        "operationId": "reject_session_api_sessions__session_id__reject_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RejectRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "description": "Unknown session"
+          },
+          "409": {
+            "description": "The session is not awaiting approval, the revision is not its latest, or (approve) the revision is infeasible"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "503": {
+            "description": "Planning is unavailable"
+          }
+        },
+        "summary": "Reject Session",
         "tags": [
           "sessions"
         ]

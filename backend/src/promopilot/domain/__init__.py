@@ -21,7 +21,7 @@ from promopilot.domain.selection import (
     SolveStatus,
     WhyChosen,
 )
-from promopilot.domain.session import PlanningSession, SessionStatus
+from promopilot.domain.session import DecisionKind, PlanDecision, PlanningSession, SessionStatus
 from promopilot.domain.simulation import (
     CompetitorReaction,
     LineSimulation,
@@ -30,6 +30,7 @@ from promopilot.domain.simulation import (
     RegionStockout,
     SimulatedOutcomes,
 )
+from promopilot.domain.violation import Violation, ViolationCode
 from promopilot.domain.vocabulary import Mechanism, Region, Segment, TargetSegment, Week
 
 __all__ = [
@@ -41,6 +42,7 @@ __all__ = [
     "CompetitorReaction",
     "ConstraintKind",
     "ConstraintSource",
+    "DecisionKind",
     "LineSimulation",
     "Mechanism",
     "MechanismOption",
@@ -48,6 +50,7 @@ __all__ = [
     "NotSelectedOption",
     "NotSelectedReason",
     "Percentiles",
+    "PlanDecision",
     "PlanLine",
     "PlanRevision",
     "PlanRevisionLine",
@@ -70,6 +73,8 @@ __all__ = [
     "SimulatedOutcomes",
     "SolveStatus",
     "TargetSegment",
+    "Violation",
+    "ViolationCode",
     "Week",
     "WhyChosen",
 ]

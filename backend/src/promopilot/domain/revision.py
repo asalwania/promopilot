@@ -16,6 +16,7 @@ from promopilot.domain.selection import (
     WhyChosen,
 )
 from promopilot.domain.simulation import PlanSimulation
+from promopilot.domain.violation import Violation
 
 
 class PlanRevisionLine(BaseModel):
@@ -58,6 +59,9 @@ class PlanRevision(BaseModel):
     relaxation: Relaxation | None = None
     """For a request that is infeasible, or not proven feasible in time, the smallest change
     to the brief's constraints that makes it feasible (ADR 0044); None otherwise."""
+    open_issues: tuple[Violation, ...] = ()
+    """Violations the Critic found that the revision still has when it goes for approval
+    (ADR 0046); empty for revisions planned before E8."""
 
     @model_validator(mode="after")
     def _is_a_valid_promo_plan(self) -> Self:

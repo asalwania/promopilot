@@ -1,12 +1,11 @@
-"""One planning session run: brief to planning request to plan revision 1 (E3, E6)."""
+"""Reading a brief into a planning request: the Context node's step (E3, ADR 0046)."""
 
-from dataclasses import dataclass
 from typing import Protocol
 
 import pandas as pd
 
 from promopilot.agents.context import read_brief
-from promopilot.domain import PlanningRequest, PlanRevision
+from promopilot.domain import PlanningRequest
 from promopilot.llm import LLMProvider
 
 
@@ -16,18 +15,6 @@ class BriefData(Protocol):
     async def products(self) -> pd.DataFrame: ...
     async def calendar(self) -> pd.DataFrame: ...
     async def default_as_of_week(self) -> int: ...
-
-
-class Planner(Protocol):
-    """Plans a planning request (`promopilot.agents.OptimisingPlanner`)."""
-
-    async def plan(self, request: PlanningRequest) -> PlanRevision: ...
-
-
-@dataclass(frozen=True)
-class PlanningResult:
-    request: PlanningRequest
-    revision: PlanRevision
 
 
 async def read_planning_request(brief: str, llm: LLMProvider, data: BriefData) -> PlanningRequest:
@@ -44,14 +31,3 @@ async def read_planning_request(brief: str, llm: LLMProvider, data: BriefData) -
         calendar=await data.calendar(),
         categories=sorted(products["category"].unique()),
     )
-
-
-async def plan_session(
-    brief: str, llm: LLMProvider, data: BriefData, planner: Planner
-) -> PlanningResult:
-    """Read the brief into a planning request, then plan it.
-
-    Raises `BriefError`, `LLMError`, or `PlanningError` when the request cannot be planned.
-    """
-    request = await read_planning_request(brief, llm, data)
-    return PlanningResult(request, await planner.plan(request))

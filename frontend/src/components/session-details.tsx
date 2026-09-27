@@ -3,6 +3,7 @@ import { LoaderCircle } from "lucide-react";
 import { PlanTable } from "@/components/plan-table";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type {
+  PlanDecision,
   PlanningRequest,
   Session,
   SessionStatus,
@@ -19,6 +20,7 @@ const STATUS_LABELS: Record<SessionStatus, string> = {
 };
 
 export function SessionDetails({ session }: { session: Session }) {
+  const decision = latestDecision(session);
   return (
     <div className="flex w-full flex-col gap-4">
       <Card>
@@ -36,6 +38,7 @@ export function SessionDetails({ session }: { session: Session }) {
         </CardHeader>
         <CardContent className="flex flex-col gap-2">
           <p className="text-muted-foreground text-sm">{session.brief}</p>
+          {decision && <DecisionNote decision={decision} />}
           {session.error && (
             <p role="alert" className="text-destructive text-sm">
               {session.error}
@@ -73,6 +76,22 @@ export function SessionDetails({ session }: { session: Session }) {
         </Card>
       )}
     </div>
+  );
+}
+
+// Approve and reject buttons, and the full audit trail, arrive in E10 (ADR 0046).
+function latestDecision(session: Session): PlanDecision | undefined {
+  return session.decisions.at(-1);
+}
+
+function DecisionNote({ decision }: { decision: PlanDecision }) {
+  const revision = `Plan revision ${decision.revision_number}`;
+  return (
+    <p className="text-sm">
+      {decision.decision === "approved"
+        ? `${revision} was approved.`
+        : `${revision} was rejected: ${decision.reason ?? ""}`}
+    </p>
   );
 }
 

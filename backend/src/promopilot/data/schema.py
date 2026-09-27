@@ -4,7 +4,9 @@ Migrations in migrations/ create them.
 """
 
 from sqlalchemy import (
+    BigInteger,
     Boolean,
+    CheckConstraint,
     Column,
     Date,
     DateTime,
@@ -18,6 +20,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     func,
+    text,
 )
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
 
@@ -145,6 +148,8 @@ planning_sessions = Table(
     Column("error", Text),
     Column("created_at", DateTime(timezone=True), nullable=False, server_default=func.now()),
     Column("updated_at", DateTime(timezone=True), nullable=False, server_default=func.now()),
+    # E8 (ADR 0046): the agent graph's checkpoint thread; null for sessions planned before it.
+    Column("thread_id", Text),
     Index("ix_planning_sessions_status", "status"),
 )
 
@@ -166,6 +171,8 @@ plan_revisions = Table(
     Column("policy_findings", JSONB),
     # E6 #37 (ADR 0044); null unless the request is infeasible (or not proven feasible).
     Column("relaxation", JSONB),
+    # E8 #44 (ADR 0046): violations the Critic left open; null for revisions planned before it.
+    Column("open_issues", JSONB),
 )
 
 plan_lines = Table(
@@ -190,6 +197,33 @@ plan_lines = Table(
     ForeignKeyConstraint(
         ["session_id", "revision_number"],
         ["plan_revisions.session_id", "plan_revisions.number"],
+    ),
+)
+
+# Every approval and rejection of a plan revision, in order: the session's audit trail (E8,
+# ADR 0046). A session has at most one approval.
+
+approvals = Table(
+    "approvals",
+    metadata,
+    Column("id", BigInteger, primary_key=True, autoincrement=True),
+    Column("session_id", UUID, nullable=False),
+    Column("revision_number", Integer, nullable=False),
+    Column("decision", Text, nullable=False),
+    Column("reason", Text),
+    Column("decided_at", DateTime(timezone=True), nullable=False, server_default=func.now()),
+    ForeignKeyConstraint(
+        ["session_id", "revision_number"],
+        ["plan_revisions.session_id", "plan_revisions.number"],
+    ),
+    CheckConstraint("decision IN ('approved', 'rejected')", name="ck_approvals_decision"),
+    CheckConstraint("(decision = 'rejected') = (reason IS NOT NULL)", name="ck_approvals_reason"),
+    Index("ix_approvals_session_id", "session_id"),
+    Index(
+        "uq_approvals_one_approval",
+        "session_id",
+        unique=True,
+        postgresql_where=text("decision = 'approved'"),
     ),
 )
 

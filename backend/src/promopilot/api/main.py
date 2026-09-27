@@ -9,7 +9,7 @@ from fastapi import FastAPI
 from sqlalchemy.ext.asyncio import create_async_engine
 
 from promopilot import __version__
-from promopilot.agents import OptimisingPlanner
+from promopilot.agents import GraphTools, OptimisingPlanner, PostgresCheckpoints
 from promopilot.agents.tools import ToolRegistry
 from promopilot.agents.tools.compare_mechanisms import compare_mechanisms_tool
 from promopilot.agents.tools.estimate_demand import estimate_demand_tool
@@ -65,6 +65,11 @@ def create_app(
 ) -> FastAPI:
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+        try:
+            # The agent graph's checkpoints (ADR 0046); without them sessions answer 503.
+            await sessions.open()
+        except Exception:
+            log.exception("sessions.checkpoints_unavailable")
         try:
             await sessions.recover_interrupted()
         except Exception:
@@ -138,21 +143,27 @@ def build_app() -> FastAPI:
         n_runs=settings.simulation_runs, seed=settings.simulation_seed
     )
     store = SessionStore(engine)
-    # Sessions plan with the latest demand model and the live relations model (ADR 0038).
-    # A stored plan revision is re-simulated with the same settings (ADR 0043).
+    # Sessions run the agent graph, checkpointed in the app database (ADR 0046); its planner
+    # plans with the latest demand model and the live relations model (ADR 0038). A stored
+    # plan revision is re-simulated with the same settings (ADR 0043).
     sessions = SessionService(
         store=store,
-        data=data,
-        llm=build_provider(settings),
-        planner=OptimisingPlanner(
-            demand_model,
-            relations_model,
-            data,
+        tools=GraphTools(
+            brief_data=data,
+            planner=OptimisingPlanner(
+                demand_model,
+                relations_model,
+                data,
+                policy=policy,
+                settings=solver_settings,
+                seed=settings.optimizer_seed,
+                simulation=simulation_settings,
+            ),
+            sessions=store,
             policy=policy,
-            settings=solver_settings,
-            seed=settings.optimizer_seed,
-            simulation=simulation_settings,
         ),
+        llm=build_provider(settings),
+        checkpoints=PostgresCheckpoints(settings.database_url),
     )
     app = create_app(
         database_probe=probe,

@@ -15,6 +15,7 @@ export const planningSession: SessionResponse = {
   planning_request: null,
   plan_revision: null,
   error: null,
+  decisions: [],
 };
 
 export const planLines: PlanRevisionLine[] = [
@@ -225,6 +226,7 @@ export const awaitingApprovalSession: SessionResponse = {
     },
     clearance_shortfalls: [],
     policy_findings: [],
+    open_issues: [],
   },
 };
 
@@ -271,6 +273,7 @@ export const infeasibleSession: SessionResponse = {
       },
     ],
     policy_findings: [],
+    open_issues: [],
     relaxation: {
       changes: [
         {
@@ -288,4 +291,30 @@ export const infeasibleSession: SessionResponse = {
       proven: true,
     },
   },
+};
+
+export const approvedSession: SessionResponse = {
+  ...awaitingApprovalSession,
+  status: "approved",
+  decisions: [
+    {
+      decision: "approved",
+      revision_number: 1,
+      reason: null,
+      decided_at: "2026-09-28T10:15:00Z",
+    },
+  ],
+};
+
+export const rejectedSession: SessionResponse = {
+  ...awaitingApprovalSession,
+  status: "rejected",
+  decisions: [
+    {
+      decision: "rejected",
+      revision_number: 1,
+      reason: "Too deep on Beverages in West.",
+      decided_at: "2026-09-28T10:15:00Z",
+    },
+  ],
 };
