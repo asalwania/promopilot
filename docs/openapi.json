@@ -99,6 +99,29 @@
         "title": "BindingEvidence",
         "type": "string"
       },
+      "ClarificationAsked": {
+        "description": "The Context agent paused to ask the manager these questions.",
+        "properties": {
+          "kind": {
+            "const": "clarification",
+            "default": "clarification",
+            "title": "Kind",
+            "type": "string"
+          },
+          "questions": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Questions",
+            "type": "array"
+          }
+        },
+        "required": [
+          "questions"
+        ],
+        "title": "ClarificationAsked",
+        "type": "object"
+      },
       "ClearanceShortfall": {
         "description": "A clearance target the plan misses: no plan within the other constraints reaches it,\nso the optimiser returned the plan that comes closest and reports by how much it falls\nshort (SPEC \u00a79.4, F-06 AC2, ADR 0040).",
         "properties": {
@@ -382,6 +405,31 @@
         "title": "DecisionKind",
         "type": "string"
       },
+      "DecisionMade": {
+        "description": "A decision taken in the graph: a route a node chose, or a human's approve or reject.",
+        "properties": {
+          "decision": {
+            "title": "Decision",
+            "type": "string"
+          },
+          "kind": {
+            "const": "decision",
+            "default": "decision",
+            "title": "Kind",
+            "type": "string"
+          },
+          "summary": {
+            "title": "Summary",
+            "type": "string"
+          }
+        },
+        "required": [
+          "decision",
+          "summary"
+        ],
+        "title": "DecisionMade",
+        "type": "object"
+      },
       "ExplanationSource": {
         "enum": [
           "llm",
@@ -399,6 +447,36 @@
         ],
         "title": "FallbackReason",
         "type": "string"
+      },
+      "FindingRaised": {
+        "description": "Something the Critic found in the plan.",
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "kind": {
+            "const": "finding",
+            "default": "finding",
+            "title": "Kind",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source",
+          "code",
+          "message"
+        ],
+        "title": "FindingRaised",
+        "type": "object"
       },
       "HTTPValidationError": {
         "properties": {
@@ -553,6 +631,7 @@
         "title": "InventoryRow",
         "type": "object"
       },
+      "JsonValue": {},
       "LineSimulation": {
         "description": "One plan line's simulated ranges, identified by its SKU and region.",
         "properties": {
@@ -858,6 +937,65 @@
           "as_of_week"
         ],
         "title": "ModelVersion",
+        "type": "object"
+      },
+      "NodeFinished": {
+        "description": "A graph node's run ended.",
+        "properties": {
+          "duration_ms": {
+            "minimum": 0.0,
+            "title": "Duration Ms",
+            "type": "integer"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "kind": {
+            "const": "node_finished",
+            "default": "node_finished",
+            "title": "Kind",
+            "type": "string"
+          },
+          "outcome": {
+            "$ref": "#/components/schemas/NodeOutcome"
+          }
+        },
+        "required": [
+          "outcome",
+          "duration_ms"
+        ],
+        "title": "NodeFinished",
+        "type": "object"
+      },
+      "NodeOutcome": {
+        "description": "How a node's run ended: it finished, paused at an interrupt, or raised.",
+        "enum": [
+          "completed",
+          "interrupted",
+          "failed"
+        ],
+        "title": "NodeOutcome",
+        "type": "string"
+      },
+      "NodeStarted": {
+        "description": "A graph node started running (again, when an interrupted node resumes).",
+        "properties": {
+          "kind": {
+            "const": "node_started",
+            "default": "node_started",
+            "title": "Kind",
+            "type": "string"
+          }
+        },
+        "title": "NodeStarted",
         "type": "object"
       },
       "NotSelectedOption": {
@@ -1889,6 +2027,10 @@
           },
           "status": {
             "$ref": "#/components/schemas/SessionStatus"
+          },
+          "usage": {
+            "$ref": "#/components/schemas/SessionUsage",
+            "description": "What the session's LLM calls used and cost: the sums of its token-usage trace events (ADR 0047)."
           }
         },
         "required": [
@@ -1898,7 +2040,8 @@
           "planning_request",
           "plan_revision",
           "error",
-          "decisions"
+          "decisions",
+          "usage"
         ],
         "title": "SessionResponse",
         "type": "object"
@@ -1915,6 +2058,46 @@
         ],
         "title": "SessionStatus",
         "type": "string"
+      },
+      "SessionUsage": {
+        "description": "What a planning session's LLM calls used and cost: the sums of its token-usage events.",
+        "properties": {
+          "calls": {
+            "default": 0,
+            "title": "Calls",
+            "type": "integer"
+          },
+          "cost_inr": {
+            "default": 0.0,
+            "title": "Cost Inr",
+            "type": "number"
+          },
+          "cost_usd": {
+            "default": 0.0,
+            "title": "Cost Usd",
+            "type": "number"
+          },
+          "input_tokens": {
+            "default": 0,
+            "title": "Input Tokens",
+            "type": "integer"
+          },
+          "output_tokens": {
+            "default": 0,
+            "title": "Output Tokens",
+            "type": "integer"
+          },
+          "unpriced_models": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Unpriced Models",
+            "type": "array"
+          }
+        },
+        "title": "SessionUsage",
+        "type": "object"
       },
       "SimulatePlanRequest": {
         "additionalProperties": false,
@@ -2067,6 +2250,205 @@
         ],
         "title": "TargetSegment",
         "type": "string"
+      },
+      "TokensUsed": {
+        "description": "One billed LLM call: its model, tokens and cost, priced when it was made.",
+        "properties": {
+          "cost_inr": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cost Inr"
+          },
+          "cost_usd": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cost Usd"
+          },
+          "input_tokens": {
+            "minimum": 0.0,
+            "title": "Input Tokens",
+            "type": "integer"
+          },
+          "kind": {
+            "const": "token_usage",
+            "default": "token_usage",
+            "title": "Kind",
+            "type": "string"
+          },
+          "model": {
+            "title": "Model",
+            "type": "string"
+          },
+          "output_tokens": {
+            "minimum": 0.0,
+            "title": "Output Tokens",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "model",
+          "input_tokens",
+          "output_tokens",
+          "cost_usd",
+          "cost_inr"
+        ],
+        "title": "TokensUsed",
+        "type": "object"
+      },
+      "ToolCalled": {
+        "description": "A deterministic tool was called: its arguments and a summary of what it returned.",
+        "properties": {
+          "arguments": {
+            "$ref": "#/components/schemas/JsonValue"
+          },
+          "error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Code"
+          },
+          "kind": {
+            "const": "tool_called",
+            "default": "tool_called",
+            "title": "Kind",
+            "type": "string"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "result_summary": {
+            "$ref": "#/components/schemas/JsonValue"
+          },
+          "tool": {
+            "title": "Tool",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tool",
+          "arguments",
+          "ok",
+          "result_summary"
+        ],
+        "title": "ToolCalled",
+        "type": "object"
+      },
+      "TraceEvent": {
+        "description": "One step of a planning session's trace.",
+        "properties": {
+          "at": {
+            "format": "date-time",
+            "title": "At",
+            "type": "string"
+          },
+          "id": {
+            "minimum": 1.0,
+            "title": "Id",
+            "type": "integer"
+          },
+          "node": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Node"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/TracePayload"
+          },
+          "session_id": {
+            "format": "uuid",
+            "title": "Session Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "session_id",
+          "at",
+          "node",
+          "payload"
+        ],
+        "title": "TraceEvent",
+        "type": "object"
+      },
+      "TracePayload": {
+        "discriminator": {
+          "mapping": {
+            "clarification": "#/components/schemas/ClarificationAsked",
+            "decision": "#/components/schemas/DecisionMade",
+            "finding": "#/components/schemas/FindingRaised",
+            "node_finished": "#/components/schemas/NodeFinished",
+            "node_started": "#/components/schemas/NodeStarted",
+            "token_usage": "#/components/schemas/TokensUsed",
+            "tool_called": "#/components/schemas/ToolCalled"
+          },
+          "propertyName": "kind"
+        },
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/NodeStarted"
+          },
+          {
+            "$ref": "#/components/schemas/NodeFinished"
+          },
+          {
+            "$ref": "#/components/schemas/ToolCalled"
+          },
+          {
+            "$ref": "#/components/schemas/DecisionMade"
+          },
+          {
+            "$ref": "#/components/schemas/ClarificationAsked"
+          },
+          {
+            "$ref": "#/components/schemas/FindingRaised"
+          },
+          {
+            "$ref": "#/components/schemas/TokensUsed"
+          }
+        ]
+      },
+      "TraceStreamEnd": {
+        "description": "The last event of a session's trace stream (`event: end`): the session is final, so no\nmore trace events can come (ADR 0047).",
+        "properties": {
+          "session_id": {
+            "format": "uuid",
+            "title": "Session Id",
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/SessionStatus"
+          }
+        },
+        "required": [
+          "session_id",
+          "status"
+        ],
+        "title": "TraceStreamEnd",
+        "type": "object"
       },
       "ValidationError": {
         "properties": {
@@ -2822,6 +3204,99 @@
           }
         },
         "summary": "Approve Session",
+        "tags": [
+          "sessions"
+        ]
+      }
+    },
+    "/api/sessions/{session_id}/events": {
+      "get": {
+        "description": "The session's trace events over SSE (SF-01, ADR 0047), in order, as they happen.\n\nEach event's SSE `id` is its number in the session; a client that reconnects with\n`Last-Event-ID` gets the events after it, with no gaps or repeats (a missing or\nnon-numeric one replays the trace from the start). Once the session is final\n(approved, or failed) the stream sends `event: end` with its status and closes.",
+        "operationId": "session_events_api_sessions__session_id__events_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Session Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "last-event-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Last-Event-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "text/event-stream": {
+                "itemSchema": {
+                  "properties": {
+                    "data": {
+                      "contentMediaType": "application/json",
+                      "contentSchema": {
+                        "anyOf": [
+                          {
+                            "$ref": "#/components/schemas/TraceEvent"
+                          },
+                          {
+                            "$ref": "#/components/schemas/TraceStreamEnd"
+                          }
+                        ],
+                        "title": "Streamitem Session Events Api Sessions  Session Id  Events Get"
+                      },
+                      "type": "string"
+                    },
+                    "event": {
+                      "type": "string"
+                    },
+                    "id": {
+                      "type": "string"
+                    },
+                    "retry": {
+                      "minimum": 0,
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "description": "Unknown session"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Session Events",
         "tags": [
           "sessions"
         ]

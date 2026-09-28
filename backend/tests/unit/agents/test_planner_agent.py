@@ -15,6 +15,7 @@ from promopilot.agents import (
     AgentTools,
     DegradedReason,
     GraphTools,
+    MemoryTrace,
     PlannedRevision,
     StoredRevisions,
     build_graph,
@@ -36,7 +37,15 @@ from promopilot.agents.tools.get_competitor_gaps import get_competitor_gaps_tool
 from promopilot.agents.tools.run_optimizer import RunOptimizerOutput, run_optimizer_tool
 from promopilot.competitors import CompetitorGap, CompetitorGaps
 from promopilot.datagen import GeneratedDataset
-from promopilot.domain import PlanningRequest, PromoWindow, Region, Scope, SolveStatus
+from promopilot.domain import (
+    DecisionMade,
+    PlanningRequest,
+    PromoWindow,
+    Region,
+    Scope,
+    SolveStatus,
+    ToolCalled,
+)
 from promopilot.llm import (
     CassetteMissError,
     FakeProvider,
@@ -62,23 +71,6 @@ from tests.unit.agents.test_plan_session import FREE, planner_of
 
 HISTORY_WEEKS = 52  # small_config
 SET_ID = UUID("00000000-0000-0000-0000-000000000047")
-
-
-class Traced:
-    """A tool registry that keeps every call it answers, as #45's traced wrapper emits a
-    `tool_called` event for each."""
-
-    def __init__(self, inner: ToolRegistry) -> None:
-        self._inner = inner
-        self.events: list[tuple[str, dict[str, Any], bool]] = []
-
-    def specs(self) -> list[ToolSpec]:
-        return self._inner.specs()
-
-    async def call(self, name: str, arguments: Mapping[str, Any]) -> ToolResult:
-        result = await self._inner.call(name, arguments)
-        self.events.append((name, dict(arguments), result.ok))
-        return result
 
 
 class ScriptedTools:
@@ -217,8 +209,9 @@ def run() -> ToolTurn:
 async def plan(
     data: InMemoryRetailData,
     script: Sequence[BaseModel | Exception],
-    tools: ScriptedTools | Traced,
+    tools: ScriptedTools | ToolRegistry,
     *,
+    trace: MemoryTrace | None = None,
     revisions: Revisions | StoredRevisions | None = None,
     fallback: ScriptedPlanner | None = None,
     sleep: Sleeps | None = None,
@@ -231,6 +224,7 @@ async def plan(
         planner=fallback or ScriptedPlanner(planned(promo_cost=900.0)),
         sessions=RecordedSessions(),
         policy=POLICY,
+        trace=trace or MemoryTrace(),
         agent=AgentTools(
             tools=tools,
             revisions=revisions or Revisions({SET_ID: planned()}),
@@ -280,7 +274,7 @@ async def test_scripted_tool_calls_on_the_small_world_produce_the_optimised_plan
     assert isinstance(preview, ToolOk)
     assert isinstance(preview.output, GenerateCandidatesOutput)
     candidate_set_id = preview.output.candidate_set_id
-    traced = Traced(registry)
+    trace = MemoryTrace()
     default = planner_of(small_models, data)
 
     state, llm = await plan(
@@ -291,17 +285,26 @@ async def test_scripted_tool_calls_on_the_small_world_produce_the_optimised_plan
             call("run_optimizer", candidate_set_id=str(candidate_set_id)),
             finish(),
         ],
-        traced,
+        registry,
         revisions=StoredRevisions(store, default),
+        trace=trace,
     )
 
-    assert [name for name, _, _ in traced.events] == [
-        "get_competitor_gaps",
-        "generate_candidates",
-        "run_optimizer",
-        "get_competitor_gaps",  # the planner's own undercut check, after the plan is chosen
+    called = [
+        (event.node, event.payload)
+        for event in trace.events
+        if isinstance(event.payload, ToolCalled)
     ]
-    assert all(ok for _, _, ok in traced.events)
+    assert [(node, payload.tool) for node, payload in called] == [
+        ("planner", "get_competitor_gaps"),
+        ("planner", "generate_candidates"),
+        ("planner", "run_optimizer"),
+        ("planner", "get_competitor_gaps"),  # the planner's own undercut check, after the plan
+    ]
+    assert all(payload.ok for _, payload in called)
+    assert called[2][1].arguments == {"candidate_set_id": str(candidate_set_id)}
+    assert isinstance(called[2][1].result_summary, dict)
+    assert called[2][1].result_summary["candidate_set_id"] == str(candidate_set_id)
     assert state.planner_degraded is None
     assert state.plan is not None
     assert state.plan.lines, "some Snacks options pay for themselves without fixed costs"
@@ -410,6 +413,30 @@ async def test_an_llm_down_at_the_first_step_gives_the_degraded_default_plan(
     assert tools.called() == ["get_competitor_gaps"]
 
 
+async def test_falling_back_to_the_default_sequence_is_a_traced_decision(
+    data: InMemoryRetailData,
+) -> None:
+    trace = MemoryTrace()
+    tools = ScriptedTools({"get_competitor_gaps": [no_gaps()]})
+
+    await plan(data, [LLMError("primary failed; secondary failed")], tools, trace=trace)
+
+    decisions = [
+        (event.node, event.payload)
+        for event in trace.events
+        if isinstance(event.payload, DecisionMade)
+    ]
+    [(node, degraded)] = [d for d in decisions if d[1].decision == "planner_degraded"]
+    assert node == "planner"
+    assert degraded.summary == (
+        "The planner agent could not plan (llm_unavailable), so the deterministic default "
+        "sequence plans instead."
+    )
+    [(node, fallback)] = [d for d in decisions if d[1].decision == "explainer_fallback"]
+    assert node == "explainer"
+    assert "llm_unavailable" in fallback.summary
+
+
 async def test_an_llm_down_mid_round_restarts_the_conversation_once_from_the_start(
     data: InMemoryRetailData, request_read: PlanningRequest
 ) -> None:
@@ -492,6 +519,31 @@ async def test_a_failing_tool_is_retried_then_reaches_the_planner_as_a_structure
     assert tools.called()[:4] == ["generate_candidates"] * 4
     assert state.planner_degraded is None
     assert state.plan == planned().revision
+
+
+async def test_each_attempt_at_a_failing_tool_is_traced(
+    data: InMemoryRetailData, request_read: PlanningRequest
+) -> None:
+    trace = MemoryTrace()
+    tools = ScriptedTools(
+        {
+            "generate_candidates": [
+                ConnectionError("database went away"),
+                Generated(candidate_set_id=SET_ID),
+            ],
+            "run_optimizer": [optimised()],
+        }
+    )
+
+    await plan(data, [generate(request_read), run(), finish()], tools, trace=trace)
+
+    called = [e.payload for e in trace.events if isinstance(e.payload, ToolCalled)]
+    assert [(c.tool, c.ok, c.error_code) for c in called][:3] == [
+        ("generate_candidates", False, "exception"),
+        ("generate_candidates", True, None),
+        ("run_optimizer", True, None),
+    ]
+    assert called[0].result_summary == "ConnectionError: database went away"
 
 
 async def test_a_tool_that_fails_once_is_retried_and_the_planner_sees_its_result(

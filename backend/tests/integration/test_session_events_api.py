@@ -30,6 +30,7 @@ from tests.integration.test_sessions_api import (
     settled,
 )
 from tests.unit.agents.billed import BilledProvider
+from tests.unit.agents.fakes import explainer_down
 
 pytestmark = pytest.mark.integration
 
@@ -79,7 +80,9 @@ async def approved_session(client: AsyncClient) -> str:
 async def test_the_stream_sends_every_event_in_order_then_ends_once_approved(
     postgres_url: str, small_models: tuple[DemandModel, Relations]
 ) -> None:
-    async with api_process(postgres_url, FakeProvider([READING]), small_models) as client:
+    async with api_process(
+        postgres_url, FakeProvider([READING, explainer_down()]), small_models
+    ) as client:
         session_id = await approved_session(client)
         response = await client.get(f"/api/sessions/{session_id}/events")
 
@@ -100,7 +103,7 @@ async def test_the_stream_sends_every_event_in_order_then_ends_once_approved(
     assert trace[-1]["node"] == "done"
     assert trace[-1]["payload"]["outcome"] == "completed"
     decisions = [e["payload"]["decision"] for e in trace if e["payload"]["kind"] == "decision"]
-    assert decisions == ["plan_valid", "approved"]
+    assert decisions == ["plan_valid", "explainer_fallback", "approved"]
     end = events[-1]
     assert end["event"] == "end"
     assert "id" not in end
@@ -110,7 +113,9 @@ async def test_the_stream_sends_every_event_in_order_then_ends_once_approved(
 async def test_the_stream_resumes_after_last_event_id_without_gaps_or_duplicates(
     postgres_url: str, small_models: tuple[DemandModel, Relations]
 ) -> None:
-    async with api_process(postgres_url, FakeProvider([READING]), small_models) as client:
+    async with api_process(
+        postgres_url, FakeProvider([READING, explainer_down()]), small_models
+    ) as client:
         session_id = await approved_session(client)
         url = f"/api/sessions/{session_id}/events"
         full = trace_of(sse((await client.get(url)).text))
@@ -160,8 +165,11 @@ async def test_token_usage_events_add_up_to_the_sessions_usage(
     postgres_url: str, small_models: tuple[DemandModel, Relations]
 ) -> None:
     llm = BilledProvider(
-        FakeProvider([READING]),
-        [Usage(model="gpt-4.1-mini", input_tokens=1_234, output_tokens=321)],
+        FakeProvider([READING, explainer_down()]),
+        [
+            Usage(model="gpt-4.1-mini", input_tokens=1_234, output_tokens=321),
+            Usage(model="gpt-4.1-mini", input_tokens=766, output_tokens=0),
+        ],
     )
     async with api_process(postgres_url, llm, small_models) as client:
         session_id = await approved_session(client)
@@ -169,16 +177,16 @@ async def test_token_usage_events_add_up_to_the_sessions_usage(
         trace = trace_of(sse((await client.get(f"/api/sessions/{session_id}/events")).text))
 
     used = [e["payload"] for e in trace if e["payload"]["kind"] == "token_usage"]
-    assert len(used) == 1
+    assert len(used) == 2  # the Context's call and the Explainer's billed failure
     usage = session["usage"]
     assert usage["calls"] == len(used)
-    assert usage["input_tokens"] == sum(u["input_tokens"] for u in used) == 1_234
+    assert usage["input_tokens"] == sum(u["input_tokens"] for u in used) == 2_000
     assert usage["output_tokens"] == sum(u["output_tokens"] for u in used) == 321
     assert usage["cost_usd"] == pytest.approx(sum(u["cost_usd"] for u in used))
     assert usage["cost_inr"] == pytest.approx(sum(u["cost_inr"] for u in used))
-    # 1234 x $0.40/M + 321 x $1.60/M, at ₹96 to the dollar (ADR 0027's default prices).
-    assert usage["cost_usd"] == pytest.approx(0.0010072)
-    assert usage["cost_inr"] == pytest.approx(0.0010072 * 96)
+    # 2000 x $0.40/M + 321 x $1.60/M, at ₹96 to the dollar (ADR 0027's default prices).
+    assert usage["cost_usd"] == pytest.approx(0.0013136)
+    assert usage["cost_inr"] == pytest.approx(0.0013136 * 96)
     assert usage["unpriced_models"] == []
 
 
@@ -208,7 +216,7 @@ async def served(app: FastAPI) -> AsyncIterator[str]:
 async def test_events_stream_live_while_the_session_plans_and_decides(
     postgres_url: str, small_models: tuple[DemandModel, Relations]
 ) -> None:
-    llm = GatedProvider(FakeProvider([READING]))
+    llm = GatedProvider(FakeProvider([READING, explainer_down()]))
     async with (
         api_app(postgres_url, llm, small_models) as app,
         served(app) as base_url,

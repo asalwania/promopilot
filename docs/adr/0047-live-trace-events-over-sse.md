@@ -115,6 +115,7 @@ SPEC and #10 name the event kinds and the endpoint. They do not say how events a
   - api: `TraceStreamEnd`;
   - `promopilot.logs.configure_logging`.
 - `SessionService` takes the trace reader and the poll interval.
+- `agents/trace.py` is exempt from the no-business-arithmetic test (ADR 0049). Its only arithmetic is bookkeeping: numbering events in `MemoryTrace`, measuring node durations and cutting summaries short. Every cost comes from the LLM layer's `UsageMeter`.
 - New settings: `TRACE_POLL_INTERVAL_S` and `LOG_FORMAT` (`.env.example`).
 - `PlanningSession` and `SessionResponse` gain `usage`; the E3 page's schema follows the regenerated types.
 - The trace timeline, its token and cost counters, and the client that closes on `end` are E10's.

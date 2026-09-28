@@ -19,6 +19,8 @@ NUMERIC_MODULES = {"math", "statistics", "numpy", "decimal", "fractions", "scipy
 ALLOWED_MODULES = {
     "resolution.py": "brief-phrase similarity scores and holiday week runs: text matching, "
     "not business numbers (ADR 0032)",
+    "trace.py": "trace bookkeeping: event numbers in memory, node durations and summary "
+    "cut-offs; every cost comes from the LLM layer's usage meter (ADR 0047)",
 }
 ALLOWED = {
     ("context.py", "as_of_week + WEEK_TABLE_WEEKS"): "the weeks the prompt's week table lists",

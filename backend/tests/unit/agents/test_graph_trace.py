@@ -29,7 +29,7 @@ from promopilot.domain import (
 )
 from promopilot.llm import FakeProvider, LLMProvider, Usage
 from tests.unit.agents.billed import BilledProvider
-from tests.unit.agents.fakes import InMemoryRetailData
+from tests.unit.agents.fakes import InMemoryRetailData, explainer_down
 from tests.unit.agents.test_graph import (
     BRIEF,
     BUDGET,
@@ -88,7 +88,7 @@ def steps(events: list[TraceEvent]) -> list[tuple[str | None, str]]:
 async def test_a_planning_run_traces_every_node_in_order_up_to_the_approval_pause(
     data: InMemoryRetailData, trace: MemoryTrace
 ) -> None:
-    graph = graph_for(data, trace, FakeProvider([READING]))
+    graph = graph_for(data, trace, FakeProvider([READING, explainer_down()]))
     session_id = uuid4()
 
     await start_planning(graph, str(session_id), session_id, BRIEF)
@@ -104,6 +104,7 @@ async def test_a_planning_run_traces_every_node_in_order_up_to_the_approval_paus
         ("critic", "decision"),
         ("critic", "completed"),
         ("explainer", "node_started"),
+        ("explainer", "decision"),
         ("explainer", "completed"),
         ("approval", "node_started"),
         ("approval", "interrupted"),
@@ -117,7 +118,7 @@ async def test_each_violation_is_a_finding_and_the_critic_decides_to_list_them(
     data: InMemoryRetailData, trace: MemoryTrace
 ) -> None:
     over_budget = planned(promo_cost=BUDGET + 5_000.0)
-    graph = graph_for(data, trace, FakeProvider([READING]), result=over_budget)
+    graph = graph_for(data, trace, FakeProvider([READING, explainer_down()]), result=over_budget)
     session_id = uuid4()
 
     await start_planning(graph, str(session_id), session_id, BRIEF)
@@ -132,7 +133,7 @@ async def test_each_violation_is_a_finding_and_the_critic_decides_to_list_them(
 async def test_approving_traces_the_decision_and_the_run_to_done_after_the_pause(
     data: InMemoryRetailData, trace: MemoryTrace
 ) -> None:
-    graph = graph_for(data, trace, FakeProvider([READING]))
+    graph = graph_for(data, trace, FakeProvider([READING, explainer_down()]))
     session_id = uuid4()
     await start_planning(graph, str(session_id), session_id, BRIEF)
     paused = len(trace.of(session_id))
@@ -165,7 +166,7 @@ async def test_approving_traces_the_decision_and_the_run_to_done_after_the_pause
 async def test_rejecting_traces_the_reason_and_pauses_at_approval_again(
     data: InMemoryRetailData, trace: MemoryTrace
 ) -> None:
-    graph = graph_for(data, trace, FakeProvider([READING]))
+    graph = graph_for(data, trace, FakeProvider([READING, explainer_down()]))
     session_id = uuid4()
     await start_planning(graph, str(session_id), session_id, BRIEF)
     paused = len(trace.of(session_id))
@@ -211,8 +212,11 @@ async def test_the_context_agents_llm_call_is_a_priced_token_usage_event(
     data: InMemoryRetailData, trace: MemoryTrace
 ) -> None:
     llm = BilledProvider(
-        FakeProvider([READING]),
-        [Usage(model="gpt-4.1-mini", input_tokens=1_200, output_tokens=300)],
+        FakeProvider([READING, explainer_down()]),
+        [
+            Usage(model="gpt-4.1-mini", input_tokens=1_200, output_tokens=300),
+            Usage(model="gpt-4.1-mini", input_tokens=900, output_tokens=0),
+        ],
     )
     pricing = LLMPricing(
         prices={"gpt-4.1-mini": ModelPrice(input_usd_per_mtok=0.40, output_usd_per_mtok=1.60)},
@@ -223,7 +227,9 @@ async def test_the_context_agents_llm_call_is_a_priced_token_usage_event(
 
     await start_planning(graph, str(session_id), session_id, BRIEF)
 
-    [usage] = [e for e in trace.of(session_id) if isinstance(e.payload, TokensUsed)]
+    usage, explaining = [e for e in trace.of(session_id) if isinstance(e.payload, TokensUsed)]
+    # The Explainer's call fails, but it was billed, so it counts too.
+    assert explaining.node == "explainer"
     assert usage.node == "context"
     assert isinstance(usage.payload, TokensUsed)
     # 1200 x $0.40/M + 300 x $1.60/M = $0.00096

@@ -14,7 +14,7 @@ from promopilot.agents import GraphTools, build_graph, checkpoint_serializer, st
 from promopilot.datagen import GeneratedDataset
 from promopilot.llm import FakeProvider, RetryingProvider, TransientLLMError
 from promopilot.logs import configure_logging
-from tests.unit.agents.fakes import InMemoryRetailData
+from tests.unit.agents.fakes import InMemoryRetailData, explainer_down
 from tests.unit.agents.test_graph import (
     BRIEF,
     POLICY,
@@ -63,7 +63,9 @@ async def test_a_line_logged_inside_a_graph_node_names_the_session_and_node(
     async def no_wait(_: float) -> None:
         return None
 
-    llm = RetryingProvider(FakeProvider([TransientLLMError("overloaded"), READING]), sleep=no_wait)
+    llm = RetryingProvider(
+        FakeProvider([TransientLLMError("overloaded"), READING, explainer_down()]), sleep=no_wait
+    )
     graph = build_graph(
         GraphTools(
             brief_data=InMemoryRetailData(small_dataset),
