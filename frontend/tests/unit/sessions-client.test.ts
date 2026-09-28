@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  clarifySession,
   createSession,
   getSession,
   SessionLoadError,
@@ -10,6 +11,7 @@ import {
   awaitingApprovalSession,
   infeasibleSession,
   openIssuesSession,
+  planningSession,
   SESSION_ID,
 } from "./fixtures/sessions";
 
@@ -177,6 +179,145 @@ describe("getSession", () => {
     expect(failure).toMatchObject({
       message: "unexpected session response",
       notFound: false,
+    });
+  });
+});
+
+describe("clarifySession", () => {
+  const answers = { marketing_budget: "₹2 lakh" };
+
+  it("posts every answer by question id and returns the resumed session", async () => {
+    const { calls, fetchImpl } = recordingFetch(() =>
+      Response.json(planningSession, { status: 202 }),
+    );
+
+    const result = await clarifySession(SESSION_ID, answers, fetchImpl);
+
+    expect(result).toEqual({ ok: true, session: planningSession });
+    expect(calls).toHaveLength(1);
+    expect(calls[0].url).toBe(`/api/sessions/${SESSION_ID}/clarify`);
+    expect(calls[0].init?.method).toBe("POST");
+    expect(JSON.parse(String(calls[0].init?.body))).toEqual({ answers });
+  });
+
+  it("reports a conflict when the questions were already answered", async () => {
+    const { fetchImpl } = recordingFetch(() =>
+      Response.json(
+        {
+          detail:
+            "the session is planning: only a session awaiting clarification can be answered",
+        },
+        { status: 409 },
+      ),
+    );
+
+    const result = await clarifySession(SESSION_ID, answers, fetchImpl);
+
+    expect(result).toEqual({
+      ok: false,
+      conflict: true,
+      reason: "These questions were already answered.",
+    });
+  });
+
+  it("reports the API's message when the answers do not match the questions", async () => {
+    const { fetchImpl } = recordingFetch(() =>
+      Response.json(
+        {
+          detail:
+            "answer every open question by its id; unanswered: scope.categories",
+        },
+        { status: 422 },
+      ),
+    );
+
+    const result = await clarifySession(SESSION_ID, answers, fetchImpl);
+
+    expect(result).toEqual({
+      ok: false,
+      conflict: false,
+      reason:
+        "answer every open question by its id; unanswered: scope.categories",
+    });
+  });
+
+  it("reports the first validation message when an answer is invalid", async () => {
+    const { fetchImpl } = recordingFetch(() =>
+      Response.json(
+        {
+          detail: [
+            {
+              loc: ["body", "answers"],
+              msg: "Value error, the answer to marketing_budget is empty",
+              type: "value_error",
+            },
+          ],
+        },
+        { status: 422 },
+      ),
+    );
+
+    const result = await clarifySession(SESSION_ID, answers, fetchImpl);
+
+    expect(result).toEqual({
+      ok: false,
+      conflict: false,
+      reason: "Value error, the answer to marketing_budget is empty",
+    });
+  });
+
+  it("reports why planning is unavailable", async () => {
+    const { fetchImpl } = recordingFetch(() =>
+      Response.json(
+        { detail: "planning is unavailable: no checkpoints" },
+        { status: 503 },
+      ),
+    );
+
+    const result = await clarifySession(SESSION_ID, answers, fetchImpl);
+
+    expect(result).toEqual({
+      ok: false,
+      conflict: false,
+      reason: "planning is unavailable: no checkpoints",
+    });
+  });
+
+  it("reports the HTTP status when the proxy answers without a message", async () => {
+    const { fetchImpl } = recordingFetch(
+      () => new Response("Bad Gateway", { status: 502 }),
+    );
+
+    const result = await clarifySession(SESSION_ID, answers, fetchImpl);
+
+    expect(result).toEqual({ ok: false, conflict: false, reason: "HTTP 502" });
+  });
+
+  it("reports the network error when the answers cannot be sent", async () => {
+    const failingFetch: typeof fetch = async () => {
+      throw new TypeError("fetch failed");
+    };
+
+    const result = await clarifySession(SESSION_ID, answers, failingFetch);
+
+    expect(result).toEqual({
+      ok: false,
+      conflict: false,
+      reason: "fetch failed",
+    });
+  });
+
+  it("fails plainly when the resumed session breaks the contract", async () => {
+    const { fetchImpl } = recordingFetch(() =>
+      Response.json({ status: "sideways" }, { status: 202 }),
+    );
+
+    const result = await clarifySession(SESSION_ID, answers, fetchImpl);
+
+    expect(result).toEqual({
+      ok: false,
+      conflict: false,
+      reason: "unexpected session response",
     });
   });
 });

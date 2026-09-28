@@ -1,16 +1,14 @@
 import { LoaderCircle } from "lucide-react";
 
+import { AssumptionsPanel } from "@/components/assumptions-panel";
+import {
+  ClarificationForm,
+  type SubmitAnswers,
+} from "@/components/clarification-form";
 import { PlanTable } from "@/components/plan-table";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { UsageMeter } from "@/components/usage-meter";
-import type {
-  ClarificationQuestion,
-  PlanDecision,
-  PlanningRequest,
-  Session,
-  SessionStatus,
-} from "@/lib/api/sessions";
-import { formatRupees, formatWeek } from "@/lib/format";
+import type { PlanDecision, Session, SessionStatus } from "@/lib/api/sessions";
 
 const STATUS_LABELS: Record<SessionStatus, string> = {
   planning: "Planning…",
@@ -21,7 +19,22 @@ const STATUS_LABELS: Record<SessionStatus, string> = {
   failed: "Planning failed",
 };
 
-export function SessionDetails({ session }: { session: Session }) {
+// What the manager can do from the session page; SessionView owns the calls (ADR 0061).
+export type SessionActions = {
+  clarify: SubmitAnswers;
+};
+
+const NO_ACTIONS: SessionActions = {
+  clarify: async () => ({ ok: false, reason: "answers can't be sent here" }),
+};
+
+export function SessionDetails({
+  session,
+  actions = NO_ACTIONS,
+}: {
+  session: Session;
+  actions?: SessionActions;
+}) {
   const decision = latestDecision(session);
   return (
     <div className="flex w-full flex-col gap-4">
@@ -41,9 +54,6 @@ export function SessionDetails({ session }: { session: Session }) {
         <CardContent className="flex flex-col gap-2">
           <p className="text-muted-foreground text-sm">{session.brief}</p>
           {decision && <DecisionNote decision={decision} />}
-          {session.questions.length > 0 && (
-            <OpenQuestions questions={session.questions} />
-          )}
           {session.error && (
             <p role="alert" className="text-destructive text-sm">
               {session.error}
@@ -51,10 +61,21 @@ export function SessionDetails({ session }: { session: Session }) {
           )}
         </CardContent>
       </Card>
+      {session.status === "awaiting_clarification" &&
+        session.questions.length > 0 && (
+          // Keyed by round: a question asked again starts with an empty answer.
+          <ClarificationForm
+            key={session.clarifications.length}
+            questions={session.questions}
+            clarifications={session.clarifications}
+            onSubmit={actions.clarify}
+          />
+        )}
       <UsageMeter usage={session.usage} />
-      {session.planning_request && (
-        <PlanningRequestSummary request={session.planning_request} />
-      )}
+      <AssumptionsPanel
+        assumptions={session.assumptions}
+        status={session.status}
+      />
       {session.plan_revision && (
         <Card>
           <CardHeader>
@@ -98,50 +119,5 @@ function DecisionNote({ decision }: { decision: PlanDecision }) {
         ? `${revision} was approved.`
         : `${revision} was rejected: ${decision.reason ?? ""}`}
     </p>
-  );
-}
-
-// Answering them, and the assumptions panel, arrive in E10 (ADR 0048).
-function OpenQuestions({ questions }: { questions: ClarificationQuestion[] }) {
-  return (
-    <ul aria-label="Clarification questions" className="list-disc pl-5 text-sm">
-      {questions.map((question) => (
-        <li key={question.id}>
-          {question.question}
-          {question.suggestions.length > 0 &&
-            ` (${question.suggestions.join(", ")}?)`}
-        </li>
-      ))}
-    </ul>
-  );
-}
-
-function PlanningRequestSummary({ request }: { request: PlanningRequest }) {
-  const { scope, promo_window } = request;
-  const terms: [string, string][] = [
-    ["Regions", scope.regions.join(", ")],
-    ["Categories", scope.categories.join(", ")],
-    [
-      "Promo window",
-      `${formatWeek(promo_window.start_week)}–${formatWeek(promo_window.end_week)}`,
-    ],
-    ["Marketing budget", formatRupees(request.marketing_budget)],
-  ];
-  return (
-    <Card role="region" aria-labelledby="planning-request-title">
-      <CardHeader>
-        <CardTitle id="planning-request-title">Planning request</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <dl className="grid grid-cols-[max-content_1fr] gap-x-6 gap-y-1 text-sm">
-          {terms.map(([term, value]) => (
-            <div key={term} className="contents">
-              <dt className="text-muted-foreground">{term}</dt>
-              <dd>{value}</dd>
-            </div>
-          ))}
-        </dl>
-      </CardContent>
-    </Card>
   );
 }

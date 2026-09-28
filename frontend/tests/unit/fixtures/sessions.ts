@@ -419,3 +419,107 @@ export const openIssuesSession: SessionResponse = {
     ],
   },
 };
+
+type Assumption = components["schemas"]["Assumption"];
+
+// What the Context agent read (ADR 0048): exact readings, a fuzzy one, a brief value
+// company policy overrode, a policy default and a fact from data.
+export const contextAssumptions: Assumption[] = [
+  {
+    field: "scope.regions",
+    value: "North, West",
+    source: "brief",
+    confidence: 1,
+    flagged: false,
+    note: null,
+    fallback: false,
+  },
+  {
+    field: "scope.categories",
+    value: "Snacks",
+    source: "brief",
+    confidence: 0.83,
+    flagged: false,
+    note: null,
+    fallback: false,
+  },
+  {
+    field: "marketing_budget",
+    value: "₹200,000",
+    source: "brief",
+    confidence: 1,
+    flagged: false,
+    note: null,
+    fallback: false,
+  },
+  {
+    field: "min_margin",
+    value: "15.0% (company policy; the brief asked for 5.0%)",
+    source: "brief",
+    confidence: 1,
+    flagged: true,
+    note: "The brief's minimum margin of 5.0% is below the company-policy floor of 15.0%; the floor applies.",
+    fallback: false,
+  },
+  {
+    field: "kvi_price_tolerance",
+    value: "5.0% (company policy)",
+    source: "default",
+    confidence: 1,
+    flagged: false,
+    note: null,
+    fallback: false,
+  },
+  {
+    field: "overstocked_skus",
+    value: "SKU0003 in North",
+    source: "data",
+    confidence: 1,
+    flagged: false,
+    note: null,
+    fallback: false,
+  },
+];
+
+// The same brief read by rules while the language model was down (ADR 0053).
+export const fallbackAssumptions: Assumption[] = [
+  {
+    field: "scope.regions",
+    value: "North, West",
+    source: "brief",
+    confidence: 0.7,
+    flagged: false,
+    note: "Read by rules: the language model was unavailable.",
+    fallback: true,
+  },
+  {
+    field: "as_of_week",
+    value: "week 104 (starts 2026-09-21)",
+    source: "data",
+    confidence: 1,
+    flagged: false,
+    note: null,
+    fallback: true,
+  },
+];
+
+// A second round: the first answer could not be read, so the budget is asked again.
+export const repeatedQuestionSession: SessionResponse = {
+  ...awaitingClarificationSession,
+  questions: [
+    {
+      id: "marketing_budget",
+      field: "marketing_budget",
+      question:
+        'The marketing budget reads as "2 laks". What budget should the plan\'s promo cost stay within, in rupees?',
+      reason: "low_confidence",
+      suggestions: [],
+    },
+  ],
+  clarifications: [
+    {
+      question: awaitingClarificationSession.questions[0],
+      answer: "2 laks",
+    },
+  ],
+};

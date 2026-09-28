@@ -1,5 +1,5 @@
-import { render, screen, within } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { fireEvent, render, screen, within } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
 
 import { SessionDetails } from "@/components/session-details";
 
@@ -7,6 +7,7 @@ import {
   approvedSession,
   awaitingApprovalSession,
   awaitingClarificationSession,
+  contextAssumptions,
   failedSession,
   infeasibleSession,
   planLines,
@@ -26,19 +27,28 @@ describe("SessionDetails", () => {
     expect(screen.queryByRole("table")).not.toBeInTheDocument();
   });
 
-  it("shows a plan awaiting approval with the planning request it read", () => {
-    render(<SessionDetails session={awaitingApprovalSession} />);
+  it("shows a plan awaiting approval with the assumptions it rests on", () => {
+    render(
+      <SessionDetails
+        session={{
+          ...awaitingApprovalSession,
+          assumptions: contextAssumptions,
+        }}
+      />,
+    );
 
     expect(screen.getByRole("status")).toHaveTextContent("Awaiting approval");
     expect(screen.queryByRole("progressbar")).not.toBeInTheDocument();
 
-    const request = screen.getByRole("region", { name: "Planning request" });
-    expect(termsOf(request)).toEqual({
-      Regions: "North, West",
-      Categories: "Snacks",
-      "Promo window": "W105–W108",
-      "Marketing budget": "₹2,00,000",
-    });
+    // Every request field is an assumption (ADR 0048 D3), so the panel replaces
+    // the E3 planning-request summary (ADR 0061).
+    const assumptions = screen.getByRole("table", { name: "Assumptions" });
+    expect(
+      within(assumptions).getByRole("rowheader", { name: "Regions" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("region", { name: "Planning request" }),
+    ).not.toBeInTheDocument();
 
     expect(screen.getByText("Plan revision 1")).toBeInTheDocument();
     expect(
@@ -129,31 +139,44 @@ describe("SessionDetails", () => {
     ).toBeInTheDocument();
   });
 
-  it("lists the questions a session awaiting clarification asks", () => {
-    render(<SessionDetails session={awaitingClarificationSession} />);
+  it("asks a session's open questions as a form that sends the answers", async () => {
+    const clarify = vi.fn(async () => ({ ok: true as const }));
+    render(
+      <SessionDetails
+        session={awaitingClarificationSession}
+        actions={{ clarify }}
+      />,
+    );
 
     expect(screen.getByRole("status")).toHaveTextContent(
       "Awaiting clarification",
     );
-    const questions = screen.getByRole("list", {
-      name: "Clarification questions",
-    });
-    expect(
-      within(questions)
-        .getAllByRole("listitem")
-        .map((item) => item.textContent),
-    ).toEqual([
-      "What marketing budget should the plan's promo cost stay within, in rupees?",
-      'Which product categories does "snak stuff" mean? (Snacks?)',
-    ]);
     expect(screen.queryByRole("progressbar")).not.toBeInTheDocument();
+    const form = screen.getByRole("form", { name: "Clarification questions" });
+    const [budget, categories] = within(form).getAllByRole("textbox");
+    fireEvent.change(budget, { target: { value: "₹2 lakh" } });
+    fireEvent.change(categories, { target: { value: "Snacks" } });
+    fireEvent.click(
+      within(form).getByRole("button", { name: "Answer and resume planning" }),
+    );
+
+    await vi.waitFor(() =>
+      expect(clarify).toHaveBeenCalledWith({
+        marketing_budget: "₹2 lakh",
+        "scope.categories": "Snacks",
+      }),
+    );
+    // What the agent read so far stays visible beside the questions.
+    expect(
+      screen.getByRole("table", { name: "Assumptions" }),
+    ).toHaveTextContent("North, West");
   });
 
-  it("lists no questions when none are open", () => {
+  it("asks nothing when no questions are open", () => {
     render(<SessionDetails session={awaitingApprovalSession} />);
 
     expect(
-      screen.queryByRole("list", { name: "Clarification questions" }),
+      screen.queryByRole("form", { name: "Clarification questions" }),
     ).not.toBeInTheDocument();
   });
 
@@ -165,13 +188,3 @@ describe("SessionDetails", () => {
     ).not.toBeInTheDocument();
   });
 });
-
-function termsOf(element: HTMLElement): Record<string, string | null> {
-  const terms = within(element).getAllByRole("term");
-  return Object.fromEntries(
-    terms.map((term) => [
-      term.textContent,
-      term.nextElementSibling?.textContent ?? null,
-    ]),
-  );
-}
