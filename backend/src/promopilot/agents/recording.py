@@ -462,6 +462,9 @@ async def record_cassettes(
     once every session played as scripted with nothing falling back, so a failed run changes
     nothing. Then every cassette no recorded session lists is removed, so none goes stale.
     With `only`, the other sessions keep their recording. Other files are kept.
+
+    A request asked again, in the same session or another, is answered from the cassette its
+    first answer was recorded in (`RecordingProvider`), so every session replays.
     """
     chosen = [script for script in scripts if only is None or script.name in only]
     unknown = sorted(set(only or ()).difference(script.name for script in scripts))
@@ -481,6 +484,12 @@ async def record_cassettes(
             if script.name not in only and script.name in previous.sessions
         }
     with tempfile.TemporaryDirectory() as scratch:
+        # A request a kept session recorded keeps its answer: the recorder answers it from the
+        # cassette instead of asking the live model again, so the kept session still replays.
+        for session in kept.values():
+            for digest in session.cassettes:
+                name = f"{digest}.json"
+                shutil.copy2(cassette_dir.joinpath(name), Path(scratch).joinpath(name))
         recorder = RecordingProvider(live, Path(scratch))
         played = [await _play(script, recorder, data, planning) for script in chosen]
         problems = [problem for result in played for problem in result.problems]

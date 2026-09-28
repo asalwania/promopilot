@@ -514,3 +514,49 @@ async def test_with_no_manifest_the_check_still_replays_and_names_each_miss(
     assert problems[0] == f"no {MANIFEST} in {tmp_path}: run `make record-cassettes`"
     assert any("read the brief by rules (cassette_missing)" in p for p in problems)
     assert any("(BriefReading)" in p for p in problems)
+
+
+# --- a request asked twice keeps one answer ----------------------------------------------------
+
+
+async def test_two_sessions_asking_the_same_request_share_one_answer_and_both_replay(
+    data: InMemoryRetailData, tmp_path: Path
+) -> None:
+    # Both sessions read the brief the same way and plan the same revision, so their Explainer
+    # requests are one request. A live model may word it differently the second time; the
+    # recorder answers it from the first cassette, so both sessions replay (ADR 0054).
+    first, second = script("first"), script("second", BRIEF, {"approve": True})
+    turns = round_turns(await request_for(data))
+    reworded = GROUNDED.model_copy(update={"summary": "One Snacks line in North from W54."})
+    live = FakeProvider([reading(), *turns, GROUNDED, reading(), *turns, reworded])
+
+    manifest = await record_cassettes([first, second], live, data, tmp_path, planning())
+
+    assert manifest.sessions["first"].cassettes == manifest.sessions["second"].cassettes
+    assert await check_cassettes([first, second], data, tmp_path, planning()) == []
+
+
+async def test_only_answers_a_request_a_kept_session_recorded_from_its_cassette(
+    data: InMemoryRetailData, tmp_path: Path
+) -> None:
+    first, second = script("first"), script("second", BRIEF, {"approve": True})
+    turns = round_turns(await request_for(data))
+    await record_cassettes(
+        [first, second],
+        FakeProvider([reading(), *turns, GROUNDED]),
+        data,
+        tmp_path,
+        planning(),
+    )
+    reworded = GROUNDED.model_copy(update={"summary": "One Snacks line in North from W54."})
+
+    await record_cassettes(
+        [first, second],
+        FakeProvider([reading(), *turns, reworded]),
+        data,
+        tmp_path,
+        planning(),
+        only=["second"],
+    )
+
+    assert await check_cassettes([first, second], data, tmp_path, planning()) == []

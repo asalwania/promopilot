@@ -12,7 +12,7 @@ SPEC, #10 and #51 leave open:
 - how CI proves whole sessions replay;
 - what happens to the cassette that was migrated by hand.
 
-We chose these with the owner (D1–D11 on #51; every recommended option).
+We chose these with the owner (D1–D11 on #51; every recommended option). D12 records what the first live recording taught.
 
 ## Decisions
 
@@ -80,6 +80,12 @@ We chose these with the owner (D1–D11 on #51; every recommended option).
   - the four `CRITIC_*` thresholds.
 
   `--check` names any that differ on the replaying stack. `Planning.recorded_settings` lists them, and `Planning.recorded()` builds what the recorder and the check play with.
+- **D12. One answer per request, and no raw floats in a request.** The first live recording (58a5fe4) replayed e2e and the demo on Windows. clarify missed there, and e2e and clarify both missed on Linux. There were two causes, both found without live calls:
+  - **The same request asked twice got two answers.** The Critic reviewed an identical plan in several attempts, and in both e2e and clarify, so it was asked the identical request several times. gpt-4.1-mini worded its feedback differently across those calls, even at temperature 0. Each later planner attempt opened with whichever wording it had been given, but the cassette kept only the last one written. So on replay, an attempt opened with the other wording and missed.
+    - `RecordingProvider` now answers a request already recorded in its directory from that cassette, without asking the live model again. It then reports no usage.
+    - With `--only`, the kept sessions' cassettes are copied into the recording's scratch directory first, so a request a kept session shares keeps its answer.
+  - **Raw floats differed between machines.** The planner's feedback message dumped each finding whole, including its raw `actual` share (0.5183146894877728 on the Windows recording, 0.5183146894877586 on Linux-trained models). So on Linux every loop-back request missed. The Critic's and Explainer's requests were unaffected, because they carry only formatted numbers (ADR 0050). The feedback message now leaves out `actual` and `limit`: each finding's message already states them as they may be cited.
+  - Both change only the requests of planner attempts after the first, so e2e and clarify, which looped, need re-recording (`make record-cassettes ONLY="e2e clarify"`). The demo never looped back, and it replays on Linux as recorded.
 
 ## Recording
 

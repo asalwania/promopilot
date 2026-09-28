@@ -227,7 +227,7 @@ make up                 # rebuild the api image with the new cassettes
 - asks a question its script does not answer;
 - records an answer citing a number its tool data does not show.
 
-A full run removes every cassette no session lists, so commit the whole directory. `make record-cassettes ONLY=demo` re-records one session and keeps the others. It prints each session's route and the live cost (a few tenths of a dollar for all three).
+A request asked again, in the same session or another, is answered from the cassette of its first answer, so every session replays as recorded. A full run removes every cassette no session lists, so commit the whole directory. `make record-cassettes ONLY=demo` re-records one session and keeps the others. It prints each session's route and the live cost (a few tenths of a dollar for all three).
 
 ## API
 

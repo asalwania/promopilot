@@ -244,3 +244,33 @@ async def test_a_cassette_without_usage_replays_with_none(tmp_path: Path) -> Non
 def only_cassette(cassette_dir: Path) -> Path:
     [cassette] = cassette_dir.glob("*.json")
     return cassette
+
+
+async def test_a_request_already_recorded_is_answered_from_its_cassette_not_asked_again(
+    tmp_path: Path,
+) -> None:
+    # A live model can answer the same request differently each time, but a cassette keeps one
+    # answer: had the recorder asked again, the conversation that went on from the first answer
+    # would not replay from the cassette that kept the second (ADR 0054).
+    live = FakeProvider([Weather(city="Pune", celsius=31), Weather(city="Pune", celsius=32)])
+    recorder = RecordingProvider(live, tmp_path)
+
+    first = await recorder.complete_structured(Weather, ASK)
+    again = await recorder.complete_structured(Weather, list(ASK))
+
+    assert again == first == Weather(city="Pune", celsius=31)
+    assert len(live.calls) == 1
+    assert await ReplayProvider(tmp_path).complete_structured(Weather, ASK) == first
+
+
+async def test_a_tool_request_already_recorded_is_answered_from_its_cassette(
+    tmp_path: Path,
+) -> None:
+    live = FakeProvider([ToolTurn(text="31 C"), ToolTurn(text="32 C")])
+    recorder = RecordingProvider(live, tmp_path)
+
+    first = await recorder.complete_with_tools([], ASK)
+    again = await recorder.complete_with_tools([], list(ASK))
+
+    assert again == first == ToolTurn(text="31 C")
+    assert len(live.calls) == 1

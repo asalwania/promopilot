@@ -137,7 +137,13 @@ class ReplayProvider:
 
 
 class RecordingProvider:
-    """Wraps a live provider and writes each request and parsed response as a cassette."""
+    """Wraps a live provider and writes each request and parsed response as a cassette.
+
+    A request already recorded in the directory is answered from its cassette, not asked
+    again: a live model may answer the same request differently each time, a cassette keeps
+    one answer, and a conversation that went on from another answer would not replay
+    (ADR 0054). Such an answer bills nothing, so it reports no usage.
+    """
 
     def __init__(self, inner: LLMProvider, cassette_dir: Path) -> None:
         self._inner = inner
@@ -146,18 +152,33 @@ class RecordingProvider:
     async def complete_structured[T: BaseModel](
         self, schema: type[T], messages: Sequence[Message]
     ) -> T:
+        content = _structured_content(schema, messages)
+        recorded = self._recorded(content)
+        if recorded is not None:
+            return schema.model_validate(recorded)
         with track_usage() as billed:
             response = await self._inner.complete_structured(schema, messages)
-        self._write(_structured_content(schema, messages), schema.__name__, response, billed)
+        self._write(content, schema.__name__, response, billed)
         return response
 
     async def complete_with_tools(
         self, tools: Sequence[ToolSpec], messages: Sequence[Message]
     ) -> ToolTurn:
+        content = _tool_content(tools, messages)
+        recorded = self._recorded(content)
+        if recorded is not None:
+            return ToolTurn.model_validate(recorded)
         with track_usage() as billed:
             response = await self._inner.complete_with_tools(tools, messages)
-        self._write(_tool_content(tools, messages), ToolTurn.__name__, response, billed)
+        self._write(content, ToolTurn.__name__, response, billed)
         return response
+
+    def _recorded(self, content: dict[str, Any]) -> Any:
+        """The response already recorded for this request, or None."""
+        path = _cassette_path(self._dir, _digest(content))
+        if not path.is_file():
+            return None
+        return json.loads(path.read_text(encoding="utf-8"))["response"]
 
     def _write(
         self,
