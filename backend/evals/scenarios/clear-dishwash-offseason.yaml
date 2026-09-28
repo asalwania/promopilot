@@ -4,7 +4,7 @@ group: overstock_clearance
 brief: >-
   Plan an off-season promotion for Home Care in North and East for weeks 84-86, with a marketing
   budget of ₹1.5 lakh. We are overstocked on Ujala Home Dishwash 250ml and Ujala Home Dishwash
-  500ml — clear at least 40% of that stock.
+  500ml — clear at least 35% of that stock.
 as_of_week: 82
 seed: 0
 labels:
@@ -13,8 +13,8 @@ labels:
   promo_window: {start_week: 84, end_week: 86}
   marketing_budget: 150000
   clearance_targets:
-    - {sku_id: SKU0114, sell_through: 0.4}
-    - {sku_id: SKU0115, sell_through: 0.4}
+    - {sku_id: SKU0114, sell_through: 0.35}
+    - {sku_id: SKU0115, sell_through: 0.35}
 expect:
   - declares_infeasible: false
   - meets_clearance: SKU0114

@@ -72,7 +72,7 @@ We chose these with the owner (D1–D11 on #56; every recommended option).
 
     Only the infeasible group expects `declares_infeasible: true`.
 
-  It does not solve anything, so a scenario can still be feasible or infeasible only in name. The full run below checked that.
+  It does not solve anything, so a scenario can still be feasible or infeasible only in name. The first offline run below checked that, and one clearance target was lowered because of it.
 - **D6. `no_strong_substitutes_together: true`** (`promopilot.evals.substitutes`).
   - **Strong:** a pair is strong when it is in the ground truth's `substitute_pairs` and the larger of its two directed true θ is at least `STRONG_SUBSTITUTE_THETA = 0.5`. At θ = 0.5, a 20% cut on one SKU costs the other about 10.6% of its units. That covers about the top 60% of the generator's U[0.3, 0.8] range: 80 of the seed-42 world's 91 true pairs.
   - **In scope:** both SKUs are in the final request's categories, and among its named SKUs when it names any.
@@ -128,7 +128,9 @@ The three starters replay the app's cassettes and cost nothing. Five smoke scena
 - `make record-eval-cassettes` is new.
 - A `Scenario` whose labelled window starts at or before its as-of week is refused.
 - There is no migration, no API change and no new configuration.
-- **Runtime:** a full `make eval` replays 32 sessions of 150–250 s each on an idle machine (ADR 0056), plus four fits. That is **about 80–130 minutes**; `RUNS=5` for consistency is five times that. The first full replay with no eval cassettes is described below.
+- **Runtime:**
+  - Once recorded, a full `make eval` replays 32 LLM sessions of 150–250 s each (ADR 0056), plus four fits: **about 80–130 minutes**. `RUNS=5` for consistency is five times that.
+  - Before recording, the new scenarios plan by the default sequence and run much faster. The first offline run took **40 minutes**.
 - Until the suite is recorded, the 29 new scenarios fall back on replay:
   - Context reads by rules, which D4 guarantees still plans them;
   - the planner runs its default sequence;
@@ -136,3 +138,25 @@ The three starters replay the app's cassettes and cost nothing. Five smoke scena
 
   So they have no grounding value and cost nothing, and extraction accuracy measures the rules rather than the LLM.
 - #57 picks its five smoke scenarios from this suite, and CI replays them on Linux. A number fitted in memory on Linux could format differently from the Windows recording and miss (ADR 0054 D12). The smoke job would show it.
+
+## First offline run
+
+The whole suite was played once with `LLM_PROVIDER=replay` and no eval cassettes, on the seed-42 world, on the Windows host while other tests ran.
+
+- **Time:** 40 minutes in all (2,400 s). Sessions without the fits took 29 minutes, with a P50 session of 37 s. The three starters took about 150 s each.
+- **The starters** replayed the app's cassettes whole, through the layered provider, with nothing falling back. The other 29 fell back as expected, and every one reached a plan:
+  - Context read by rules;
+  - the planner ran its default sequence;
+  - the Explainer used its template.
+- **Metrics:**
+  - extraction 147 of 147;
+  - clarification 3 of 3;
+  - infeasibility handling 2 of 2, each relaxation changing a clearance target and the budget or the margin;
+  - constraint satisfaction 27 of 28;
+  - oracle breach rate 11 of 28;
+  - 28 of 32 scenarios passed.
+- **Changed before merge:** `clear-dishwash-offseason` asked for 40% sell-through and came out `INFEASIBLE` at 39.87% and 39.31%. It tested infeasibility instead of clearance, so its target is now 35%, and it then planned and passed.
+- **Findings for the target review (#58), left as they are:**
+  - `clear-curd-diwali-2025` is `FEASIBLE`: the solver stopped on its time budget. Yet `validate_plan` finds SKU0057 in North at 28.3% sell-through against a 50% target, so its constraint check fails. The optimiser's clearance constraint and the plan-time check disagree.
+  - `cannibal-bakery-diwali-2026`: the default-sequence plan promotes the strong pair SKU0194 and SKU0195 (θ 0.64) together in North and West. The other two cannibalisation scenarios avoid all their strong pairs.
+  - `demo-budget-cut-drop-west` ends `INFEASIBLE` at 59.87% of its 60% target, as ADR 0056 found.
