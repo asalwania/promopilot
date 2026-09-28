@@ -40,7 +40,7 @@ from promopilot.agents.tools import ToolError, ToolOk, ToolResult, ToolSpec
 from promopilot.agents.tools.run_optimizer import RunOptimizerOutput
 from promopilot.agents.trace import TracedToolRegistry, emit
 from promopilot.competitors import CompetitorGaps
-from promopilot.domain import DecisionMade, OpenIssue, PlanningRequest
+from promopilot.domain import DecisionMade, OpenIssue, PlanningRequest, Scope
 from promopilot.llm import CassetteMissError, LLMError, LLMProvider, Message
 from promopilot.llm import ToolSpec as LLMToolSpec
 
@@ -54,10 +54,14 @@ RETRY_DELAYS_S: Final = (0.5, 1.0)
 """Waits between the attempts of a tool that raises: three attempts in all."""
 
 GENERATE_CANDIDATES: Final = "generate_candidates"
+COMPARE_MECHANISMS: Final = "compare_mechanisms"
 RUN_OPTIMIZER: Final = "run_optimizer"
 GET_COMPETITOR_GAPS: Final = "get_competitor_gaps"
-REQUEST_TOOLS: Final = frozenset({GENERATE_CANDIDATES, "compare_mechanisms"})
+REQUEST_TOOLS: Final = frozenset({GENERATE_CANDIDATES, COMPARE_MECHANISMS})
 """Tools the LLM passes a planning request to."""
+ANALYSES: Final = frozenset({COMPARE_MECHANISMS})
+"""Request tools that only analyse, whose scope the LLM may narrow (ADR 0059): their result
+cannot change the plan."""
 
 FIXED_FIELDS: Final = (
     "as_of_week",
@@ -143,14 +147,20 @@ async def plan_with_tools(
     return await planner.explained(await default.plan(request), degraded=outcome)
 
 
-def loosening(given: PlanningRequest, proposed: PlanningRequest) -> tuple[str, ...]:
+def loosening(
+    given: PlanningRequest, proposed: PlanningRequest, *, scope_may_narrow: bool = False
+) -> tuple[str, ...]:
     """How `proposed` loosens the planning request the planner was `given`; empty when it only
-    adds or tightens the optimiser options (ADR 0049)."""
-    found = [
-        f"changes {field}"
-        for field in FIXED_FIELDS
-        if getattr(proposed, field) != getattr(given, field)
-    ]
+    adds or tightens the optimiser options (ADR 0049), or, when `scope_may_narrow` (an
+    analysis, ADR 0059), narrows the scope."""
+    found = []
+    for field in FIXED_FIELDS:
+        if getattr(proposed, field) == getattr(given, field):
+            continue
+        if field != "scope" or not scope_may_narrow:
+            found.append(f"changes {field}")
+        elif not _narrows(given.scope, proposed.scope):
+            found.append("widens scope")
     for region, cap in given.regional_budget_caps.items():
         proposed_cap = proposed.regional_budget_caps.get(region)
         if proposed_cap is None:
@@ -170,6 +180,16 @@ def loosening(given: PlanningRequest, proposed: PlanningRequest) -> tuple[str, .
         elif proposed_skus > sku_cap:
             found.append("raises the promoted-SKU cap")
     return tuple(found)
+
+
+def _narrows(given: Scope, proposed: Scope) -> bool:
+    """Whether `proposed` covers only SKUs and regions `given` covers."""
+    return (
+        set(proposed.regions) <= set(given.regions)
+        and set(proposed.categories) <= set(given.categories)
+        and (not given.sku_ids or bool(proposed.sku_ids))
+        and set(proposed.sku_ids) <= set(given.sku_ids or proposed.sku_ids)
+    )
 
 
 class _Planner:
@@ -301,7 +321,7 @@ class _Planner:
             proposed = PlanningRequest.model_validate(arguments["request"])
         except ValidationError:
             return None  # the tool reports what is wrong with it
-        loosened = loosening(self._request, proposed)
+        loosened = loosening(self._request, proposed, scope_may_narrow=name in ANALYSES)
         if not loosened:
             return None
         return ToolError(
@@ -310,7 +330,8 @@ class _Planner:
                 f"the planning request may not loosen the brief: this call {'; '.join(loosened)}. "
                 "Pass the planning request as given; only regional_budget_caps, "
                 "kvi_price_tolerance and max_promoted_skus_per_category_per_region may be added "
-                "or tightened."
+                "or tightened. To plan fewer SKUs, keep the scope and pass generate_candidates' "
+                "exclude_sku_ids (SKUs to leave out) or sku_ids (the only SKUs to keep)."
             ),
         )
 

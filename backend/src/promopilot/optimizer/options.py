@@ -215,12 +215,14 @@ def generate_options(
     mechanisms: Sequence[Mechanism] | None = None,
     target_segments: Sequence[TargetSegment] | None = None,
     sku_ids: Sequence[str] | None = None,
+    exclude_sku_ids: Sequence[str] | None = None,
 ) -> PromoOptions:
     """The promo options for the planning request's scope and promo window.
 
-    `mechanisms`, `target_segments` and `sku_ids` narrow the enumeration further; a SKU
-    outside the request's scope is a ValueError, as is an option the demand model cannot
-    predict.
+    `mechanisms`, `target_segments` and `sku_ids` narrow the enumeration further, and
+    `exclude_sku_ids` leaves SKUs out (ADR 0059). A ValueError for: a SKU outside the request's
+    scope, a SKU both kept and left out, leaving out every SKU or a clearance target of the
+    brief, and an option the demand model cannot predict.
     """
     catalogue = _Catalogue.of(context.products)
     cleared = _clearance_skus(context.products, request)
@@ -232,6 +234,8 @@ def generate_options(
     chosen = [mechanism for mechanism in Mechanism if mechanisms is None or mechanism in mechanisms]
     per_price = len(timings) * len(targets)
     scoped = _in_scope(context.products, request, sku_ids)
+    if exclude_sku_ids:
+        scoped = _left_out(scoped, context.products, request, sku_ids, exclude_sku_ids, cleared)
     matches = _price_matches(context.competitor_gaps, request, set(scoped), catalogue)
 
     pruned: Counter[PruneReason] = Counter()
@@ -525,6 +529,31 @@ def _in_scope(
             raise ValueError(f"not in the planning request's scope: {', '.join(outside)}")
         scoped &= set(sku_ids)
     return sorted(scoped)
+
+
+def _left_out(
+    scoped: list[str],
+    products: pd.DataFrame,
+    request: PlanningRequest,
+    sku_ids: Sequence[str] | None,
+    exclude_sku_ids: Sequence[str],
+    cleared: Sequence[str],
+) -> list[str]:
+    """The scoped SKUs without those left out."""
+    in_scope = set(_in_scope(products, request, None))
+    outside = [sku_id for sku_id in exclude_sku_ids if sku_id not in in_scope]
+    if outside:
+        raise ValueError(f"not in the planning request's scope: {', '.join(outside)}")
+    both = [sku_id for sku_id in exclude_sku_ids if sku_ids is not None and sku_id in sku_ids]
+    if both:
+        raise ValueError(f"both kept and left out: {', '.join(both)}")
+    targets = [sku_id for sku_id in exclude_sku_ids if sku_id in cleared]
+    if targets:
+        raise ValueError(f"may not leave out a clearance target of the brief: {', '.join(targets)}")
+    kept = [sku_id for sku_id in scoped if sku_id not in set(exclude_sku_ids)]
+    if not kept:
+        raise ValueError("leaving these SKUs out leaves no SKU to promote")
+    return kept
 
 
 def _timings(window: PromoWindow) -> list[tuple[int, int]]:

@@ -278,3 +278,93 @@ async def test_a_clearance_target_outside_the_scope_is_invalid_input(
     assert isinstance(result, ToolError)
     assert result.code == "invalid_input"
     assert outside in result.message
+
+
+# The planner's lever for a SKU the Critic flags: leave it out (ADR 0059).
+
+
+def first_category_skus(small_history: DemandHistory) -> list[str]:
+    products = small_history.products
+    category = sorted(products["category"].unique())[0]
+    return sorted(
+        str(sku_id) for sku_id in products.loc[products["category"] == category, "sku_id"]
+    )
+
+
+async def test_the_planner_can_leave_skus_out(
+    tools: ToolRegistry, store: CandidateStore, small_history: DemandHistory
+) -> None:
+    left_out = first_category_skus(small_history)[:2]
+
+    result = await tools.call(
+        "generate_candidates", arguments(small_history, exclude_sku_ids=left_out)
+    )
+
+    assert isinstance(result, ToolOk), result
+    assert isinstance(result.output, GenerateCandidatesOutput)
+    stored = store.get(result.output.candidate_set_id)
+    assert stored is not None
+    generated = {line.sku_id for line in stored.options.lines}
+    assert generated, "the other SKUs still have options"
+    assert not generated & set(left_out)
+    assert all(match.sku_id not in left_out for match in stored.options.price_matches)
+
+
+async def test_leaving_skus_out_combines_with_keeping_only_some(
+    tools: ToolRegistry, store: CandidateStore, small_history: DemandHistory
+) -> None:
+    kept, left_out = first_category_skus(small_history)[:3], first_category_skus(small_history)[2]
+
+    result = await tools.call(
+        "generate_candidates",
+        arguments(small_history, sku_ids=kept[:2], exclude_sku_ids=[left_out]),
+    )
+
+    assert isinstance(result, ToolOk), result
+    assert isinstance(result.output, GenerateCandidatesOutput)
+    stored = store.get(result.output.candidate_set_id)
+    assert stored is not None
+    assert {line.sku_id for line in stored.options.lines} <= set(kept[:2])
+
+
+async def test_a_sku_left_out_changes_the_candidate_set_id(
+    tools: ToolRegistry, small_history: DemandHistory
+) -> None:
+    async def set_id(**changes: Any) -> object:
+        result = await tools.call("generate_candidates", arguments(small_history, **changes))
+        assert isinstance(result, ToolOk), result
+        assert isinstance(result.output, GenerateCandidatesOutput)
+        return result.output.candidate_set_id
+
+    left_out = first_category_skus(small_history)[:1]
+    assert await set_id(exclude_sku_ids=left_out) != await set_id()
+
+
+def exclusion_errors(small_history: DemandHistory) -> list[tuple[dict[str, Any], str]]:
+    products = small_history.products
+    skus = first_category_skus(small_history)
+    category = sorted(products["category"].unique())[0]
+    outside = str(products.loc[products["category"] != category, "sku_id"].iloc[0])
+    target = [{"sku_id": skus[0], "sell_through": 0.5}]
+    return [
+        ({"exclude_sku_ids": [outside]}, f"not in the planning request's scope: {outside}"),
+        ({"sku_ids": skus[:2], "exclude_sku_ids": skus[1:2]}, f"both kept and left out: {skus[1]}"),
+        ({"exclude_sku_ids": skus}, "leaves no SKU"),
+        (
+            {"request": {"clearance_targets": target}, "exclude_sku_ids": skus[:1]},
+            f"clearance target of the brief: {skus[0]}",
+        ),
+    ]
+
+
+@pytest.mark.parametrize("case", range(4), ids=["outside", "both", "all", "clearance"])
+async def test_a_sku_that_cannot_be_left_out_is_invalid_input(
+    tools: ToolRegistry, small_history: DemandHistory, case: int
+) -> None:
+    changes, message = exclusion_errors(small_history)[case]
+
+    result = await tools.call("generate_candidates", arguments(small_history, **changes))
+
+    assert isinstance(result, ToolError)
+    assert result.code == "invalid_input"
+    assert message in result.message

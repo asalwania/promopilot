@@ -678,6 +678,74 @@ def test_an_option_the_brief_set_may_only_be_tightened() -> None:
     )
 
 
+def test_an_analysis_may_narrow_the_scope_but_never_widen_it() -> None:
+    given = PlanningRequest(
+        as_of_week=HISTORY_WEEKS,
+        scope=Scope(regions=(Region.NORTH, Region.SOUTH), categories=("Snacks", "Beverages")),
+        promo_window=PromoWindow(start_week=HISTORY_WEEKS + 2, end_week=HISTORY_WEEKS + 3),
+        marketing_budget=20_000.0,
+    )
+
+    def narrowing(**scope: Any) -> tuple[str, ...]:
+        proposed = given.model_copy(update={"scope": given.scope.model_copy(update=scope)})
+        return loosening(given, proposed, scope_may_narrow=True)
+
+    assert narrowing() == ()
+    assert narrowing(regions=(Region.SOUTH,), categories=("Snacks",), sku_ids=("SKU0001",)) == ()
+    assert narrowing(regions=(Region.NORTH, Region.WEST)) == ("widens scope",)
+    assert narrowing(categories=("Snacks", "Dairy")) == ("widens scope",)
+    listed = given.model_copy(
+        update={"scope": given.scope.model_copy(update={"sku_ids": ("SKU0001", "SKU0002")})}
+    )
+    assert loosening(listed, given, scope_may_narrow=True) == ("widens scope",)
+    fewer = given.scope.model_copy(update={"sku_ids": ("SKU0002",)})
+    assert (
+        loosening(listed, listed.model_copy(update={"scope": fewer}), scope_may_narrow=True) == ()
+    )
+    # Planning keeps the brief's scope.
+    assert loosening(given, listed) == ("changes scope",)
+
+
+async def test_compare_mechanisms_may_narrow_the_scope_but_generate_candidates_may_not(
+    data: InMemoryRetailData, request_read: PlanningRequest
+) -> None:
+    tools = ScriptedTools(
+        {
+            "compare_mechanisms": [Generated(candidate_set_id=SET_ID)],
+            "generate_candidates": [Generated(candidate_set_id=SET_ID)],
+            "run_optimizer": [optimised()],
+        }
+    )
+    narrowed = request_read.scope.model_copy(update={"sku_ids": ("SKU0001",)})
+    scope = narrowed.model_dump(mode="json")
+
+    state, llm = await plan(
+        data,
+        [
+            call(
+                "compare_mechanisms",
+                request=request_read.model_dump(mode="json") | {"scope": scope},
+                sku_id="SKU0001",
+                region="North",
+            ),
+            generate(request_read, scope=scope),
+            generate(request_read),
+            run(),
+            finish(),
+        ],
+        tools,
+    )
+
+    [compared] = tool_messages(llm, 2)
+    assert compared["ok"] is True
+    [_, refused] = tool_messages(llm, 3)
+    assert refused["ok"] is False
+    assert "changes scope" in refused["message"]
+    assert "exclude_sku_ids" in refused["message"]
+    assert tools.called()[:2] == ["compare_mechanisms", "generate_candidates"]
+    assert state.planner_degraded is None
+
+
 # Bounds: the planner always ends, with the optimiser's plan or the default sequence's.
 
 

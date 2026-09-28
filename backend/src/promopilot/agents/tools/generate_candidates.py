@@ -55,7 +55,8 @@ DESCRIPTION = (
     "that reaches the competitor's price. SKUs the request names for clearance count as "
     "overstocked. Returns counts, pruned counts per reason, counts per region and mechanism, "
     "the price matches offered, the top options by value, and a candidate_set_id to pass to "
-    "the optimiser. Narrow by mechanisms, target segments or SKU ids to generate fewer."
+    "the optimiser. Narrow by mechanisms, target segments or SKU ids to generate fewer, or "
+    "leave SKUs out with exclude_sku_ids."
 )
 
 
@@ -69,6 +70,13 @@ class GenerateCandidatesInput(BaseModel):
     )
     sku_ids: list[str] | None = Field(
         default=None, description="Only these SKUs of the request's scope; omit for all."
+    )
+    exclude_sku_ids: list[str] | None = Field(
+        default=None,
+        description=(
+            "SKUs of the request's scope to leave out, in every region: the lever for a SKU "
+            "the Critic flags. Not a clearance target of the brief; omit to leave none out."
+        ),
     )
 
 
@@ -158,6 +166,7 @@ def generate_candidates_tool(
                 mechanisms=arguments.mechanisms,
                 target_segments=arguments.target_segments,
                 sku_ids=arguments.sku_ids,
+                exclude_sku_ids=arguments.exclude_sku_ids,
             )
         except ValueError as error:
             raise ToolCallError("invalid_input", str(error)) from error
