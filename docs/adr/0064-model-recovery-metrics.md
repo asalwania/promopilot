@@ -70,4 +70,9 @@ We chose these with the owner (D1–D9 on #54; every recommended option).
   - `Metric.aim` and `promopilot.evals.report.format_amount`.
 - There is no migration, no API contract change and no new configuration.
 - The report gains eight metrics. #57 serves them as they are.
-- **First run** (`make eval`, replay, seed-42 world, as of week 104): FIRST_RUN
+- **First run** (`make eval`, replay, seed-42 world, as of week 104): every target is met.
+  - Elasticity recovery was 8.1%, with 679 of 800 SKU × segment estimates within 20%.
+  - Substitutes: precision 0.867 (91 of 105) and recall 1.00 (91 of 91).
+  - Complements: precision 1.00 (39 of 39) and recall 0.975 (39 of 40).
+  - Baseline WAPE was 43.5% at the model grain, 25.1% at store × SKU and 13.5% at region × SKU.
+  - The recovery metrics added no fit, because the three starter scenarios already fit week 104.
