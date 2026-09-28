@@ -11,14 +11,18 @@ only uses the revision's own numbers and always passes grounding.
 For an infeasible revision, or when company policy binds, the summary opens with the
 template's sentences on the binding constraints and the relaxation, whatever the LLM writes;
 the planner's notes follow, then the LLM's summary.
+
+A revision planned after an amendment carries its diff from the previous one (ADR 0052). The
+LLM is then shown the diff and the planning-request changes, with every amount already shown,
+and writes what changed and why in the same answer; the template writes it from the diff.
 """
 
 import json
 from collections.abc import Callable, Sequence
 from importlib.resources import files
-from typing import Final
+from typing import Any, Final
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from promopilot.domain import (
     BindingConstraint,
@@ -38,6 +42,7 @@ from promopilot.domain import (
     PlanRevisionLine,
     Region,
     RelaxedConstraint,
+    RevisionDiff,
     SelectionReasonCode,
     SimulatedOutcomes,
     SolveStatus,
@@ -71,11 +76,27 @@ class LineRationale(BaseModel):
     rationale: str = Field(description="Why the line is in the plan: one or two sentences.")
 
 
+def _every_field_required(schema: dict[str, Any]) -> None:
+    # Structured outputs need every property required; `changes` keeps a Python default only
+    # so answers built by hand need not name it. The LLM is never shown the default.
+    properties = schema.get("properties", {})
+    for field in properties.values():
+        field.pop("default", None)
+    schema["required"] = list(properties)
+
+
 class ExplainerAnswer(BaseModel):
     """What the Explainer's LLM writes for a plan revision."""
 
+    model_config = ConfigDict(json_schema_extra=_every_field_required)
+
     summary: str = Field(description="The plan summary: two to five sentences.")
     rationales: list[LineRationale] = Field(description="One rationale for every plan line.")
+    changes: str | None = Field(
+        default=None,
+        description="What changed from the previous plan revision and why: two to four "
+        "sentences; null when the plan data has no changes_from_previous.",
+    )
 
 
 def explainer_prompt() -> str:
@@ -115,16 +136,17 @@ async def explain_plan(
             reason = FallbackReason.LLM_UNAVAILABLE
             break
         rationales = _rationales(answer, revision)
-        problems = _structure_problems(answer, rationales)
+        problems = _structure_problems(answer, rationales, revision.diff)
         reason = FallbackReason.INVALID_ANSWER
         if not problems:
-            problems = _grounding_problems(answer, data)
+            problems = _grounding_problems(answer, data, revision.diff)
             reason = FallbackReason.UNGROUNDED
         if not problems and rationales is not None:
             return PlanExplanation(
                 summary=" ".join([*_opening(revision, notes), answer.summary.strip()]),
                 rationales=rationales,
                 source=ExplanationSource.LLM,
+                changes=None if revision.diff is None else (answer.changes or "").strip(),
             )
         messages = [
             *messages,
@@ -146,6 +168,7 @@ def template_explanations(
         summary=_summary(revision, open_issues, notes),
         rationales=tuple(_rationale(planned) for planned in revision.lines),
         source=ExplanationSource.TEMPLATE,
+        changes=None if revision.diff is None else _changes(revision.number, revision.diff),
     )
 
 
@@ -161,10 +184,16 @@ def _rationales(answer: ExplainerAnswer, revision: PlanRevision) -> tuple[str, .
     return tuple(written[number] for number in numbers)
 
 
-def _structure_problems(answer: ExplainerAnswer, rationales: tuple[str, ...] | None) -> list[str]:
+def _structure_problems(
+    answer: ExplainerAnswer, rationales: tuple[str, ...] | None, diff: RevisionDiff | None
+) -> list[str]:
     problems = []
     if not answer.summary.strip():
         problems.append("the summary is blank")
+    if diff is not None and not (answer.changes or "").strip():
+        problems.append(
+            f"write changes: what changed from plan revision {diff.from_revision} and why"
+        )
     if rationales is None:
         written = [item.line for item in answer.rationales]
         problems.append(
@@ -180,11 +209,15 @@ def _structure_problems(answer: ExplainerAnswer, rationales: tuple[str, ...] | N
     return problems
 
 
-def _grounding_problems(answer: ExplainerAnswer, data: object) -> list[str]:
+def _grounding_problems(
+    answer: ExplainerAnswer, data: object, diff: RevisionDiff | None
+) -> list[str]:
     parts = [
         ("the summary", answer.summary),
         *((f"the rationale for line {item.line}", item.rationale) for item in answer.rationales),
     ]
+    if diff is not None:
+        parts.append(("what changed", answer.changes or ""))
     problems = []
     for where, text in parts:
         report = check_numeric_grounding(text, data)
@@ -199,7 +232,8 @@ def _feedback(problems: Sequence[str]) -> str:
     return (
         f"Your answer failed PromoPilot's checks:\n{listed}\n"
         "Write the whole answer again. Copy every number exactly as the plan data shows it, "
-        "and write one rationale for every plan line."
+        "write one rationale for every plan line, and, when the plan data has "
+        "changes_from_previous, say what changed and why."
     )
 
 
@@ -226,6 +260,7 @@ def plan_data(
     line_facts = (
         {(fact.line.sku_id, fact.line.region): fact for fact in facts.lines} if facts else {}
     )
+    changes = {} if revision.diff is None else {"changes_from_previous": _diff_data(revision.diff)}
     return {
         "plan_revision": revision.number,
         "solver_status": None if revision.solver_status is None else revision.solver_status.value,
@@ -320,6 +355,63 @@ def plan_data(
                 policy.max_promoted_skus_per_category_per_region
             ),
         },
+        **changes,
+    }
+
+
+def _diff_data(diff: RevisionDiff) -> dict[str, object]:
+    """The diff from the previous revision, every amount shown as it may be cited. The
+    amendment's own words are not in it: the request changes say what it changed (ADR 0052)."""
+    return {
+        "from_revision": diff.from_revision,
+        "request_changes": [change.model_dump() for change in diff.request_changes],
+        "lines_added": [_diff_line(planned) for planned in diff.added],
+        "lines_removed": [_diff_line(planned) for planned in diff.removed],
+        "lines_changed": [
+            {
+                "sku_id": change.sku_id,
+                "region": change.region.value,
+                "changed": list(change.fields),
+                "before": _diff_line(change.before),
+                "after": _diff_line(change.after),
+            }
+            for change in diff.changed
+        ],
+        "line_counts": {
+            "added": len(diff.added),
+            "removed": len(diff.removed),
+            "changed": len(diff.changed),
+            "unchanged": diff.unchanged,
+        },
+        "objective": None
+        if diff.objective_delta is None
+        else _delta_data(diff.objective_before, diff.objective_after, diff.objective_delta),
+        "promo_cost": _delta_data(
+            diff.promo_cost_before, diff.promo_cost_after, diff.promo_cost_delta
+        ),
+    }
+
+
+def _diff_line(planned: PlanRevisionLine) -> dict[str, object]:
+    line = planned.line
+    return {
+        "sku_id": line.sku_id,
+        "region": line.region.value,
+        "mechanism": line.mechanism.value,
+        "depth": f"{line.depth_pct}%",
+        "weeks": line.duration_weeks,
+        "start_week": f"W{line.start_week}",
+        "target_segment": line.target_segment.value,
+        "promo_cost": format_rupees(planned.promo_cost),
+        "expected_incremental_profit": format_rupees(planned.expected_incremental_profit),
+    }
+
+
+def _delta_data(before: float | None, after: float | None, delta: float) -> dict[str, object]:
+    return {
+        "before": None if before is None else format_rupees(before),
+        "after": None if after is None else format_rupees(after),
+        "change": format_rupees(delta),
     }
 
 
@@ -473,6 +565,76 @@ def _summary(
         codes = sorted({issue.code.value for issue in open_issues})
         parts.append(f"Open issues the critic found: {', '.join(codes)}.")
     return " ".join(parts)
+
+
+_REQUEST_FIELDS = {
+    "as_of_week": "the as-of week",
+    "scope.regions": "the regions",
+    "scope.categories": "the categories",
+    "scope.sku_ids": "the SKUs",
+    "promo_window": "the promo window",
+    "marketing_budget": "the marketing budget",
+    "min_margin": "the minimum margin",
+    "clearance_targets": "the clearance targets",
+    "regional_budget_caps": "the regional budget caps",
+    "kvi_price_tolerance": "the KVI price tolerance",
+    "max_promoted_skus_per_category_per_region": "the cap on promoted SKUs per category and region",
+}
+
+
+def _changes(number: int, diff: RevisionDiff) -> str:
+    """What changed from the previous revision, in the diff's own numbers (ADR 0052)."""
+    parts = [f"Plan revision {number} changes plan revision {diff.from_revision}."]
+    if diff.request_changes:
+        named = [
+            f"{_REQUEST_FIELDS.get(change.field, change.field)} from {change.before} to "
+            f"{change.after}"
+            for change in diff.request_changes
+        ]
+        parts.append(f"The planning request changed: {'; '.join(named)}.")
+    else:
+        parts.append("The planning request did not change.")
+    if diff.added:
+        parts.append(f"Added: {_places(diff.added)}.")
+    if diff.removed:
+        parts.append(f"Removed: {_places(diff.removed)}.")
+    if diff.changed:
+        named = [
+            f"{change.sku_id} in {change.region.value} ({', '.join(change.fields)})"
+            for change in diff.changed
+        ]
+        parts.append(f"Changed: {', '.join(named)}.")
+    if diff.unchanged:
+        lines = "plan line is" if diff.unchanged == 1 else "plan lines are"
+        parts.append(f"{format_units(diff.unchanged)} {lines} unchanged.")
+    promo_cost = (
+        f"the promo cost from {format_rupees(diff.promo_cost_before)} to "
+        f"{format_rupees(diff.promo_cost_after)} ({_moved(diff.promo_cost_delta)})"
+    )
+    if diff.objective_delta is None:
+        parts.append(f"{promo_cost[0].upper()}{promo_cost[1:]}.")
+    else:
+        parts.append(
+            f"The objective goes from {_rupees(diff.objective_before)} to "
+            f"{_rupees(diff.objective_after)} ({_moved(diff.objective_delta)}), and {promo_cost}."
+        )
+    return " ".join(parts)
+
+
+def _places(lines: tuple[PlanRevisionLine, ...]) -> str:
+    return ", ".join(f"{planned.line.sku_id} in {planned.line.region.value}" for planned in lines)
+
+
+def _rupees(amount: float | None) -> str:
+    return "nothing" if amount is None else format_rupees(amount)
+
+
+def _moved(delta: float) -> str:
+    # The sign is written as a word; grounding ignores signs (ADR 0028).
+    shown = format_rupees(delta).removeprefix("-")
+    if shown == "₹0":
+        return "unchanged"
+    return f"down {shown}" if delta < 0 else f"up {shown}"
 
 
 def _opening(revision: PlanRevision, notes: tuple[str, ...]) -> list[str]:

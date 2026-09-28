@@ -18,6 +18,7 @@ from promopilot.domain.selection import (
     WhyChosen,
 )
 from promopilot.domain.simulation import PlanSimulation
+from promopilot.domain.vocabulary import Region
 
 
 class PlanRevisionLine(BaseModel):
@@ -34,6 +35,51 @@ class PlanRevisionLine(BaseModel):
     mechanism_comparison: tuple[MechanismOutcome, ...] = ()
     """Each mechanism's best option for the line's SKU and region, the line's own mechanism
     shown with the line itself (F-02, ADR 0041); empty for revisions planned before E7."""
+
+
+class LineChange(BaseModel):
+    """A plan line whose SKU and region are in both revisions but whose decision changed."""
+
+    model_config = ConfigDict(frozen=True)
+
+    sku_id: str
+    region: Region
+    fields: tuple[str, ...]
+    """The plan-line fields that changed (mechanism, depth_pct, ...), in `PlanLine` order."""
+    before: PlanRevisionLine
+    after: PlanRevisionLine
+
+
+class RequestChange(BaseModel):
+    """A planning-request field an amendment changed, shown as the explanation may cite it."""
+
+    model_config = ConfigDict(frozen=True)
+
+    field: str
+    before: str
+    after: str
+
+
+class RevisionDiff(BaseModel):
+    """What changed from the previous plan revision (AG-05, ADR 0052): plan lines matched by
+    (SKU, region), the objective and promo-cost deltas, and the planning-request changes."""
+
+    model_config = ConfigDict(frozen=True)
+
+    from_revision: int = Field(ge=1)
+    added: tuple[PlanRevisionLine, ...] = ()
+    removed: tuple[PlanRevisionLine, ...] = ()
+    changed: tuple[LineChange, ...] = ()
+    unchanged: int = Field(default=0, ge=0)
+    """Lines with the same decision in both revisions, whatever their expected numbers."""
+    objective_before: float | None = None
+    objective_after: float | None = None
+    objective_delta: float | None = None
+    """None unless both revisions have an objective."""
+    promo_cost_before: float = 0.0
+    promo_cost_after: float = 0.0
+    promo_cost_delta: float = 0.0
+    request_changes: tuple[RequestChange, ...] = ()
 
 
 class PlanRevision(BaseModel):
@@ -66,6 +112,8 @@ class PlanRevision(BaseModel):
     explanation: PlanExplanation | None = None
     """The Explainer's summary and rationales (ADR 0050); None until the Explainer has run,
     and for revisions planned before #49."""
+    diff: RevisionDiff | None = None
+    """What changed from the previous plan revision (ADR 0052); None for the first."""
 
     @model_validator(mode="after")
     def _is_a_valid_promo_plan(self) -> Self:

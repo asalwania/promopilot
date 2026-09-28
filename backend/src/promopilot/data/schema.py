@@ -154,6 +154,8 @@ planning_sessions = Table(
     Column("assumptions", JSONB),
     Column("questions", JSONB),
     Column("clarifications", JSONB),
+    # E8 #50 (ADR 0052): every amendment, oldest first.
+    Column("amendments", JSONB),
     Index("ix_planning_sessions_status", "status"),
 )
 
@@ -179,6 +181,8 @@ plan_revisions = Table(
     Column("open_issues", JSONB),
     # E8 #49 (ADR 0050): the Explainer's summary and rationales; null until it has run.
     Column("explanation", JSONB),
+    # E8 #50 (ADR 0052): the diff from the previous revision; null for the first.
+    Column("diff", JSONB),
 )
 
 plan_lines = Table(

@@ -1,6 +1,69 @@
 {
   "components": {
     "schemas": {
+      "AmendRequest": {
+        "additionalProperties": false,
+        "description": "Amend the planning request of a session awaiting approval or rejected (ADR 0052): in\nplain English, or by accepting the latest revision's relaxation. Exactly one of the two.",
+        "properties": {
+          "accept_relaxation": {
+            "default": false,
+            "description": "Accept the latest plan revision's smallest relaxation (ADR 0044) as the amendment instead of writing one.",
+            "title": "Accept Relaxation",
+            "type": "boolean"
+          },
+          "text": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The change, in plain English (\"cut budget to \u20b96 lakh\", \"drop West\").",
+            "title": "Text"
+          }
+        },
+        "title": "AmendRequest",
+        "type": "object"
+      },
+      "Amendment": {
+        "description": "A change to the planning request, in the manager's words, made while a plan revision\nwaited for a decision (AG-05, ADR 0052). Every amendment is kept, oldest first.",
+        "properties": {
+          "amended_at": {
+            "format": "date-time",
+            "title": "Amended At",
+            "type": "string"
+          },
+          "amends_revision": {
+            "minimum": 1.0,
+            "title": "Amends Revision",
+            "type": "integer"
+          },
+          "relaxation": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Relaxation"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text",
+          "amends_revision",
+          "amended_at"
+        ],
+        "title": "Amendment",
+        "type": "object"
+      },
       "ApproveRequest": {
         "additionalProperties": false,
         "description": "Approve a plan revision: it must be the session's latest (ADR 0046).",
@@ -767,6 +830,40 @@
         "type": "object"
       },
       "JsonValue": {},
+      "LineChange": {
+        "description": "A plan line whose SKU and region are in both revisions but whose decision changed.",
+        "properties": {
+          "after": {
+            "$ref": "#/components/schemas/PlanRevisionLine"
+          },
+          "before": {
+            "$ref": "#/components/schemas/PlanRevisionLine"
+          },
+          "fields": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Fields",
+            "type": "array"
+          },
+          "region": {
+            "$ref": "#/components/schemas/Region"
+          },
+          "sku_id": {
+            "title": "Sku Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "sku_id",
+          "region",
+          "fields",
+          "before",
+          "after"
+        ],
+        "title": "LineChange",
+        "type": "object"
+      },
       "LineSimulation": {
         "description": "One plan line's simulated ranges, identified by its SKU and region.",
         "properties": {
@@ -1258,6 +1355,17 @@
       "PlanExplanation": {
         "description": "What the Explainer wrote for one plan revision.",
         "properties": {
+          "changes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Changes"
+          },
           "fallback_reason": {
             "anyOf": [
               {
@@ -1366,6 +1474,16 @@
             },
             "title": "Clearance Shortfalls",
             "type": "array"
+          },
+          "diff": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RevisionDiff"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "explanation": {
             "anyOf": [
@@ -2040,6 +2158,131 @@
         "title": "RelaxedConstraint",
         "type": "object"
       },
+      "RequestChange": {
+        "description": "A planning-request field an amendment changed, shown as the explanation may cite it.",
+        "properties": {
+          "after": {
+            "title": "After",
+            "type": "string"
+          },
+          "before": {
+            "title": "Before",
+            "type": "string"
+          },
+          "field": {
+            "title": "Field",
+            "type": "string"
+          }
+        },
+        "required": [
+          "field",
+          "before",
+          "after"
+        ],
+        "title": "RequestChange",
+        "type": "object"
+      },
+      "RevisionDiff": {
+        "description": "What changed from the previous plan revision (AG-05, ADR 0052): plan lines matched by\n(SKU, region), the objective and promo-cost deltas, and the planning-request changes.",
+        "properties": {
+          "added": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/PlanRevisionLine"
+            },
+            "title": "Added",
+            "type": "array"
+          },
+          "changed": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/LineChange"
+            },
+            "title": "Changed",
+            "type": "array"
+          },
+          "from_revision": {
+            "minimum": 1.0,
+            "title": "From Revision",
+            "type": "integer"
+          },
+          "objective_after": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Objective After"
+          },
+          "objective_before": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Objective Before"
+          },
+          "objective_delta": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Objective Delta"
+          },
+          "promo_cost_after": {
+            "default": 0.0,
+            "title": "Promo Cost After",
+            "type": "number"
+          },
+          "promo_cost_before": {
+            "default": 0.0,
+            "title": "Promo Cost Before",
+            "type": "number"
+          },
+          "promo_cost_delta": {
+            "default": 0.0,
+            "title": "Promo Cost Delta",
+            "type": "number"
+          },
+          "removed": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/PlanRevisionLine"
+            },
+            "title": "Removed",
+            "type": "array"
+          },
+          "request_changes": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/RequestChange"
+            },
+            "title": "Request Changes",
+            "type": "array"
+          },
+          "unchanged": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Unchanged",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "from_revision"
+        ],
+        "title": "RevisionDiff",
+        "type": "object"
+      },
       "RiskCode": {
         "enum": [
           "OVER_CONCENTRATION",
@@ -2211,6 +2454,14 @@
       "SessionResponse": {
         "description": "One planning session's read model: status, brief, planning request, latest revision.",
         "properties": {
+          "amendments": {
+            "description": "Every amendment to the planning request, oldest first (ADR 0052).",
+            "items": {
+              "$ref": "#/components/schemas/Amendment"
+            },
+            "title": "Amendments",
+            "type": "array"
+          },
           "assumptions": {
             "description": "How the Context agent read the brief, each with its source and confidence (ADR 0048).",
             "items": {
@@ -2302,13 +2553,14 @@
           "usage",
           "assumptions",
           "questions",
-          "clarifications"
+          "clarifications",
+          "amendments"
         ],
         "title": "SessionResponse",
         "type": "object"
       },
       "SessionStatus": {
-        "description": "Every status a planning session can have (ADR 0046).\n\nplanning -> awaiting_approval -> approved (final) or rejected (open for amendments); any\nfailure while planning -> failed; planning -> awaiting_clarification -> planning when the\nquestions are answered (ADR 0048).",
+        "description": "Every status a planning session can have (ADR 0046).\n\nplanning -> awaiting_approval -> approved (final) or rejected (open for amendments); any\nfailure while planning -> failed; planning -> awaiting_clarification -> planning when the\nquestions are answered (ADR 0048); awaiting_approval or rejected -> planning when the\nrequest is amended (ADR 0052).",
         "enum": [
           "planning",
           "awaiting_clarification",
@@ -3408,6 +3660,69 @@
           }
         },
         "summary": "Get Session",
+        "tags": [
+          "sessions"
+        ]
+      }
+    },
+    "/api/sessions/{session_id}/amend": {
+      "post": {
+        "description": "Amend the planning request (AG-05); a new plan revision, with its diff from the\nprevious one, is planned in the background.",
+        "operationId": "amend_session_api_sessions__session_id__amend_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AmendRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "description": "Unknown session"
+          },
+          "409": {
+            "description": "The session is not awaiting approval or rejected, or (accept_relaxation) its latest revision has no relaxation"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "503": {
+            "description": "Planning is unavailable"
+          }
+        },
+        "summary": "Amend Session",
         "tags": [
           "sessions"
         ]

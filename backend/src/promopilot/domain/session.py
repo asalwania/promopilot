@@ -9,6 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from promopilot.domain.assumption import Assumption, Clarification, ClarificationQuestion
 from promopilot.domain.request import PlanningRequest
 from promopilot.domain.revision import PlanRevision
+from promopilot.domain.selection import Relaxation
 from promopilot.domain.trace import SessionUsage
 
 
@@ -17,7 +18,8 @@ class SessionStatus(StrEnum):
 
     planning -> awaiting_approval -> approved (final) or rejected (open for amendments); any
     failure while planning -> failed; planning -> awaiting_clarification -> planning when the
-    questions are answered (ADR 0048).
+    questions are answered (ADR 0048); awaiting_approval or rejected -> planning when the
+    request is amended (ADR 0052).
     """
 
     PLANNING = "planning"
@@ -46,6 +48,21 @@ class PlanDecision(BaseModel):
     decided_at: datetime
 
 
+class Amendment(BaseModel):
+    """A change to the planning request, in the manager's words, made while a plan revision
+    waited for a decision (AG-05, ADR 0052). Every amendment is kept, oldest first."""
+
+    model_config = ConfigDict(frozen=True)
+
+    text: str
+    amends_revision: int = Field(ge=1)
+    """The plan revision that was the session's latest when it was amended."""
+    relaxation: Relaxation | None = None
+    """The relaxation the manager accepted (ADR 0044), when the amendment accepts one; its
+    text is then written from it."""
+    amended_at: datetime
+
+
 class PlanningSession(BaseModel):
     model_config = ConfigDict(frozen=True)
 
@@ -68,3 +85,5 @@ class PlanningSession(BaseModel):
     """The clarification questions waiting for an answer; empty unless awaiting one."""
     clarifications: tuple[Clarification, ...] = ()
     """Every question answered so far, oldest first."""
+    amendments: tuple[Amendment, ...] = ()
+    """Every amendment, oldest first (ADR 0052)."""

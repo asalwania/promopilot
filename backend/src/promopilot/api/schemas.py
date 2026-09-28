@@ -1,14 +1,15 @@
 """Request/response schemas: the OpenAPI contract consumed by the frontend."""
 
 from datetime import datetime
-from typing import Literal
+from typing import Literal, Self
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from promopilot.agents.tools.estimate_demand import ModelVersion
 from promopilot.agents.tools.get_relations import Complement, Substitute
 from promopilot.domain import (
+    Amendment,
     Assumption,
     Clarification,
     ClarificationQuestion,
@@ -119,6 +120,9 @@ class SessionResponse(BaseModel):
     clarifications: list[Clarification] = Field(
         description="Every question answered so far, oldest first."
     )
+    amendments: list[Amendment] = Field(
+        description="Every amendment to the planning request, oldest first (ADR 0052)."
+    )
 
     @classmethod
     def of(cls, session: PlanningSession) -> "SessionResponse":
@@ -134,6 +138,7 @@ class SessionResponse(BaseModel):
             assumptions=list(session.assumptions),
             questions=list(session.questions),
             clarifications=list(session.clarifications),
+            amendments=list(session.amendments),
         )
 
 
@@ -196,6 +201,40 @@ class ClarifyRequest(BaseModel):
                     f"the answer to {question_id} is longer than {ANSWER_MAX_CHARS} characters"
                 )
         return answers
+
+
+AMENDMENT_MAX_CHARS = 2000
+
+
+class AmendRequest(BaseModel):
+    """Amend the planning request of a session awaiting approval or rejected (ADR 0052): in
+    plain English, or by accepting the latest revision's relaxation. Exactly one of the two."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    text: str | None = Field(
+        default=None,
+        max_length=AMENDMENT_MAX_CHARS,
+        description='The change, in plain English ("cut budget to ₹6 lakh", "drop West").',
+    )
+    accept_relaxation: bool = Field(
+        default=False,
+        description="Accept the latest plan revision's smallest relaxation (ADR 0044) as the "
+        "amendment instead of writing one.",
+    )
+
+    @field_validator("text")
+    @classmethod
+    def _not_blank(cls, text: str | None) -> str | None:
+        if text is not None and not text.strip():
+            raise ValueError("an amendment needs text")
+        return text
+
+    @model_validator(mode="after")
+    def _text_or_relaxation(self) -> Self:
+        if (self.text is None) == (not self.accept_relaxation):
+            raise ValueError("give either the amendment's text or accept_relaxation: true")
+        return self
 
 
 class SimulatePlanRequest(BaseModel):

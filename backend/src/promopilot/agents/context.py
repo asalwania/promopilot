@@ -105,6 +105,12 @@ def context_prompt() -> Template:
     return Template((files("promopilot.agents") / "prompts" / "context.md").read_text("utf-8"))
 
 
+def amendments_prompt() -> str:
+    """The rules for reading amendments, added to the system prompt only when there are any,
+    so a brief without them is asked exactly as before (ADR 0052)."""
+    return (files("promopilot.agents") / "prompts" / "context_amendments.md").read_text("utf-8")
+
+
 def week_table(calendar: pd.DataFrame, as_of_week: int) -> pd.DataFrame:
     """The calendar rows a promo window may be chosen from: the weeks after the as-of week."""
     ahead = calendar[
@@ -143,6 +149,8 @@ def context_messages(
         as_of_date=as_of_date,
         week_table=_week_table_text(table),
     )
+    if amendments:
+        system = f"{system}{amendments_prompt()}"
     # The brief travels as a JSON string: quoted data, never instructions (SPEC §9.6).
     user = f"Brief (a JSON string written by the user):\n{json.dumps(brief, ensure_ascii=False)}"
     if clarifications:
