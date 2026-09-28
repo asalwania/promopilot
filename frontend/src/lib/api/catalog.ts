@@ -112,10 +112,23 @@ export function getInventory(
   return read("/api/inventory", inventoryReportSchema, fetchImpl);
 }
 
+// Without options: the data's default as-of week and every SKU (ADR 0034). The
+// session page asks for its request's as-of week and KVIs only (ADR 0060).
 export function getCompetitorGaps(
   fetchImpl: typeof fetch = fetch,
+  options: { asOfWeek?: number; kviOnly?: boolean } = {},
 ): Promise<CompetitorGaps> {
-  return read("/api/competitors/gaps", competitorGapsSchema, fetchImpl);
+  const query = new URLSearchParams();
+  if (options.asOfWeek !== undefined) {
+    query.set("as_of_week", String(options.asOfWeek));
+  }
+  if (options.kviOnly) query.set("kvi_only", "true");
+  const search = query.size > 0 ? `?${query}` : "";
+  return read(
+    `/api/competitors/gaps${search}`,
+    competitorGapsSchema,
+    fetchImpl,
+  );
 }
 
 // Through the same-origin `/api/*` proxy (ADR 0018). Throws the API's reason

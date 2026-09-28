@@ -1,4 +1,5 @@
 import { formatRupees } from "@/lib/format";
+import { SOURCES } from "@/lib/sources";
 import { cn } from "@/lib/utils";
 
 // One SKU a plan line moves in its region, as the relations calculators return it
@@ -68,7 +69,12 @@ function Callout({
       <h3 className="font-medium">{title}</h3>
       <ul className="mt-1 space-y-0.5">
         {ranked.slice(0, SHOWN).map((effect) => (
-          <li key={effect.sku_id}>{describe(effect)}</li>
+          <li
+            key={effect.sku_id}
+            title={`Source: ${SOURCES.crossEffects} · relations model`}
+          >
+            {describe(effect)}
+          </li>
         ))}
       </ul>
       {hidden > 0 && (

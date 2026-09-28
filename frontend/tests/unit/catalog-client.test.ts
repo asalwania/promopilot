@@ -50,6 +50,17 @@ describe("the data explorer's reads", () => {
     },
   );
 
+  it("asks for one as-of week's KVI gaps when the session page names them", async () => {
+    const { calls, fetchImpl } = recordingFetch(() => Response.json(gaps));
+
+    expect(
+      await getCompetitorGaps(fetchImpl, { asOfWeek: 104, kviOnly: true }),
+    ).toEqual(gaps);
+    expect(calls[0].url).toBe(
+      "/api/competitors/gaps?as_of_week=104&kvi_only=true",
+    );
+  });
+
   it("throws with the API's reason when it gives one", async () => {
     const { fetchImpl } = recordingFetch(() =>
       Response.json(
