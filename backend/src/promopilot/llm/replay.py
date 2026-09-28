@@ -2,10 +2,12 @@
 
 A cassette is `<cassette_dir>/<request hash>.json`. The hash covers only provider-independent
 request content: the schema's JSON Schema (structured calls) or the tool specs (tool calls), the
-messages and the temperature. A cassette recorded with one provider or model replays under any
-other. Only that content, the parsed response and the usage the call was billed for are
-written; transport details such as request headers never reach a cassette. Replay reports the
-recorded usage again, so replayed sessions show real token and cost counters.
+messages and the temperature. A tool result's content is left out, so a replayed tool round
+does not depend on model ids or solver timings (ADR 0049). A cassette recorded with one
+provider or model replays under any other. Only that content, the parsed response and the
+usage the call was billed for are written; transport details such as request headers never
+reach a cassette. Replay reports the recorded usage again, so replayed sessions show real token
+and cost counters.
 """
 
 import hashlib
@@ -41,6 +43,20 @@ def _wire(messages: Sequence[Message]) -> list[dict[str, Any]]:
     ]
 
 
+def _tool_wire(messages: Sequence[Message]) -> list[dict[str, Any]]:
+    # A tool result's content is left out too: it carries model ids and solver evidence that
+    # change with every retrain and machine, while the calls that asked for it (names,
+    # arguments, ids) stay in (ADR 0049).
+    return [
+        m.model_dump(
+            mode="json",
+            exclude_defaults=True,
+            exclude={"provider_state", "content"} if m.role == "tool" else {"provider_state"},
+        )
+        for m in messages
+    ]
+
+
 def _structured_content(schema: type[BaseModel], messages: Sequence[Message]) -> dict[str, Any]:
     return {
         "schema": schema.model_json_schema(),
@@ -52,7 +68,7 @@ def _structured_content(schema: type[BaseModel], messages: Sequence[Message]) ->
 def _tool_content(tools: Sequence[ToolSpec], messages: Sequence[Message]) -> dict[str, Any]:
     return {
         "tools": [tool.model_dump(mode="json") for tool in tools],
-        "messages": _wire(messages),
+        "messages": _tool_wire(messages),
         "temperature": STRUCTURED_TEMPERATURE,
     }
 
@@ -68,7 +84,8 @@ def request_hash(schema: type[BaseModel], messages: Sequence[Message]) -> str:
 
 
 def tool_request_hash(tools: Sequence[ToolSpec], messages: Sequence[Message]) -> str:
-    """A SHA-256 of a tool request's canonical content; tool-call ids count, provider state not."""
+    """A SHA-256 of a tool request's canonical content: tool calls count (names, arguments,
+    ids), tool results and provider state do not (ADR 0049)."""
     return _digest(_tool_content(tools, messages))
 
 

@@ -251,6 +251,14 @@ A human decision, with a reason, that a plan revision is not acceptable. The ses
 An approval or a rejection of one named plan revision, with when it was made (and, for a rejection, why). Every decision of a planning session is kept in order as its audit trail.
 _Avoid_: vote, sign-off
 
+**Planner note**:
+A sentence the planner adds to a plan revision's explanation from tool outputs: how the plan answers each undercut KVI ("Competitor is 5.1% cheaper on SKU0002 in North; matching on 1 SKU"), and, when the default sequence planned it, why (ADR 0049).
+_Avoid_: planner explanation, rationale (which is per plan line)
+
+**Default sequence**:
+The deterministic planning path with no LLM: generate every promo option, optimise, simulate. The planner agent falls back to it when the LLM is unavailable or it reaches no optimiser plan, and the plan revision is then **degraded** (SF-03, ADR 0049).
+_Avoid_: fallback planner, naive planner
+
 **Open issue**:
 A violation (and, from the critic's risk review, a finding) that a plan revision still has when it goes for approval. It is listed on the revision; it does not block approval, but an infeasible revision cannot be approved.
 _Avoid_: error, warning

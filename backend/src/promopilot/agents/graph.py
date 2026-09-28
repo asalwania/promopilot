@@ -1,11 +1,12 @@
 """The agent graph (SPEC §9.6, ADR 0046): Context → Planner → Critic → Explainer → Approval
 (interrupt) → Done, checkpointed so an interrupt survives an API restart.
 
-In this slice the Context node reads the brief with the LLM (E3), the Planner runs the
-deterministic default sequence (option generation → optimiser, with the relaxation when the
-request is infeasible → simulation, ADR 0038/0044), the Critic runs `validate_plan` and keeps
-what it finds as open issues, and the Explainer has the LLM explain the plan, checked by
-numeric grounding, with the template as its fallback (ADR 0050). The Critic
+In this slice the Context node reads the brief with the LLM (E3), the Planner is the LLM
+planner agent over the tool registry when it is given one (#47, ADR 0049), falling back to
+the deterministic default sequence (option generation → optimiser, with the relaxation when
+the request is infeasible → simulation, ADR 0038/0044), the Critic runs `validate_plan` and
+keeps what it finds as open issues, and the Explainer has the LLM explain the plan, checked
+by numeric grounding, with the template as its fallback (ADR 0050). The Critic
 loop (#48), the Clarify interrupt (#46) and amendments (#50) extend these edges.
 
 Nodes record the session as they go through a `SessionRecorder` (`promopilot.data.
@@ -34,6 +35,7 @@ from pydantic import BaseModel
 
 from promopilot.agents.explainer import explain_plan
 from promopilot.agents.planner import PlannedRevision
+from promopilot.agents.planner_agent import AgentTools, plan_with_tools
 from promopilot.agents.session import BriefData, read_planning_request
 from promopilot.agents.state import (
     ApprovalAnswer,
@@ -100,8 +102,12 @@ class GraphTools:
 
     brief_data: BriefData
     planner: Planner
+    """The deterministic default sequence: the Planner itself without `agent`, the degraded
+    path with it (ADR 0049)."""
     sessions: SessionRecorder
     policy: CompanyPolicy
+    agent: AgentTools | None = None
+    """The planner agent's tools; with them the LLM plans through the tool registry (#47)."""
 
 
 @dataclass(frozen=True)
@@ -127,12 +133,17 @@ def build_graph(
 
     async def planner(state: PlanningState) -> dict[str, object]:
         request = _required(state.request, "a planning request")
-        planned = await tools.planner.plan(request)
+        if tools.agent is None:
+            planned = await tools.planner.plan(request)
+        else:
+            planned = await plan_with_tools(state.brief, request, llm, tools.agent, tools.planner)
         await tools.sessions.save_revision(state.session_id, request, planned.revision)
         return {
             "plan": planned.revision,
             "plan_facts": planned.facts,
             "iteration": state.iteration + 1,
+            "planner_notes": planned.notes,
+            "planner_degraded": planned.degraded,
         }
 
     async def critic(state: PlanningState) -> dict[str, object]:

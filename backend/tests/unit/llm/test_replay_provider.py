@@ -146,6 +146,37 @@ def test_the_tool_call_ids_are_part_of_the_tool_request_hash() -> None:
     assert tool_request_hash([FORECAST], other_id) != tool_request_hash([FORECAST], TOOL_ROUND)
 
 
+def test_tool_results_are_left_out_of_the_tool_request_hash() -> None:
+    # Tool outputs carry model ids and solver evidence that change on every machine and every
+    # retrain; a replayed tool round must not depend on them (ADR 0049).
+    other_result = [*TOOL_ROUND[:2], TOOL_ROUND[2].model_copy(update={"content": '{"c": 29}'})]
+
+    assert tool_request_hash([FORECAST], other_result) == tool_request_hash([FORECAST], TOOL_ROUND)
+
+
+def test_the_tool_call_arguments_stay_in_the_tool_request_hash() -> None:
+    other_city = CALL.model_copy(update={"arguments": {"city": "Nagpur"}})
+    other_arguments = [
+        TOOL_ROUND[0],
+        Message(role="assistant", content="", tool_calls=(other_city,)),
+        TOOL_ROUND[2],
+    ]
+
+    assert tool_request_hash([FORECAST], other_arguments) != tool_request_hash(
+        [FORECAST], TOOL_ROUND
+    )
+
+
+async def test_a_recorded_tool_round_replays_when_the_tool_result_differs(tmp_path: Path) -> None:
+    turn = ToolTurn(text="It is warm in Pune.")
+    await RecordingProvider(FakeProvider([turn]), tmp_path).complete_with_tools(
+        [FORECAST], TOOL_ROUND
+    )
+    later = [*TOOL_ROUND[:2], TOOL_ROUND[2].model_copy(update={"content": '{"celsius": 33}'})]
+
+    assert await ReplayProvider(tmp_path).complete_with_tools([FORECAST], later) == turn
+
+
 def test_provider_state_is_left_out_of_the_hash() -> None:
     thinking = {"type": "thinking", "thinking": "", "signature": "sig-abc"}
     with_state = [

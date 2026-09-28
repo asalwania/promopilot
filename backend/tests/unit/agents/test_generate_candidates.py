@@ -57,12 +57,13 @@ def build(
     *,
     demand: bool = True,
     relations: bool = True,
+    demand_version: int = 3,
 ) -> ToolRegistry:
     model, found = small_models
     return ToolRegistry(
         [
             generate_candidates_tool(
-                Fixed((entry(ModelKind.DEMAND, 3), model) if demand else None),
+                Fixed((entry(ModelKind.DEMAND, demand_version), model) if demand else None),
                 Fixed((entry(ModelKind.RELATIONS, 2), found) if relations else None),
                 InMemoryRetailData(small_dataset),
                 fixed_as_of_week(SMALL_AS_OF),
@@ -146,6 +147,31 @@ async def test_the_planner_can_narrow_the_mechanisms(
         Mechanism.PCT_OFF,
         Mechanism.FIXED_PRICE,
     }
+
+
+async def test_the_same_call_on_the_same_models_gets_the_same_candidate_set_id(
+    small_models: tuple[DemandModel, Relations],
+    small_dataset: GeneratedDataset,
+    store: CandidateStore,
+    small_history: DemandHistory,
+) -> None:
+    # A replayed tool round passes the recorded id back, so the id cannot be random (ADR 0049).
+    tools = build(small_models, small_dataset, store)
+    again = build(small_models, small_dataset, CandidateStore())
+    newer = build(small_models, small_dataset, CandidateStore(), demand_version=4)
+
+    async def set_id(registry: ToolRegistry, **changes: Any) -> object:
+        result = await registry.call("generate_candidates", arguments(small_history, **changes))
+        assert isinstance(result, ToolOk), result
+        assert isinstance(result.output, GenerateCandidatesOutput)
+        return result.output.candidate_set_id
+
+    first = await set_id(tools)
+    assert await set_id(again) == first
+    assert await set_id(tools, mechanisms=["PCT_OFF"]) != first
+    assert await set_id(tools, request={"marketing_budget": 100_000.0}) != first
+    assert await set_id(newer) != first
+    assert store.get(first) is not None  # type: ignore[arg-type]
 
 
 @pytest.mark.parametrize(

@@ -67,6 +67,53 @@ class CompetitorGaps(BaseModel):
                 return False
         return True
 
+    def undercut_response(self, lines: Sequence[PlanLine]) -> tuple[str, ...]:
+        """The planner's explanation of how a plan answers undercut KVIs (F-08 AC2, ADR 0049).
+
+        One sentence per undercut KVI, widest gap first, with its gap to one decimal and both
+        prices ("Competitor is 5.1% cheaper on K2 (Rice 5kg) in North (₹94.90 vs ₹100.00)."),
+        then how many the plan matches. A KVI is matched when a plan line in its region
+        promotes it (a BUNDLE promotes both SKUs) at an effective unit price at or below the
+        competitor's. Empty when no KVI is undercut. Every number comes from these gaps, so the
+        sentences pass numeric grounding against them.
+        """
+        undercut = [gap for gap in self.gaps if gap.undercut]
+        if not undercut:
+            return ()
+        stated = [
+            f"Competitor is {gap.gap * 100:.1f}% cheaper on {gap.sku_id} ({gap.name}) in "
+            f"{gap.region.value} (₹{gap.competitor_price:,.2f} vs ₹{gap.base_price:,.2f})."
+            for gap in undercut
+        ]
+        matched = sum(1 for gap in undercut if _matched(gap, lines))
+        return (*stated, _response(matched, len(undercut)))
+
+
+def _matched(gap: CompetitorGap, lines: Sequence[PlanLine]) -> bool:
+    return any(
+        line.region == gap.region
+        and gap.sku_id in line.skus
+        and effective_unit_price(line.mechanism, gap.base_price, line.depth_pct)
+        <= gap.competitor_price
+        for line in lines
+    )
+
+
+def _response(matched: int, undercut: int) -> str:
+    if matched == 0:
+        return (
+            "Not matching on any undercut SKU: no price match paid for itself within the "
+            "brief's constraints, so the plan protects margin."
+        )
+    them = "it" if matched == 1 else "them"
+    if matched == undercut:
+        skus = "SKU" if matched == 1 else "SKUs"
+        return f"Matching on {matched} {skus}: the plan prices {them} at or below the competitor."
+    return (
+        f"Matching on {matched} of {undercut} undercut SKUs: the plan prices {them} at or "
+        "below the competitor."
+    )
+
 
 def competitor_gaps(
     products: pd.DataFrame,

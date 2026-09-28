@@ -1,5 +1,6 @@
 import json
 from dataclasses import dataclass
+from uuid import uuid4
 
 import pytest
 
@@ -8,10 +9,18 @@ from promopilot.agents import (
     BriefReading,
     OptimisingPlanner,
     PlanningError,
+    StoredRevisions,
     read_planning_request,
 )
 from promopilot.agents.session import BriefData
+from promopilot.agents.tools import ToolOk, ToolRegistry
+from promopilot.agents.tools.as_of import fixed_as_of_week
+from promopilot.agents.tools.generate_candidates import (
+    GenerateCandidatesOutput,
+    generate_candidates_tool,
+)
 from promopilot.agents.tools.inventory_status import pooled_stock
+from promopilot.agents.tools.run_optimizer import RunOptimizerOutput, run_optimizer_tool
 from promopilot.datagen import GeneratedDataset
 from promopilot.domain import (
     BindingEvidence,
@@ -30,7 +39,7 @@ from promopilot.llm import FakeProvider, LLMError, LLMProvider
 from promopilot.models.demand import DemandModel
 from promopilot.models.registry import ModelKind
 from promopilot.models.relations import Relations
-from promopilot.optimizer import SolverSettings
+from promopilot.optimizer import CandidateStore, SolverSettings
 from promopilot.simulator import SimulationSettings
 from tests.unit.agents.fakes import InMemoryRetailData
 from tests.unit.agents.test_generate_candidates import Fixed, entry
@@ -370,3 +379,77 @@ async def test_a_clearance_target_outside_the_scope_cannot_be_planned(
 
     with pytest.raises(PlanningError, match="outside the planning request's scope"):
         await planner.plan(planning(clearance_targets=[{"sku_id": other, "sell_through": 0.5}]))
+
+
+# The planner agent's final plan: the latest optimiser solution of a stored candidate set,
+# turned into a plan revision without solving again (ADR 0049).
+
+
+def planning_tools(
+    models: tuple[DemandModel, Relations], data: InMemoryRetailData, store: CandidateStore
+) -> ToolRegistry:
+    demand_source = Fixed((entry(ModelKind.DEMAND, 1), models[0]))
+    relations_source = Fixed((entry(ModelKind.RELATIONS, 1), models[1]))
+    return ToolRegistry(
+        [
+            generate_candidates_tool(
+                demand_source,
+                relations_source,
+                data,
+                fixed_as_of_week(HISTORY_WEEKS),
+                policy=FREE,
+                store=store,
+            ),
+            run_optimizer_tool(store, policy=FREE, settings=SolverSettings(), seed=0),
+        ]
+    )
+
+
+async def test_a_stored_solution_becomes_the_same_revision_the_default_sequence_plans(
+    small_models: tuple[DemandModel, Relations],
+    data: InMemoryRetailData,
+    planner: OptimisingPlanner,
+) -> None:
+    llm = FakeProvider([reading()])
+    request = await read_planning_request("Snacks push in the North", llm, data)
+    store = CandidateStore()
+    tools = planning_tools(small_models, data, store)
+    generated = await tools.call("generate_candidates", {"request": request.model_dump()})
+    assert isinstance(generated, ToolOk), generated
+    assert isinstance(generated.output, GenerateCandidatesOutput)
+    candidate_set_id = generated.output.candidate_set_id
+    solved = await tools.call("run_optimizer", {"candidate_set_id": str(candidate_set_id)})
+    assert isinstance(solved, ToolOk), solved
+    assert isinstance(solved.output, RunOptimizerOutput)
+
+    built = await StoredRevisions(store, planner).revision(candidate_set_id)
+
+    assert built is not None
+    default = await planner.plan(request)
+    assert [line.line for line in built.revision.lines] == [
+        row.option for row in solved.output.lines
+    ]
+    assert built.revision.lines == default.revision.lines
+    assert built.revision.simulation == default.revision.simulation
+    assert built.facts == default.facts
+    assert validate_plan(built.facts, request, FREE) == ()
+
+
+async def test_a_candidate_set_with_no_solution_has_no_revision(
+    small_models: tuple[DemandModel, Relations],
+    data: InMemoryRetailData,
+    planner: OptimisingPlanner,
+) -> None:
+    llm = FakeProvider([reading()])
+    request = await read_planning_request("Snacks push in the North", llm, data)
+    store = CandidateStore()
+    generated = await planning_tools(small_models, data, store).call(
+        "generate_candidates", {"request": request.model_dump()}
+    )
+    assert isinstance(generated, ToolOk), generated
+    assert isinstance(generated.output, GenerateCandidatesOutput)
+
+    revisions = StoredRevisions(store, planner)
+
+    assert await revisions.revision(generated.output.candidate_set_id) is None
+    assert await revisions.revision(uuid4()) is None

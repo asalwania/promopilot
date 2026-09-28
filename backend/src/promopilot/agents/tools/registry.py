@@ -15,7 +15,10 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, SerializeAsAny, ValidationError
 
-ToolErrorCode = Literal["unknown_tool", "invalid_input", "model_unavailable", "data_unavailable"]
+ToolErrorCode = Literal[
+    "unknown_tool", "invalid_input", "model_unavailable", "data_unavailable", "tool_failed"
+]
+"""`tool_failed` is the planner's, for a tool that kept raising after its retries (ADR 0049)."""
 
 
 @dataclass(frozen=True)

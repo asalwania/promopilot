@@ -7,6 +7,7 @@ import pytest
 
 from promopilot.competitors import CompetitorGaps, competitor_gaps
 from promopilot.domain import CompanyPolicy, PlanLine, Region
+from promopilot.guardrails import check_numeric_grounding
 
 AS_OF = 10
 POLICY = CompanyPolicy()
@@ -226,3 +227,76 @@ def test_the_tolerance_comes_from_company_policy() -> None:
 
     assert loose.kvi_price_tolerance == 0.05
     assert tolerant(loose, line("K2", depth_pct=1)) is True  # ₹99 ≤ ₹99.645
+
+
+# The planner's undercut response (F-08 AC2, ADR 0049): the gap and whether the plan matches.
+
+
+def north() -> CompetitorGaps:
+    """Only K2 is undercut in the North (5.1%)."""
+    return gaps(regions=[Region.NORTH])
+
+
+def test_each_undercut_kvi_is_stated_with_its_gap_and_prices() -> None:
+    [stated, response] = north().undercut_response([])
+
+    assert stated == "Competitor is 5.1% cheaper on K2 (Rice 5kg) in North (₹94.90 vs ₹100.00)."
+    assert response.startswith("Not matching on any undercut SKU")
+    assert "protects margin" in response
+
+
+def test_a_plan_line_at_or_below_the_competitor_price_matches_it() -> None:
+    # K2 North: competitor ₹94.90. 6% off is ₹94 (a match); 5% off is ₹95 (still dearer).
+    assert north().undercut_response([line("K2", depth_pct=6)])[-1] == (
+        "Matching on 1 SKU: the plan prices it at or below the competitor."
+    )
+    assert north().undercut_response([line("K2", depth_pct=5)])[-1].startswith("Not matching")
+    deeper = line("K2", mechanism="BOGO", depth_pct=50)
+    assert north().undercut_response([deeper])[-1].startswith("Matching on 1 SKU")
+    elsewhere = line("K2", region="South", depth_pct=30)
+    assert north().undercut_response([elsewhere])[-1].startswith("Not matching")
+
+
+def test_a_partial_response_says_how_many_of_the_undercut_skus_it_matches() -> None:
+    # A 4% threshold makes K1 North (4.9%) undercut as well as K2 North (5.1%).
+    wider = competitor_gaps(
+        PRODUCTS,
+        PRICES,
+        as_of_week=AS_OF,
+        policy=CompanyPolicy(undercut_threshold=0.04),
+        regions=[Region.NORTH],
+    )
+
+    sentences = wider.undercut_response([line("K1", depth_pct=10)])
+
+    assert sentences[:2] == (
+        "Competitor is 5.1% cheaper on K2 (Rice 5kg) in North (₹94.90 vs ₹100.00).",
+        "Competitor is 4.9% cheaper on K1 (Atta 5kg) in North (₹95.10 vs ₹100.00).",
+    )
+    assert sentences[2] == (
+        "Matching on 1 of 2 undercut SKUs: the plan prices it at or below the competitor."
+    )
+    both = wider.undercut_response([line("K1", depth_pct=10), line("K2", depth_pct=10)])
+    assert both[2] == "Matching on 2 SKUs: the plan prices them at or below the competitor."
+
+
+def test_no_undercut_kvi_needs_no_response() -> None:
+    # K1 is 4.9% cheaper in the North and dearer in the South: neither is undercut.
+    assert gaps(sku_ids=["K1"]).undercut_response([line("K1")]) == ()
+
+
+def test_every_undercut_region_is_stated_widest_gap_first() -> None:
+    sentences = gaps().undercut_response([])
+
+    assert (
+        sentences[0] == "Competitor is 10.0% cheaper on K3 (Oil 1L) in South (₹180.00 vs ₹200.00)."
+    )
+    assert sentences[1].startswith("Competitor is 5.1% cheaper on K2")
+
+
+def test_the_response_passes_numeric_grounding_against_the_gaps() -> None:
+    result = gaps()
+
+    text = " ".join(result.undercut_response([line("K2", depth_pct=6)]))
+
+    assert check_numeric_grounding(text, result).grounded, text

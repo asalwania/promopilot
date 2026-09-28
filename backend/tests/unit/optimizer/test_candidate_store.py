@@ -6,9 +6,16 @@ from uuid import uuid4
 import pandas as pd
 import pytest
 
-from promopilot.domain import PlanLine, PlanningRequest, PromoWindow, Region, Scope
+from promopilot.domain import PlanLine, PlanningRequest, PromoPlan, PromoWindow, Region, Scope
 from promopilot.guardrails import SkuFacts
-from promopilot.optimizer import TABLE_COLUMNS, CandidateStore, PromoOptions, PruneReason
+from promopilot.optimizer import (
+    TABLE_COLUMNS,
+    CandidateStore,
+    OptimisationResult,
+    PromoOptions,
+    PruneReason,
+    SolveStatus,
+)
 
 REQUEST = PlanningRequest(
     as_of_week=10,
@@ -66,3 +73,43 @@ def test_only_the_most_recently_used_sets_are_kept() -> None:
     assert store.get(third.candidate_set_id) is third
     with pytest.raises(ValueError, match="at least one"):
         CandidateStore(capacity=0)
+
+
+def result(objective: float) -> OptimisationResult:
+    return OptimisationResult(
+        status=SolveStatus.OPTIMAL,
+        objective=objective,
+        plan=PromoPlan(lines=()),
+        selected=(),
+        pairwise_cannibalisation=0.0,
+        eligible=0,
+        pairs=0,
+    )
+
+
+def test_a_set_can_be_stored_under_a_given_id_and_replaced_under_it() -> None:
+    store = CandidateStore()
+    key = uuid4()
+
+    first = store.put(REQUEST, options(1), FACTS, candidate_set_id=key)
+    store.record_solution(key, result(5.0))
+    second = store.put(REQUEST, options(2), FACTS, candidate_set_id=key)
+
+    assert first.candidate_set_id == second.candidate_set_id == key
+    assert store.get(key) is second
+    assert store.solution(key) is None, "a replaced set forgets the solution of the old one"
+
+
+def test_the_latest_solution_of_a_set_is_kept_with_it_until_the_set_is_dropped() -> None:
+    store = CandidateStore(capacity=1)
+    first = store.put(REQUEST, options(1), FACTS)
+
+    store.record_solution(first.candidate_set_id, result(5.0))
+    store.record_solution(first.candidate_set_id, result(7.0))
+
+    solved = store.solution(first.candidate_set_id)
+    assert solved is not None
+    assert solved.objective == 7.0
+    store.put(REQUEST, options(2), FACTS)
+    assert store.solution(first.candidate_set_id) is None
+    store.record_solution(uuid4(), result(1.0))  # a dropped or unknown set is ignored

@@ -2,11 +2,30 @@ from pathlib import Path
 
 import pytest
 
-from promopilot.agents import BriefReading, RecordingError, read_planning_request, record_cassettes
+from promopilot.agents import (
+    AgentTools,
+    BriefReading,
+    RecordedPlanning,
+    RecordingError,
+    plan_with_tools,
+    read_planning_request,
+    record_cassettes,
+)
 from promopilot.datagen import GeneratedDataset
 from promopilot.domain import Region
-from promopilot.llm import FakeProvider, ReplayProvider
+from promopilot.llm import FakeProvider, ReplayProvider, cassette_paths
 from tests.unit.agents.fakes import InMemoryRetailData
+from tests.unit.agents.test_graph import ScriptedPlanner, planned
+from tests.unit.agents.test_planner_agent import (
+    SET_ID,
+    Generated,
+    Revisions,
+    ScriptedTools,
+    finish,
+    generate,
+    optimised,
+    run,
+)
 
 HISTORY_WEEKS = 52  # small_config
 BRIEF = "Snacks push in the North, ₹20k, weeks 54-55"
@@ -72,3 +91,52 @@ async def test_a_full_run_replaces_stale_cassettes_and_keeps_other_files(
     assert stale.name not in names_after
     assert briefs.name in names_after
     assert len(names_after) == 2, "one fresh cassette next to briefs.json"
+
+
+# With the planner agent (ADR 0049): its tool-calling turns are recorded too, so a session
+# replays them with no key; recording needs trained models and fails rather than degrade.
+
+
+def agent_tools() -> AgentTools:
+    tools = ScriptedTools(
+        {
+            "generate_candidates": [Generated(candidate_set_id=SET_ID)],
+            "run_optimizer": [optimised()],
+        }
+    )
+    return AgentTools(tools=tools, revisions=Revisions({SET_ID: planned()}))
+
+
+async def test_the_planner_agents_turns_are_recorded_and_replay_to_the_same_plan(
+    data: InMemoryRetailData, tmp_path: Path
+) -> None:
+    request = await read_planning_request(BRIEF, FakeProvider([reading()]), data)
+    live = FakeProvider([reading(), generate(request), run(), finish()])
+    fallback = ScriptedPlanner(planned(promo_cost=900.0))
+
+    await record_cassettes(
+        [BRIEF], live, data, tmp_path, planning=RecordedPlanning(agent_tools(), fallback)
+    )
+
+    assert len(cassette_paths(tmp_path)) == 4, "the reading and three planner steps"
+    replay = ReplayProvider(tmp_path)
+    replayed = await plan_with_tools(
+        BRIEF, await read_planning_request(BRIEF, replay, data), replay, agent_tools(), fallback
+    )
+    assert replayed.degraded is None
+    assert replayed.revision == planned().revision
+    assert fallback.requests == []
+
+
+async def test_a_brief_the_planner_agent_cannot_plan_fails_the_run(
+    data: InMemoryRetailData, tmp_path: Path
+) -> None:
+    live = FakeProvider([reading(), finish("No plan."), finish("Still none.")])
+    fallback = ScriptedPlanner(planned(promo_cost=900.0))
+
+    with pytest.raises(RecordingError, match="no_optimised_plan"):
+        await record_cassettes(
+            [BRIEF], live, data, tmp_path, planning=RecordedPlanning(agent_tools(), fallback)
+        )
+
+    assert names(tmp_path) == set()
