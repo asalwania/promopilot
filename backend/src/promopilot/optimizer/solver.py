@@ -60,8 +60,10 @@ Beside the plan, `solve` reports (ADR 0038):
   breaks alone or added to the plan.
 
 The solver runs with a fixed seed and, by default, one worker; with more workers it
-interleaves their search, so the same input gives the same plan whenever the solver proves
-optimality within its time limit.
+interleaves their search. Every phase stops on CP-SAT's deterministic time, a measure of work
+done rather than of seconds passed, so the same input gives the same plan, status, binding
+constraints and relaxation on any machine, however fast or busy (ADR 0055). Wall-clock limits
+remain only as safety nets that a healthy machine never reaches.
 """
 
 import math
@@ -107,7 +109,8 @@ _EPSILON = 1e-9
 _ROUNDING = 1e-6
 """Paise (or thousandths of a unit) lost to float noise before rounding up or down."""
 _MIN_RESOLVE_SECONDS = 0.001
-"""Less binding time left than this settles no more constraints."""
+"""Less binding time left than this, of work or of its wall-clock net, settles no more
+constraints."""
 BASIS_POINTS = 10_000
 """A relaxation's changes are weighed in basis points of the brief's own values (ADR 0044),
 and relaxed margins and sell-throughs are reported to a basis point."""
@@ -118,15 +121,26 @@ reported is the plan's own, to a basis point."""
 
 @dataclass(frozen=True)
 class SolverSettings:
-    """The solver's time limit and worker count (OPTIMIZER_TIME_LIMIT_SECONDS,
-    OPTIMIZER_WORKERS), and the time shared by the re-solves that find binding constraints
-    (OPTIMIZER_BINDING_TIME_LIMIT_SECONDS, ADR 0038), and the time for finding the smallest
-    relaxation of an infeasible request (OPTIMIZER_RELAXATION_TIME_LIMIT_SECONDS, ADR 0044)."""
+    """How much work each phase may do, in CP-SAT deterministic seconds, and the wall-clock
+    net behind it (ADR 0055):
 
-    time_limit_seconds: float = 10.0
+    - a solve: OPTIMIZER_DETERMINISTIC_LIMIT and OPTIMIZER_TIME_LIMIT_SECONDS;
+    - the re-solves that find binding constraints, shared: OPTIMIZER_BINDING_DETERMINISTIC_LIMIT
+      and OPTIMIZER_BINDING_TIME_LIMIT_SECONDS (ADR 0038);
+    - the smallest relaxation of an infeasible request: OPTIMIZER_RELAXATION_DETERMINISTIC_LIMIT
+      and OPTIMIZER_RELAXATION_TIME_LIMIT_SECONDS (ADR 0044);
+
+    and the worker count (OPTIMIZER_WORKERS). The work budgets decide the result. A wall-clock
+    net that runs out first ends the phase too, but then not the same way on every machine. A
+    binding budget or net of 0 turns the binding analysis off."""
+
+    time_limit_seconds: float = 60.0
     workers: int = 1
-    binding_time_limit_seconds: float = 8.0
-    relaxation_time_limit_seconds: float = 10.0
+    binding_time_limit_seconds: float = 30.0
+    relaxation_time_limit_seconds: float = 60.0
+    deterministic_limit: float = 10.0
+    binding_deterministic_limit: float = 6.0
+    relaxation_deterministic_limit: float = 10.0
 
     def __post_init__(self) -> None:
         if self.time_limit_seconds <= 0:
@@ -137,6 +151,12 @@ class SolverSettings:
             raise ValueError("the binding time limit cannot be negative")
         if self.relaxation_time_limit_seconds <= 0:
             raise ValueError("the relaxation time limit must be positive")
+        if self.deterministic_limit <= 0:
+            raise ValueError("the solver's deterministic limit must be positive")
+        if self.binding_deterministic_limit < 0:
+            raise ValueError("the binding deterministic limit cannot be negative")
+        if self.relaxation_deterministic_limit <= 0:
+            raise ValueError("the relaxation deterministic limit must be positive")
 
 
 class OptionFacts(Protocol):
@@ -209,13 +229,15 @@ def solve(
     brief = problem  # with the brief's own clearance targets, before any is lowered
     findings = problem.rules.findings
     closest: _Closest | None = None
-    time_limit = settings.time_limit_seconds
+    time_limit, work = settings.time_limit_seconds, settings.deterministic_limit
     if problem.targets:
-        closest = problem.closest(settings, seed, time_limit=time_limit / 2)
+        # The closest plan takes up to half of each; the main solve what it left (ADR 0055).
+        closest = problem.closest(settings, seed, time_limit=time_limit / 2, work=work / 2)
         problem = problem.lowered(closest.shortfall)
         time_limit = max(time_limit - (time.monotonic() - started), time_limit / 2)
+        work = max(work - closest.work, work / 2)
     outcome = problem.solve(
-        settings, seed, hint=closest.picked if closest else (), time_limit=time_limit
+        settings, seed, hint=closest.picked if closest else (), time_limit=time_limit, work=work
     )
     found = outcome.status in (cp_model.OPTIMAL, cp_model.FEASIBLE)
     # No plan found in time: the closest plan keeps every constraint, the lowered targets
@@ -308,6 +330,8 @@ class _Outcome:
     """Selected eligible options, as indices into `_Problem.lines`."""
     charged: int
     """Pairwise terms of selected pairs, in paise."""
+    work: float = 0.0
+    """The deterministic time the solve took."""
 
 
 @dataclass(frozen=True)
@@ -319,6 +343,8 @@ class _Closest:
     """Thousandths of a unit short of each target."""
     proven: bool
     """Whether no plan is proven closer."""
+    work: float = 0.0
+    """The deterministic time the search took."""
 
 
 def out_of_near(near: np.ndarray, clash: np.ndarray) -> np.ndarray:
@@ -543,7 +569,9 @@ class _Problem:
             bound[k] += shortfall.get(limit, 0)
         return replace(self, bound=bound)
 
-    def closest(self, settings: SolverSettings, seed: int, *, time_limit: float) -> _Closest:
+    def closest(
+        self, settings: SolverSettings, seed: int, *, time_limit: float, work: float
+    ) -> _Closest:
         """The plan that leaves the least stock short of the clearance targets, each unit
         weighted by its unit cost, under every other constraint (the first phase)."""
         model = cp_model.CpModel()
@@ -563,7 +591,7 @@ class _Problem:
         model.minimize(sum(weight * short for weight, short in slack))
         for chosen in x:
             model.add_hint(chosen, False)
-        solver = self._solver(settings, seed, time_limit, first=False)
+        solver = self._solver(settings, seed, time_limit, work, first=False)
         status = solver.solve(model)
         found = status in (cp_model.OPTIMAL, cp_model.FEASIBLE)
         picked = [n for n, chosen in enumerate(x) if found and solver.boolean_value(chosen)]
@@ -572,7 +600,7 @@ class _Problem:
             for k, limit in enumerate(self.limits)
             if limit in self.targets
         }
-        return _Closest(picked, shortfall, status == cp_model.OPTIMAL)
+        return _Closest(picked, shortfall, status == cp_model.OPTIMAL, solver.deterministic_time)
 
     def solve(
         self,
@@ -583,11 +611,13 @@ class _Problem:
         hint: Sequence[int] = (),
         beat: int | None = None,
         time_limit: float | None = None,
+        work: float | None = None,
         first: bool = False,
         breaking: bool = False,
     ) -> _Outcome:
         """Solve the model, without the `drop` constraint, starting from the `hint` plan,
-        within `time_limit` seconds (the time limit of `settings` by default). With `beat`,
+        within `work` deterministic seconds and a `time_limit` net (those of `settings` by
+        default). With `beat`,
         only plans whose objective (paise) is at least that are feasible. With `breaking`,
         only plans that break the `drop` constraint are. With `first`, the search stops at
         the first feasible plan."""
@@ -617,15 +647,21 @@ class _Problem:
             for (i, j), both in zip(self.pairs, y, strict=True):
                 model.add_hint(both, i in hinted and j in hinted)
 
-        solver = self._solver(settings, seed, time_limit or settings.time_limit_seconds, first)
+        solver = self._solver(
+            settings,
+            seed,
+            time_limit or settings.time_limit_seconds,
+            work or settings.deterministic_limit,
+            first,
+        )
         status = solver.solve(model)
         if status not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
-            return _Outcome(status, [], 0)
+            return _Outcome(status, [], 0, solver.deterministic_time)
         picked = [n for n, chosen in enumerate(x) if solver.boolean_value(chosen)]
         charged = int(
             sum(c for c, both in zip(self.charges, y, strict=True) if solver.boolean_value(both))
         )
-        return _Outcome(status, picked, charged)
+        return _Outcome(status, picked, charged, solver.deterministic_time)
 
     def _variables(self, model: cp_model.CpModel) -> list[cp_model.IntVar]:
         """One x per eligible option, at most one per (SKU, region) it occupies."""
@@ -640,12 +676,15 @@ class _Problem:
 
     @staticmethod
     def _solver(
-        settings: SolverSettings, seed: int, time_limit: float, first: bool
+        settings: SolverSettings, seed: int, time_limit: float, work: float, first: bool
     ) -> cp_model.CpSolver:
         solver = cp_model.CpSolver()
         solver.parameters.random_seed = seed
         solver.parameters.num_workers = settings.workers
         solver.parameters.interleave_search = settings.workers > 1
+        # The work budget decides where the search ends, on any machine; the wall-clock
+        # limit is a safety net (ADR 0055).
+        solver.parameters.max_deterministic_time = work
         solver.parameters.max_time_in_seconds = time_limit
         solver.parameters.stop_after_first_solution = first
         return solver
@@ -666,19 +705,25 @@ class _Problem:
         current plan, for a plan at least a paisa better that breaks it (the plan is optimal
         with it, so any better plan must), and the search stops at the first one found:
         that proves it binds; infeasibility proves it does not. Each gets an even share of
-        what is left of the binding time limit, and any time left after that is spent on
-        making the lower bounds exact. The pairwise terms are the ones already priced.
-        Whatever is still unsettled at the end is unproven.
+        what is left of the binding budget, in deterministic seconds (and of its wall-clock
+        net), and any work left after that is spent on making the lower bounds exact. The
+        pairwise terms are the ones already priced. Whatever is still unsettled at the end is
+        unproven. The budget shrinks by the work each re-solve did, so which constraints are
+        settled does not depend on the machine (ADR 0055).
         """
         limits = self._limits()
         deadline = time.monotonic() + settings.binding_time_limit_seconds
+        budget = [settings.binding_deterministic_limit]
         settled: dict[_Limit, tuple[BindingEvidence, int, list[int]] | None] = {}
 
         def left() -> float:
             return deadline - time.monotonic()
 
+        def spent() -> bool:
+            return budget[0] < _MIN_RESOLVE_SECONDS or left() < _MIN_RESOLVE_SECONDS
+
         for limit in limits:
-            if left() < _MIN_RESOLVE_SECONDS:
+            if spent():
                 break
             swapped = self._swap(picked, limit)
             if swapped is not None:
@@ -687,19 +732,20 @@ class _Problem:
 
         open_ = [limit for limit in limits if limit not in settled]
         for k, limit in enumerate(open_):
-            if left() < _MIN_RESOLVE_SECONDS:
+            if spent():
                 break
-            share = min(left() / (len(open_) - k), settings.time_limit_seconds)
             relaxed = self.solve(
                 settings,
                 seed,
                 drop=limit,
                 hint=picked,
                 beat=objective + 1,
-                time_limit=share,
+                time_limit=min(left() / (len(open_) - k), settings.time_limit_seconds),
+                work=min(budget[0] / (len(open_) - k), settings.deterministic_limit),
                 first=True,
                 breaking=True,
             )
+            budget[0] -= relaxed.work
             if relaxed.status == cp_model.INFEASIBLE:
                 settled[limit] = None
             elif relaxed.status in (cp_model.OPTIMAL, cp_model.FEASIBLE):
@@ -716,7 +762,7 @@ class _Problem:
             if found is not None and found[0] is BindingEvidence.LOWER_BOUND
         ]
         for k, limit in enumerate(bounded):
-            if left() < _MIN_RESOLVE_SECONDS:
+            if spent():
                 break
             _, gain, better = settled[limit] or (BindingEvidence.LOWER_BOUND, 0, [])
             relaxed = self.solve(
@@ -727,7 +773,9 @@ class _Problem:
                 beat=objective + gain,
                 breaking=True,
                 time_limit=min(left() / (len(bounded) - k), settings.time_limit_seconds),
+                work=min(budget[0] / (len(bounded) - k), settings.deterministic_limit),
             )
+            budget[0] -= relaxed.work
             if relaxed.status in (cp_model.OPTIMAL, cp_model.FEASIBLE):
                 exact = relaxed.status == cp_model.OPTIMAL
                 settled[limit] = (
@@ -981,17 +1029,29 @@ class _Problem:
         """The smallest change to the brief's constraints that makes every clearance target
         reachable (ADR 0044), and a plan that reaches them with it.
 
-        Two re-solves share the relaxation time limit. The first frees every brief constraint
-        but the clearance targets as far as company policy allows: if a target must still come
-        down, policy binds. The second finds the least sum of changes, each in basis points of
-        the brief's value. When it finds nothing in time, the closest plan gives the
-        relaxation: each target lowered to what it reaches.
+        Two re-solves share the relaxation budget, in deterministic seconds (ADR 0055). The
+        first frees every brief constraint but the clearance targets as far as company policy
+        allows: if a target must still come down, policy binds. The second finds the least sum
+        of changes, each in basis points of the brief's value. When it finds nothing within its
+        budget, the closest plan gives the relaxation: each target lowered to what it reaches.
         """
         started = time.monotonic()
-        limit = settings.relaxation_time_limit_seconds
-        held = self._least_change(settings, seed, closest.picked, free=True, time_limit=limit / 2)
+        limit, work = (
+            settings.relaxation_time_limit_seconds,
+            settings.relaxation_deterministic_limit,
+        )
+        held = self._least_change(
+            settings, seed, closest.picked, free=True, time_limit=limit / 2, work=work / 2
+        )
         left = max(limit - (time.monotonic() - started), limit / 2)
-        whole = self._least_change(settings, seed, closest.picked, free=False, time_limit=left)
+        whole = self._least_change(
+            settings,
+            seed,
+            closest.picked,
+            free=False,
+            time_limit=left,
+            work=max(work - held.work, work / 2),
+        )
         found = (cp_model.OPTIMAL, cp_model.FEASIBLE)
         plan = whole.picked if whole.status in found else closest.picked
         policy_binds = held.status in found and held.cost > 0
@@ -1021,6 +1081,7 @@ class _Problem:
         *,
         free: bool,
         time_limit: float,
+        work: float,
     ) -> "_Change":
         """A plan that reaches every clearance target with the least change to the brief's
         constraints, each in basis points of the brief's value. With `free`, every brief
@@ -1084,12 +1145,12 @@ class _Problem:
         hinted = set(hint)
         for n, chosen in enumerate(x):
             model.add_hint(chosen, n in hinted)
-        solver = self._solver(settings, seed, time_limit, first=False)
+        solver = self._solver(settings, seed, time_limit, work, first=False)
         status = solver.solve(model)
         if status not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
-            return _Change(status, [], 0)
+            return _Change(status, [], 0, solver.deterministic_time)
         picked = [n for n, chosen in enumerate(x) if solver.boolean_value(chosen)]
-        return _Change(status, picked, round(solver.objective_value))
+        return _Change(status, picked, round(solver.objective_value), solver.deterministic_time)
 
     def _margin_levels(
         self,
@@ -1411,6 +1472,8 @@ class _Change:
     picked: list[int]
     cost: int
     """The sum of its changes in basis points of the brief's values."""
+    work: float = 0.0
+    """The deterministic time the search took."""
 
 
 def _raised(

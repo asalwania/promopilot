@@ -50,17 +50,22 @@ class Settings(BaseSettings):
     log_format: Literal["json", "console"] = "json"
 
     # The CP-SAT optimiser (ADR 0036). One worker and a fixed seed give the same plan for the
-    # same input whenever the solver proves optimality within the time limit; more workers
-    # interleave their search deterministically.
-    optimizer_time_limit_seconds: float = Field(default=10.0, gt=0)
+    # same input; more workers interleave their search deterministically. Each phase stops on
+    # a budget of CP-SAT deterministic seconds (work done, the same on any machine), so a plan
+    # never depends on how fast or busy the machine is; the *_TIME_LIMIT_SECONDS are
+    # wall-clock safety nets a healthy machine never reaches (ADR 0055).
+    optimizer_deterministic_limit: float = Field(default=10.0, gt=0)
+    optimizer_time_limit_seconds: float = Field(default=60.0, gt=0)
     optimizer_workers: int = Field(default=1, ge=1)
     optimizer_seed: int = Field(default=0, ge=0)
-    # Wall-clock seconds for proving which constraints bind, after the solve (ADR 0038). A
-    # constraint left unsettled when the time runs out is reported as unproven.
-    optimizer_binding_time_limit_seconds: float = Field(default=8.0, ge=0)
-    # Wall-clock seconds for finding the smallest relaxation of an infeasible request (ADR
-    # 0044); only a request no plan can reach every clearance target of spends them.
-    optimizer_relaxation_time_limit_seconds: float = Field(default=10.0, gt=0)
+    # Proving which constraints bind, after the solve (ADR 0038): a constraint left unsettled
+    # when the budget runs out is reported as unproven. 0 turns the analysis off.
+    optimizer_binding_deterministic_limit: float = Field(default=6.0, ge=0)
+    optimizer_binding_time_limit_seconds: float = Field(default=30.0, ge=0)
+    # Finding the smallest relaxation of an infeasible request (ADR 0044); only a request no
+    # plan can reach every clearance target of spends it.
+    optimizer_relaxation_deterministic_limit: float = Field(default=10.0, gt=0)
+    optimizer_relaxation_time_limit_seconds: float = Field(default=60.0, gt=0)
 
     # The Monte Carlo simulation of every plan revision (ADR 0042): runs per simulation, within
     # the simulator's MIN_RUNS..MAX_RUNS, and the seed that makes it reproducible.

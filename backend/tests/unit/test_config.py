@@ -15,13 +15,22 @@ def test_the_optimiser_is_deterministic_by_default(monkeypatch: pytest.MonkeyPat
         "OPTIMIZER_WORKERS",
         "OPTIMIZER_SEED",
         "OPTIMIZER_BINDING_TIME_LIMIT_SECONDS",
+        "OPTIMIZER_RELAXATION_TIME_LIMIT_SECONDS",
+        "OPTIMIZER_DETERMINISTIC_LIMIT",
+        "OPTIMIZER_BINDING_DETERMINISTIC_LIMIT",
+        "OPTIMIZER_RELAXATION_DETERMINISTIC_LIMIT",
     ):
         monkeypatch.delenv(name, raising=False)
 
     settings = Settings()
 
-    assert settings.optimizer_binding_time_limit_seconds == 8.0
-    assert settings.optimizer_time_limit_seconds == 10.0
+    # Work budgets decide the plan; wall-clock limits are only safety nets (ADR 0055).
+    assert settings.optimizer_deterministic_limit == 10.0
+    assert settings.optimizer_binding_deterministic_limit == 6.0
+    assert settings.optimizer_relaxation_deterministic_limit == 10.0
+    assert settings.optimizer_binding_time_limit_seconds == 30.0
+    assert settings.optimizer_time_limit_seconds == 60.0
+    assert settings.optimizer_relaxation_time_limit_seconds == 60.0
     assert settings.optimizer_workers == 1
     assert settings.optimizer_seed == 0
 
@@ -135,3 +144,24 @@ def test_the_critics_risk_thresholds_default_to_adr_0051(monkeypatch: pytest.Mon
     engine = create_async_engine("postgresql+asyncpg://unused@127.0.0.1:1/unused")
 
     assert build_planning(Settings(), engine).risk_thresholds == RiskThresholds()
+
+
+def test_the_optimisers_work_budgets_reach_the_solver_settings(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("OPTIMIZER_DETERMINISTIC_LIMIT", "4")
+    monkeypatch.setenv("OPTIMIZER_BINDING_DETERMINISTIC_LIMIT", "0")
+    monkeypatch.setenv("OPTIMIZER_RELAXATION_DETERMINISTIC_LIMIT", "3")
+    engine = create_async_engine("postgresql+asyncpg://unused@127.0.0.1:1/unused")
+
+    solver = build_planning(Settings(), engine).solver
+
+    assert (
+        solver.deterministic_limit,
+        solver.binding_deterministic_limit,
+        solver.relaxation_deterministic_limit,
+    ) == (4.0, 0.0, 3.0)
+    with monkeypatch.context() as patched:
+        patched.setenv("OPTIMIZER_DETERMINISTIC_LIMIT", "0")
+        with pytest.raises(ValidationError):
+            Settings()
