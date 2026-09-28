@@ -50,6 +50,17 @@ from promopilot.agents.state import (
     DegradedReason,
     PlanningState,
 )
+from promopilot.agents.trace import (
+    LLMPricing,
+    MemoryTrace,
+    NoTrace,
+    TracedProvider,
+    TracedToolRegistry,
+    TraceSink,
+    emit,
+    summarize,
+    traced_node,
+)
 
 __all__ = [
     "AgentTools",
@@ -64,8 +75,11 @@ __all__ = [
     "ExplainerAnswer",
     "GraphSnapshot",
     "GraphTools",
+    "LLMPricing",
     "LineRationale",
     "MemoryCheckpoints",
+    "MemoryTrace",
+    "NoTrace",
     "OptimisingPlanner",
     "PlannedRevision",
     "Planner",
@@ -80,8 +94,12 @@ __all__ = [
     "SessionRecorder",
     "StoredRevisions",
     "ToolCaller",
+    "TraceSink",
+    "TracedProvider",
+    "TracedToolRegistry",
     "build_graph",
     "checkpoint_serializer",
+    "emit",
     "explain_plan",
     "graph_state",
     "loosening",
@@ -90,5 +108,7 @@ __all__ = [
     "record_cassettes",
     "resume_with_decision",
     "start_planning",
+    "summarize",
     "template_explanations",
+    "traced_node",
 ]

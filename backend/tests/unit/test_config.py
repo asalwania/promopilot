@@ -68,3 +68,30 @@ def test_the_simulation_runs_and_seed_come_from_the_environment_within_bounds(
             patched.setenv("SIMULATION_RUNS", runs)
             with pytest.raises(ValueError, match="simulation_runs"):
                 Settings()
+
+
+def test_the_trace_polls_twice_a_second_and_logs_json_by_default(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("TRACE_POLL_INTERVAL_S", raising=False)
+    monkeypatch.delenv("LOG_FORMAT", raising=False)
+
+    settings = Settings()
+
+    assert settings.trace_poll_interval_s == 0.5
+    assert settings.log_format == "json"
+
+
+def test_the_trace_poll_interval_and_log_format_come_from_the_environment(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("TRACE_POLL_INTERVAL_S", "0.2")
+    monkeypatch.setenv("LOG_FORMAT", "console")
+
+    settings = Settings()
+
+    assert settings.trace_poll_interval_s == 0.2
+    assert settings.log_format == "console"
+    monkeypatch.setenv("LOG_FORMAT", "xml")
+    with pytest.raises(ValueError, match="log_format"):
+        Settings()

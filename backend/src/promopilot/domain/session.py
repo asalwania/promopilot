@@ -8,6 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from promopilot.domain.request import PlanningRequest
 from promopilot.domain.revision import PlanRevision
+from promopilot.domain.trace import SessionUsage
 
 
 class SessionStatus(StrEnum):
@@ -58,3 +59,5 @@ class PlanningSession(BaseModel):
     """The agent graph's checkpoint thread (ADR 0046); None for sessions planned before E8."""
     decisions: tuple[PlanDecision, ...] = ()
     """Every approval and rejection, oldest first."""
+    usage: SessionUsage = SessionUsage()
+    """What its LLM calls used and cost: the sums of its token-usage trace events (ADR 0047)."""

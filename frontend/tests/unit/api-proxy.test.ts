@@ -95,6 +95,92 @@ describe("proxyToApi", () => {
     await reader.cancel();
   });
 
+  it("marks an SSE stream so nothing between the API and the browser buffers it", async () => {
+    const { fetchImpl } = recordingFetch(
+      new Response("data: {}\n\n", {
+        headers: {
+          "content-type": "text/event-stream; charset=utf-8",
+          "cache-control": "no-cache",
+          "x-accel-buffering": "no",
+        },
+      }),
+    );
+
+    const response = await proxyToApi(
+      new Request("http://web:3000/api/sessions/abc/events"),
+      "http://api:8000",
+      fetchImpl,
+    );
+
+    // no-transform keeps Next's gzip (and any other proxy) from holding events back.
+    expect(response.headers.get("cache-control")).toBe(
+      "no-cache, no-transform",
+    );
+    expect(response.headers.get("x-accel-buffering")).toBe("no");
+  });
+
+  it("leaves other responses' caching headers alone", async () => {
+    const { fetchImpl } = recordingFetch(
+      new Response("{}", {
+        headers: {
+          "content-type": "application/json",
+          "cache-control": "max-age=60",
+        },
+      }),
+    );
+
+    const response = await proxyToApi(
+      new Request("http://web:3000/api/health"),
+      "http://api:8000",
+      fetchImpl,
+    );
+
+    expect(response.headers.get("cache-control")).toBe("max-age=60");
+    expect(response.headers.get("x-accel-buffering")).toBeNull();
+  });
+
+  it("forwards Last-Event-ID so a reconnecting stream resumes", async () => {
+    const seen: string[] = [];
+    const fetchImpl: typeof fetch = async (input, init) => {
+      seen.push(new Request(input, init).headers.get("last-event-id") ?? "");
+      return new Response("", {
+        headers: { "content-type": "text/event-stream" },
+      });
+    };
+
+    await proxyToApi(
+      new Request("http://web:3000/api/sessions/abc/events", {
+        headers: { "Last-Event-ID": "42" },
+      }),
+      "http://api:8000",
+      fetchImpl,
+    );
+
+    expect(seen).toEqual(["42"]);
+  });
+
+  it("aborts the API request when the browser goes away", async () => {
+    let upstreamSignal: AbortSignal | undefined;
+    const fetchImpl: typeof fetch = async (_input, init) => {
+      upstreamSignal = init?.signal ?? undefined;
+      return new Response("", {
+        headers: { "content-type": "text/event-stream" },
+      });
+    };
+    const browser = new AbortController();
+
+    await proxyToApi(
+      new Request("http://web:3000/api/sessions/abc/events", {
+        signal: browser.signal,
+      }),
+      "http://api:8000",
+      fetchImpl,
+    );
+    browser.abort();
+
+    expect(upstreamSignal?.aborted).toBe(true);
+  });
+
   it("answers 502 when the API cannot be reached", async () => {
     const failingFetch: typeof fetch = async () => {
       throw new TypeError("fetch failed");

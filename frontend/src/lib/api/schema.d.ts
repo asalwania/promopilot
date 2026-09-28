@@ -230,6 +230,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/sessions/{session_id}/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Session Events
+         * @description The session's trace events over SSE (SF-01, ADR 0047), in order, as they happen.
+         *
+         *     Each event's SSE `id` is its number in the session; a client that reconnects with
+         *     `Last-Event-ID` gets the events after it, with no gaps or repeats (a missing or
+         *     non-numeric one replays the trace from the start). Once the session is final
+         *     (approved, or failed) the stream sends `event: end` with its status and closes.
+         */
+        get: operations["session_events_api_sessions__session_id__events_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/sessions/{session_id}/reject": {
         parameters: {
             query?: never;
@@ -307,6 +332,19 @@ export interface components {
          * @enum {string}
          */
         BindingEvidence: "exact" | "lower_bound" | "unproven" | "infeasible";
+        /**
+         * ClarificationAsked
+         * @description The Context agent paused to ask the manager these questions.
+         */
+        ClarificationAsked: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "clarification";
+            /** Questions */
+            questions: string[];
+        };
         /**
          * ClearanceShortfall
          * @description A clearance target the plan misses: no plan within the other constraints reaches it,
@@ -464,6 +502,21 @@ export interface components {
          */
         DecisionKind: "approved" | "rejected";
         /**
+         * DecisionMade
+         * @description A decision taken in the graph: a route a node chose, or a human's approve or reject.
+         */
+        DecisionMade: {
+            /** Decision */
+            decision: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "decision";
+            /** Summary */
+            summary: string;
+        };
+        /**
          * ExplanationSource
          * @enum {string}
          */
@@ -474,6 +527,23 @@ export interface components {
          * @enum {string}
          */
         FallbackReason: "ungrounded" | "invalid_answer" | "llm_unavailable";
+        /**
+         * FindingRaised
+         * @description Something the Critic found in the plan.
+         */
+        FindingRaised: {
+            /** Code */
+            code: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "finding";
+            /** Message */
+            message: string;
+            /** Source */
+            source: string;
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
@@ -536,6 +606,7 @@ export interface components {
             /** Sku Id */
             sku_id: string;
         };
+        JsonValue: unknown;
         /**
          * LineSimulation
          * @description One plan line's simulated ranges, identified by its SKU and region.
@@ -668,6 +739,39 @@ export interface components {
             model_id: string;
             /** Version */
             version: number;
+        };
+        /**
+         * NodeFinished
+         * @description A graph node's run ended.
+         */
+        NodeFinished: {
+            /** Duration Ms */
+            duration_ms: number;
+            /** Error */
+            error?: string | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "node_finished";
+            outcome: components["schemas"]["NodeOutcome"];
+        };
+        /**
+         * NodeOutcome
+         * @description How a node's run ended: it finished, paused at an interrupt, or raised.
+         * @enum {string}
+         */
+        NodeOutcome: "completed" | "interrupted" | "failed";
+        /**
+         * NodeStarted
+         * @description A graph node started running (again, when an interrupted node resumes).
+         */
+        NodeStarted: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "node_started";
         };
         /**
          * NotSelectedOption
@@ -1091,6 +1195,8 @@ export interface components {
              */
             session_id: string;
             status: components["schemas"]["SessionStatus"];
+            /** @description What the session's LLM calls used and cost: the sums of its token-usage trace events (ADR 0047). */
+            usage: components["schemas"]["SessionUsage"];
         };
         /**
          * SessionStatus
@@ -1102,6 +1208,42 @@ export interface components {
          * @enum {string}
          */
         SessionStatus: "planning" | "awaiting_clarification" | "awaiting_approval" | "approved" | "rejected" | "failed";
+        /**
+         * SessionUsage
+         * @description What a planning session's LLM calls used and cost: the sums of its token-usage events.
+         */
+        SessionUsage: {
+            /**
+             * Calls
+             * @default 0
+             */
+            calls: number;
+            /**
+             * Cost Inr
+             * @default 0
+             */
+            cost_inr: number;
+            /**
+             * Cost Usd
+             * @default 0
+             */
+            cost_usd: number;
+            /**
+             * Input Tokens
+             * @default 0
+             */
+            input_tokens: number;
+            /**
+             * Output Tokens
+             * @default 0
+             */
+            output_tokens: number;
+            /**
+             * Unpriced Models
+             * @default []
+             */
+            unpriced_models: string[];
+        };
         /**
          * SimulatePlanRequest
          * @description Re-simulate a session's latest plan revision (ADR 0043), optionally against a
@@ -1168,6 +1310,81 @@ export interface components {
          * @enum {string}
          */
         TargetSegment: "Value Seekers" | "Families" | "Premium" | "Young Urban" | "All customers";
+        /**
+         * TokensUsed
+         * @description One billed LLM call: its model, tokens and cost, priced when it was made.
+         */
+        TokensUsed: {
+            /** Cost Inr */
+            cost_inr: number | null;
+            /** Cost Usd */
+            cost_usd: number | null;
+            /** Input Tokens */
+            input_tokens: number;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "token_usage";
+            /** Model */
+            model: string;
+            /** Output Tokens */
+            output_tokens: number;
+        };
+        /**
+         * ToolCalled
+         * @description A deterministic tool was called: its arguments and a summary of what it returned.
+         */
+        ToolCalled: {
+            arguments: components["schemas"]["JsonValue"];
+            /** Error Code */
+            error_code?: string | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "tool_called";
+            /** Ok */
+            ok: boolean;
+            result_summary: components["schemas"]["JsonValue"];
+            /** Tool */
+            tool: string;
+        };
+        /**
+         * TraceEvent
+         * @description One step of a planning session's trace.
+         */
+        TraceEvent: {
+            /**
+             * At
+             * Format: date-time
+             */
+            at: string;
+            /** Id */
+            id: number;
+            /** Node */
+            node: string | null;
+            payload: components["schemas"]["TracePayload"];
+            /**
+             * Session Id
+             * Format: uuid
+             */
+            session_id: string;
+        };
+        TracePayload: components["schemas"]["NodeStarted"] | components["schemas"]["NodeFinished"] | components["schemas"]["ToolCalled"] | components["schemas"]["DecisionMade"] | components["schemas"]["ClarificationAsked"] | components["schemas"]["FindingRaised"] | components["schemas"]["TokensUsed"];
+        /**
+         * TraceStreamEnd
+         * @description The last event of a session's trace stream (`event: end`): the session is final, so no
+         *     more trace events can come (ADR 0047).
+         */
+        TraceStreamEnd: {
+            /**
+             * Session Id
+             * Format: uuid
+             */
+            session_id: string;
+            status: components["schemas"]["SessionStatus"];
+        };
         /** ValidationError */
         ValidationError: {
             /** Context */
@@ -1659,6 +1876,46 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    session_events_api_sessions__session_id__events_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "last-event-id"?: string | null;
+            };
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/event-stream": unknown;
+                };
+            };
+            /** @description Unknown session */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
             };
         };
     };

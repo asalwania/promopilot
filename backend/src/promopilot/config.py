@@ -44,6 +44,11 @@ class Settings(BaseSettings):
     llm_prices: dict[str, ModelPrice] = Field(default_factory=lambda: dict(DEFAULT_LLM_PRICES))
     usd_inr_rate: float = Field(default=96.0, gt=0)
 
+    # The live trace (ADR 0047): how often an open SSE stream looks for new trace events, in
+    # seconds, and whether logs are JSON lines (`json`) or readable text (`console`).
+    trace_poll_interval_s: float = Field(default=0.5, gt=0, le=10)
+    log_format: Literal["json", "console"] = "json"
+
     # The CP-SAT optimiser (ADR 0036). One worker and a fixed seed give the same plan for the
     # same input whenever the solver proves optimality within the time limit; more workers
     # interleave their search deterministically.

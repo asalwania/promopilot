@@ -18,6 +18,7 @@ from testcontainers.community.postgres import PostgresContainer
 from promopilot.agents import (
     BriefReading,
     GraphTools,
+    LLMPricing,
     MemoryCheckpoints,
     OptimisingPlanner,
     PlannedRevision,
@@ -30,7 +31,14 @@ from promopilot.agents.tools.inventory_status import pooled_stock
 from promopilot.api.main import create_app
 from promopilot.api.plans import PlanService
 from promopilot.api.sessions import SessionService
-from promopilot.data import RetailData, SessionConflictError, SessionStore, load_dataset
+from promopilot.config import DEFAULT_LLM_PRICES
+from promopilot.data import (
+    RetailData,
+    SessionConflictError,
+    SessionStore,
+    TraceStore,
+    load_dataset,
+)
 from promopilot.datagen import GeneratedDataset, write
 from promopilot.domain import (
     ClearanceShortfall,
@@ -142,6 +150,22 @@ async def api_process(
     planning: Callable[[Planner], Planner] | None = None,
 ) -> AsyncIterator[AsyncClient]:
     """One API process: its own engine, startup and shutdown, like a uvicorn worker."""
+    async with api_app(url, llm, models, planning) as app:
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            yield client
+
+
+@asynccontextmanager
+async def api_app(
+    url: str,
+    llm: LLMProvider,
+    models: tuple[DemandModel, Relations] | None,
+    planning: Callable[[Planner], Planner] | None = None,
+    *,
+    trace_poll_interval_s: float = 0.05,
+) -> AsyncIterator[FastAPI]:
+    """The app of one API process, started up; it shuts down on leaving."""
     engine = create_async_engine(url)
     data = RetailData(engine)
     demand = Fixed(None if models is None else (entry(ModelKind.DEMAND, 1), models[0]))
@@ -156,6 +180,7 @@ async def api_process(
         simulation=simulation,
     )
     store = SessionStore(engine)
+    trace = TraceStore(engine)
     sessions = SessionService(
         store=store,
         tools=GraphTools(
@@ -163,9 +188,13 @@ async def api_process(
             planner=planning(planner) if planning else planner,
             sessions=store,
             policy=FREE,
+            trace=trace,
+            pricing=LLMPricing(prices=DEFAULT_LLM_PRICES, usd_inr_rate=96.0),
         ),
         llm=llm,
         checkpoints=PostgresCheckpoints(url),
+        trace=trace,
+        trace_poll_interval_s=trace_poll_interval_s,
     )
     plans = PlanService(
         revisions=store, demand_models=demand, data=data, policy=FREE, defaults=simulation
@@ -175,9 +204,7 @@ async def api_process(
     )
     try:
         async with app.router.lifespan_context(app):
-            transport = ASGITransport(app=app)
-            async with AsyncClient(transport=transport, base_url="http://test") as client:
-                yield client
+            yield app
     finally:
         await engine.dispose()
 
@@ -826,6 +853,7 @@ async def test_without_checkpoints_a_new_session_is_503(postgres_url: str) -> No
         ),
         llm=FakeProvider([]),
         checkpoints=BrokenCheckpoints(),
+        trace=TraceStore(engine),
     )
     app = create_app(database_probe=HealthyProbe(), model_status=NoModel(), sessions=sessions)
     try:

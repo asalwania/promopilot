@@ -267,6 +267,10 @@ _Avoid_: error, warning
 The saved state of a planning session's agent graph after a step. A session paused at an interrupt (approval, clarification) resumes from its checkpoint, even after an API restart.
 _Avoid_: snapshot, save point
 
+**Trace event**:
+One numbered step of a planning session's agent graph: a node starting or finishing, a tool call, a decision, a clarification, a finding, or the tokens one LLM call used and cost. A session's trace events are kept in order and stream live to the session page; its token usage is their sum.
+_Avoid_: log line, message, activity
+
 **Violation**:
 One hard constraint a plan breaks on its own plan-time numbers (e.g. total promo cost over the marketing budget, a plan line below unit cost), found by plan validation and sent back to the planner.
 _Avoid_: error, failure, issue (which the critic's risk review raises)

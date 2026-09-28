@@ -8,6 +8,7 @@ from sqlalchemy import func, insert, select, update
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from promopilot.data.schema import approvals, plan_lines, plan_revisions, planning_sessions
+from promopilot.data.trace import session_usage
 from promopilot.domain import (
     BindingConstraint,
     ClearanceShortfall,
@@ -101,6 +102,7 @@ class SessionStore:
                     .order_by(approvals.c.id)
                 )
             ).all()
+            usage = await session_usage(connection, session_id)
         request = session.planning_request
         return PlanningSession(
             id=session.id,
@@ -121,6 +123,7 @@ class SessionStore:
                 )
                 for row in decisions
             ),
+            usage=usage,
         )
 
     async def save_revision(
