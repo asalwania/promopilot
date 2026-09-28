@@ -69,6 +69,12 @@ from promopilot.agents.recording import (
     ungrounded_answers,
 )
 from promopilot.agents.session import BriefData, read_context, read_planning_request
+from promopilot.agents.stack import (
+    PlanningData,
+    PlanningSettings,
+    PlanningStack,
+    planning_stack,
+)
 from promopilot.agents.state import (
     AmendAnswer,
     ApprovalAnswer,
@@ -125,8 +131,11 @@ __all__ = [
     "PlannedRevision",
     "Planner",
     "PlannerData",
+    "PlanningData",
     "PlanningError",
     "PlanningGraph",
+    "PlanningSettings",
+    "PlanningStack",
     "PlanningState",
     "PostgresCheckpoints",
     "RecordedPlanning",
@@ -155,6 +164,7 @@ __all__ = [
     "manifest_problems",
     "plan_data",
     "plan_with_tools",
+    "planning_stack",
     "read_by_rules",
     "read_context",
     "read_manifest",
