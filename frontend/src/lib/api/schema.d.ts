@@ -335,6 +335,11 @@ export interface components {
         Assumption: {
             /** Confidence */
             confidence: number;
+            /**
+             * Fallback
+             * @default false
+             */
+            fallback: boolean;
             /** Field */
             field: string;
             /**

@@ -28,6 +28,7 @@ import pydantic
 
 from promopilot.agents.context import BriefError, BriefReading, week_table
 from promopilot.agents.resolution import AMBIGUOUS_BELOW, BriefResolver, Resolution
+from promopilot.agents.state import DegradedReason
 from promopilot.competitors import competitor_gaps
 from promopilot.domain import (
     Assumption,
@@ -75,6 +76,8 @@ class ContextReading:
     """None while any question is open."""
     assumptions: tuple[Assumption, ...]
     questions: tuple[ClarificationQuestion, ...]
+    degraded: DegradedReason | None = None
+    """Why the brief was read by rules, not by the LLM (ADR 0053); None for an LLM reading."""
 
 
 def interpret(reading: BriefReading, world: ContextWorld) -> ContextReading:

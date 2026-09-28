@@ -336,15 +336,24 @@ async def test_a_session_without_trained_models_fails_saying_how_to_train(
     assert "make train" in done["error"]
 
 
-async def test_an_llm_error_fails_the_session(postgres_url: str, running_api: Api) -> None:
+async def test_the_llm_down_at_context_reads_the_brief_by_rules_and_asks_instead_of_failing(
+    postgres_url: str, running_api: Api
+) -> None:
+    # ADR 0053: the brief states its scope and budget, but "the next festival" names no weeks.
     async with running_api(postgres_url, FakeProvider([LLMError("provider down")])) as client:
         session_id = (await client.post("/api/sessions", json={"brief": BRIEF})).json()[
             "session_id"
         ]
         done = await settled(client, session_id)
 
-    assert done["status"] == "failed"
-    assert "provider down" in done["error"]
+    assert done["status"] == "awaiting_clarification"
+    assert [q["field"] for q in done["questions"]] == ["promo_window"]
+    assumed = {a["field"]: a for a in done["assumptions"]}
+    assert all(a["fallback"] for a in done["assumptions"])
+    assert (assumed["marketing_budget"]["value"], assumed["marketing_budget"]["confidence"]) == (
+        "₹20,000",
+        0.7,
+    )
     assert done["plan_revision"] is None
 
 

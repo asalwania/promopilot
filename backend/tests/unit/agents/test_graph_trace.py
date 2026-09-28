@@ -11,6 +11,7 @@ from promopilot.agents import (
     LLMPricing,
     MemoryTrace,
     PlannedRevision,
+    PlanningError,
     PlanningGraph,
     build_graph,
     checkpoint_serializer,
@@ -197,16 +198,57 @@ async def test_rejecting_traces_the_reason_and_pauses_at_approval_again(
     )
 
 
+class CrashingPlanner:
+    async def plan(self, request: object) -> PlannedRevision:
+        raise PlanningError("the solver crashed")
+
+
 async def test_a_failing_node_is_traced_as_failed(
     data: InMemoryRetailData, trace: MemoryTrace
 ) -> None:
-    graph = graph_for(data, trace, FakeProvider([LLMError("provider down")]))
+    graph = build_graph(
+        GraphTools(
+            brief_data=data,
+            planner=CrashingPlanner(),
+            sessions=RecordedSessions(),
+            policy=POLICY,
+            trace=trace,
+        ),
+        FakeProvider([READING]),
+        InMemorySaver(serde=checkpoint_serializer()),
+    )
     session_id = uuid4()
 
-    with pytest.raises(LLMError, match="provider down"):
+    with pytest.raises(PlanningError, match="the solver crashed"):
         await start_planning(graph, str(session_id), session_id, BRIEF)
 
-    assert steps(trace.of(session_id)) == [("context", "node_started"), ("context", "failed")]
+    assert steps(trace.of(session_id)) == [
+        ("context", "node_started"),
+        ("context", "completed"),
+        ("planner", "node_started"),
+        ("planner", "failed"),
+    ]
+
+
+async def test_the_llm_down_at_context_is_a_fallback_decision_not_a_failure(
+    data: InMemoryRetailData, trace: MemoryTrace
+) -> None:
+    graph = graph_for(data, trace, FakeProvider([LLMError("provider down"), explainer_down()]))
+    session_id = uuid4()
+
+    await start_planning(graph, str(session_id), session_id, BRIEF)
+
+    events = trace.of(session_id)
+    assert steps(events)[:3] == [
+        ("context", "node_started"),
+        ("context", "decision"),
+        ("context", "completed"),
+    ]
+    decision = events[1].payload
+    assert isinstance(decision, DecisionMade)
+    assert decision.decision == "context_fallback"
+    assert "llm_unavailable" in decision.summary
+    assert steps(events)[-1] == ("approval", "interrupted")
 
 
 async def test_a_question_is_a_clarification_event_and_clarify_pauses(

@@ -55,6 +55,16 @@ _QUANTITY = re.compile(
     r"(\d+(?:\.\d+)?)\s*(kgs?|kilograms?|gms?|grams?|g|ml|millilit(?:re|er)s?|ltrs?|lit(?:re|er)s?|l)\b"
 )
 _WORD = re.compile(r"[a-z0-9]+(?:[.x][a-z0-9]+)*")
+_EVERY_REGION = re.compile(
+    r"\b(?:pan[- ]?india|all[- ]india|nation[- ]?wide|across (?:all of )?india"
+    r"|(?:all|every|each)(?: of)?(?: the)?(?: four| 4)? (?:regions?|zones?))\b",
+    re.IGNORECASE,
+)
+_EVERY_CATEGORY = re.compile(
+    r"\b(?:(?:all|every|each)(?: of)?(?: the)?(?: product)? categor(?:y|ies)"
+    r"|(?:entire|whole|full)(?: product)? (?:range|catalogue|catalog|assortment))\b",
+    re.IGNORECASE,
+)
 
 
 class ResolverData(Protocol):
@@ -95,6 +105,21 @@ class Resolution[T]:
 
 
 @dataclass(frozen=True)
+class Mentions:
+    """What a whole text names, term by term: each term whose every word the text has, in
+    order. Nothing is guessed, so a misspelt name is no mention (ADR 0053)."""
+
+    regions: tuple[Region, ...]
+    """In the order North, South, East, West; every region when the text says so."""
+    categories: tuple[str, ...]
+    """In catalogue order; every category when the text says so."""
+    products: tuple[str, ...]
+    """Category, subcategory, brand and pack-size names, as the catalogue writes them."""
+    holidays: tuple[str, ...]
+    """Holiday names, as the calendar writes them."""
+
+
+@dataclass(frozen=True)
 class _Term:
     kind: str
     value: str
@@ -124,6 +149,10 @@ class BriefResolver:
     def categories(self, phrase: str) -> Resolution[tuple[str, ...]]:
         """Categories, in catalogue order: "Snacks and Beverages" → (Snacks, Beverages)."""
         order = {name: n for n, name in enumerate(self._categories)}
+        if _names_every(_EVERY_CATEGORY, phrase):
+            every = tuple(self._categories)
+            label = f"all categories: {', '.join(every)}"
+            return Resolution(phrase, (Candidate(every, label, 1.0),))
 
         def value(terms: tuple[_Term, ...]) -> tuple[tuple[str, ...], str] | None:
             names = tuple(sorted({t.value for t in terms}, key=order.__getitem__))
@@ -132,7 +161,12 @@ class BriefResolver:
         return _resolve(phrase, _terms("category", self._categories), value)
 
     def regions(self, phrase: str) -> Resolution[tuple[Region, ...]]:
-        """Regions, in the order North, South, East, West: "North and West" → (North, West)."""
+        """Regions, in the order North, South, East, West: "North and West" → (North, West);
+        "all regions" or "pan-India" → every region."""
+        if _names_every(_EVERY_REGION, phrase):
+            every = tuple(self._regions)
+            label = f"all regions: {', '.join(r.value for r in every)}"
+            return Resolution(phrase, (Candidate(every, label, 1.0),))
 
         def value(terms: tuple[_Term, ...]) -> tuple[tuple[Region, ...], str] | None:
             named = {t.value for t in terms}
@@ -191,6 +225,43 @@ class BriefResolver:
             return PromoWindow(start_week=start, end_week=end), f"{names} (weeks {start}-{end})"
 
         return _resolve(phrase, _terms("holiday", weeks), value)
+
+    def mentions(self, text: str) -> Mentions:
+        """The regions, categories, product names and holidays `text` names exactly: each term
+        whose words all appear in it, in order. Unlike a phrase, a whole text is not scored."""
+        words = _words(text, fillers=True)
+        regions = [r.value for r in self._regions]
+        named_regions = set(_mentioned(words, _terms("region", regions)))
+        every_region = _EVERY_REGION.search(text) is not None
+        named_categories = set(_mentioned(words, _terms("category", self._categories)))
+        every_category = _EVERY_CATEGORY.search(text) is not None
+        holidays = dict.fromkeys(str(n) for n in self._calendar["holiday_name"].dropna())
+        return Mentions(
+            regions=tuple(r for r in self._regions if every_region or r.value in named_regions),
+            categories=tuple(
+                c for c in self._categories if every_category or c in named_categories
+            ),
+            products=tuple(dict.fromkeys(_mentioned(words, self._product_terms))),
+            holidays=tuple(dict.fromkeys(_mentioned(words, _terms("holiday", holidays)))),
+        )
+
+
+def _names_every(pattern: re.Pattern[str], phrase: str) -> bool:
+    """The phrase says "every region" (or category) and names nothing else."""
+    return pattern.search(phrase) is not None and not _words(pattern.sub(" ", phrase))
+
+
+def _mentioned(words: Sequence[str], terms: Iterable[_Term]) -> list[str]:
+    """The values of the terms whose words appear in `words` as a run, in text order."""
+    found = []
+    for term in terms:
+        named = _words(term.value, fillers=True)
+        size = len(named)
+        for start in range(len(words) - size + 1):
+            if tuple(words[start : start + size]) == named:
+                found.append((start, term.value))
+                break
+    return [value for _, value in sorted(found)]
 
 
 def _resolve[T](
@@ -257,12 +328,13 @@ def _terms(kind: str, values: Iterable[str]) -> list[_Term]:
     return [_Term(kind, str(value), words) for value in values if (words := _words(str(value)))]
 
 
-def _words(text: str) -> tuple[str, ...]:
+def _words(text: str, *, fillers: bool = False) -> tuple[str, ...]:
+    """Meaningful words; with `fillers`, every word, so a mention's words must be adjacent."""
     text = _QUANTITY.sub(lambda m: m.group(1) + _unit(m.group(2)), text.lower())
     words = []
     for raw in _WORD.findall(text):
         word = _singular(raw)
-        if raw not in _FILLERS and word not in _FILLERS:
+        if fillers or (raw not in _FILLERS and word not in _FILLERS):
             words.append(word)
     return tuple(words)
 

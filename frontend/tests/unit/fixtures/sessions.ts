@@ -333,6 +333,7 @@ export const awaitingClarificationSession: SessionResponse = {
       confidence: 1,
       flagged: false,
       note: null,
+      fallback: false,
     },
   ],
   questions: [

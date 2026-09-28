@@ -10,6 +10,7 @@ from langgraph.checkpoint.memory import InMemorySaver
 
 from promopilot.agents import (
     BriefReading,
+    DegradedReason,
     GraphTools,
     PlannedRevision,
     build_graph,
@@ -41,7 +42,7 @@ from promopilot.domain import (
 )
 from promopilot.guardrails import LineFacts, PlanFacts, SkuFacts, plan_limits
 from promopilot.llm import FakeProvider, LLMError
-from tests.unit.agents.fakes import InMemoryRetailData, explainer_down
+from tests.unit.agents.fakes import DownProvider, InMemoryRetailData, explainer_down
 
 HISTORY_WEEKS = 52  # small_config
 BUDGET = 20_000.0
@@ -308,18 +309,86 @@ async def test_a_new_graph_on_the_same_checkpointer_resumes_where_the_old_one_pa
     assert state.values.plan == planned().revision
 
 
-async def test_a_context_agent_whose_llm_fails_fails_the_run(
-    data: InMemoryRetailData, sessions: RecordedSessions, checkpointer: InMemorySaver
+# --- the LLM down at Context: the fallback reading (SF-03, #124, ADR 0053) --------------------
+
+DEMO_BRIEF = (  # cassettes/briefs.json
+    "Plan a Diwali promotion for Snacks and Beverages in North and West. Run it for the two "
+    "weeks leading up to Diwali, with a marketing budget of ₹2 lakh."
+)
+
+
+async def test_with_the_llm_down_at_context_the_demo_brief_still_reaches_a_plan(
+    default_dataset: GeneratedDataset, sessions: RecordedSessions, checkpointer: InMemorySaver
 ) -> None:
+    llm = DownProvider()
+    planner = ScriptedPlanner(planned())
     graph = build_graph(
-        tools(data, sessions), FakeProvider([LLMError("provider down")]), checkpointer
+        GraphTools(
+            brief_data=InMemoryRetailData(default_dataset),
+            planner=planner,
+            sessions=sessions,
+            policy=POLICY,
+        ),
+        llm,
+        checkpointer,
     )
     session_id = uuid4()
 
-    with pytest.raises(LLMError, match="provider down"):
-        await start_planning(graph, str(session_id), session_id, BRIEF)
+    route = await start_planning(graph, str(session_id), session_id, DEMO_BRIEF)
 
-    assert sessions.revisions == {}
+    assert route == ["context", "planner", "critic", "explainer", "approval"]
+    state = await graph_state(graph, str(session_id))
+    assert state is not None
+    assert state.values.context_degraded is DegradedReason.LLM_UNAVAILABLE
+    request = planner.requests[0]
+    assert request.scope.regions == (Region.NORTH, Region.WEST)
+    assert request.scope.categories == ("Snacks", "Beverages")
+    assert (request.promo_window.start_week, request.promo_window.end_week) == (108, 109)
+    # Numbers come only from the brief's text: "₹2 lakh".
+    assert request.marketing_budget == 200_000.0
+    saved = sessions.assumptions[session_id]
+    assert saved == state.values.assumptions
+    assert saved
+    assert all(a.fallback for a in saved)
+    assert {a.field: a for a in saved}["marketing_budget"].confidence == 0.7
+
+
+async def test_with_the_llm_down_a_brief_the_rules_cannot_read_goes_to_clarify_not_failed(
+    data: InMemoryRetailData, sessions: RecordedSessions, checkpointer: InMemorySaver
+) -> None:
+    llm = FakeProvider([LLMError("down"), LLMError("still down"), explainer_down()])
+    graph = build_graph(tools(data, sessions), llm, checkpointer)
+    session_id = uuid4()
+
+    route = await start_planning(
+        graph, str(session_id), session_id, "Something nice for the festive season"
+    )
+
+    assert route == ["context", "clarify"]
+    paused = await graph_state(graph, str(session_id))
+    assert paused is not None
+    assert paused.awaits_clarification
+    asked = {q.field: q for q in paused.values.questions}
+    assert set(asked) == {"scope.regions", "scope.categories", "promo_window", "marketing_budget"}
+
+    # The manager answers while the LLM is still down: the rules read each answer.
+    route = await resume_with_answers(
+        graph,
+        str(session_id),
+        {
+            asked["scope.regions"].id: "North",
+            asked["scope.categories"].id: "Snacks",
+            asked["promo_window"].id: "weeks 54-55",
+            asked["marketing_budget"].id: "₹20k",
+        },
+    )
+
+    assert route == ["clarify", "context", "planner", "critic", "explainer", "approval"]
+    state = await graph_state(graph, str(session_id))
+    assert state is not None
+    assert state.values.request is not None
+    assert state.values.request.marketing_budget == BUDGET
+    assert state.values.context_degraded is DegradedReason.LLM_UNAVAILABLE
 
 
 # --- the Context agent and the Clarify interrupt (#46, ADR 0048) ------------------------------

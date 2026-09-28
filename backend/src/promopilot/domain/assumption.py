@@ -31,6 +31,9 @@ class Assumption(BaseModel):
     """The agent did not take the brief at its word (a value that would loosen company policy,
     an objective or target the planner does not offer), or the manager should check it."""
     note: str | None = None
+    fallback: bool = False
+    """Read by rules because the LLM was unavailable (ADR 0053): what the rules read from the
+    brief is at most 0.7 confident."""
 
 
 class QuestionReason(StrEnum):
