@@ -18,7 +18,49 @@ from promopilot.domain.selection import (
     WhyChosen,
 )
 from promopilot.domain.simulation import PlanSimulation
-from promopilot.domain.vocabulary import Region
+from promopilot.domain.vocabulary import Region, Segment
+
+
+def uplift_pct(units: float, baseline_units: float) -> float | None:
+    """Units above the no-promotion baseline, as a percentage of it; None without a baseline."""
+    if baseline_units <= 0:
+        return None
+    return (units / baseline_units - 1) * 100
+
+
+class SegmentUplift(BaseModel):
+    """A plan line's expected units in one customer segment against its no-promotion baseline,
+    the anchor SKU's over the promo weeks (F-03 AC2)."""
+
+    model_config = ConfigDict(frozen=True)
+
+    segment: Segment
+    units: float = Field(ge=0)
+    baseline_units: float = Field(ge=0)
+    uplift_pct: float | None
+    """None when the segment has no baseline."""
+
+    @classmethod
+    def of(cls, segment: Segment, *, units: float, baseline_units: float) -> "SegmentUplift":
+        return cls(
+            segment=segment,
+            units=units,
+            baseline_units=baseline_units,
+            uplift_pct=uplift_pct(units, baseline_units),
+        )
+
+
+class LineCrossEffect(BaseModel):
+    """Another SKU a plan line moves in its region, as the relations calculators give it
+    (ADR 0033): a fall in profit is cannibalisation, a rise is halo."""
+
+    model_config = ConfigDict(frozen=True)
+
+    sku_id: str
+    units_change_pct: float
+    """The change in its units as a percentage of its baseline over the promo weeks."""
+    profit_change: float
+    """Rupees."""
 
 
 class PlanRevisionLine(BaseModel):
@@ -35,6 +77,22 @@ class PlanRevisionLine(BaseModel):
     mechanism_comparison: tuple[MechanismOutcome, ...] = ()
     """Each mechanism's best option for the line's SKU and region, the line's own mechanism
     shown with the line itself (F-02, ADR 0041); empty for revisions planned before E7."""
+    baseline_units: float | None = Field(default=None, ge=0)
+    """The anchor SKU's expected units over the promo weeks with no promotion; None for
+    revisions planned before #60, like `uplift_pct`."""
+    uplift_pct: float | None = None
+    """expected_units above baseline_units, as a percentage of it (`uplift_pct`)."""
+    segments: tuple[SegmentUplift, ...] = ()
+    """The expected units and uplift in each segment, in Segment order (F-03 AC2)."""
+    cross_effects: tuple[LineCrossEffect, ...] = ()
+    """Every other SKU the line moves in its region, the largest profit change first."""
+
+    @model_validator(mode="after")
+    def _each_segment_once(self) -> Self:
+        named = [segment.segment for segment in self.segments]
+        if len(named) != len(set(named)):
+            raise ValueError("a plan line names each segment once")
+        return self
 
 
 class LineChange(BaseModel):

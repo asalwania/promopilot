@@ -7,6 +7,7 @@ from promopilot.domain import (
     CompetitorReaction,
     ExplanationSource,
     FallbackReason,
+    LineCrossEffect,
     Mechanism,
     OpenIssue,
     PlanExplanation,
@@ -21,9 +22,12 @@ from promopilot.domain import (
     RiskCode,
     RiskFinding,
     Scope,
+    Segment,
+    SegmentUplift,
     TargetSegment,
     Violation,
     ViolationCode,
+    uplift_pct,
 )
 
 
@@ -255,3 +259,57 @@ def test_an_open_issue_stored_before_risk_findings_still_reads_as_a_violation() 
     assert isinstance(risk, RiskFinding)
     assert risk.code is RiskCode.STOCKOUT_RISK
     assert issues.dump_python((violation,), mode="json")[0]["kind"] == "violation"
+
+
+def test_uplift_is_the_units_above_baseline_as_a_percentage_of_it() -> None:
+    assert uplift_pct(150.0, 100.0) == pytest.approx(50.0)
+    assert uplift_pct(80.0, 100.0) == pytest.approx(-20.0)
+
+
+def test_there_is_no_uplift_without_a_baseline() -> None:
+    assert uplift_pct(12.0, 0.0) is None
+
+
+def test_a_segments_uplift_is_computed_from_its_units_and_baseline() -> None:
+    segment = SegmentUplift.of(Segment.FAMILIES, units=300.0, baseline_units=200.0)
+
+    assert segment == SegmentUplift(
+        segment=Segment.FAMILIES, units=300.0, baseline_units=200.0, uplift_pct=50.0
+    )
+
+
+def test_a_plan_line_planned_before_uplift_was_kept_reads_back_without_it() -> None:
+    planned = PlanRevisionLine(
+        line=line(), expected_units=10.0, promo_cost=5.0, expected_incremental_profit=1.0
+    )
+
+    assert planned.baseline_units is None
+    assert planned.uplift_pct is None
+    assert planned.segments == ()
+    assert planned.cross_effects == ()
+
+
+def test_a_plan_line_names_each_segment_once() -> None:
+    families = SegmentUplift.of(Segment.FAMILIES, units=3.0, baseline_units=2.0)
+
+    with pytest.raises(ValidationError, match="each segment once"):
+        PlanRevisionLine(
+            line=line(),
+            expected_units=6.0,
+            promo_cost=5.0,
+            expected_incremental_profit=1.0,
+            segments=(families, families),
+        )
+
+
+def test_a_plan_lines_cross_effect_names_the_sku_it_moves() -> None:
+    effect = LineCrossEffect(sku_id="SKU002", units_change_pct=-12.5, profit_change=-3000.0)
+    planned = PlanRevisionLine(
+        line=line(),
+        expected_units=10.0,
+        promo_cost=5.0,
+        expected_incremental_profit=1.0,
+        cross_effects=(effect,),
+    )
+
+    assert planned.cross_effects[0].sku_id == "SKU002"

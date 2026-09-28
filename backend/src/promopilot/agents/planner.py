@@ -28,10 +28,21 @@ from promopilot.agents.tools.estimate_demand import DemandModelSource
 from promopilot.agents.tools.get_relations import RelationsSource
 from promopilot.agents.tools.inventory_status import pooled_stock
 from promopilot.competitors import read_competitor_gaps
-from promopilot.domain import CompanyPolicy, PlanningRequest, PlanRevision, PlanRevisionLine
+from promopilot.domain import (
+    CompanyPolicy,
+    LineCrossEffect,
+    PlanLine,
+    PlanningRequest,
+    PlanRevision,
+    PlanRevisionLine,
+    Segment,
+    SegmentUplift,
+    uplift_pct,
+)
 from promopilot.guardrails import PlanFacts
 from promopilot.mechanisms import ComparisonContext, compare
-from promopilot.models.demand import DemandModel
+from promopilot.models.demand import DemandModel, PredictionContext
+from promopilot.models.relations import line_effects
 from promopilot.optimizer import (
     CandidateStore,
     FittedOptionFacts,
@@ -178,17 +189,26 @@ class OptimisingPlanner:
         comparing = ComparisonContext(
             options=options, relations=context.relations, products=context.products
         )
+        chosen = [options.lines[row] for row in result.selected]
+        details = await asyncio.to_thread(_line_details, chosen, context)
         lines = []
-        for row, why in zip(result.selected, result.why_chosen, strict=True):
-            line = options.lines[row]
+        for row, why, line, (segments, effects) in zip(
+            result.selected, result.why_chosen, chosen, details, strict=True
+        ):
+            units = float(table["units"].iloc[row])
+            baseline = float(table["baseline_units"].iloc[row])
             lines.append(
                 PlanRevisionLine(
                     line=line,
-                    expected_units=float(table["units"].iloc[row]),
+                    expected_units=units,
                     promo_cost=float(table["promo_cost"].iloc[row]),
                     expected_incremental_profit=float(table["incremental_profit"].iloc[row]),
                     why_chosen=why,
                     mechanism_comparison=compare(line.sku_id, line.region, comparing, chosen=line),
+                    baseline_units=baseline,
+                    uplift_pct=uplift_pct(units, baseline),
+                    segments=segments,
+                    cross_effects=effects,
                 )
             )
         revision = PlanRevision(
@@ -204,6 +224,55 @@ class OptimisingPlanner:
             relaxation=result.relaxation,
         )
         return PlannedRevision(revision, plan_facts(options, result.selected, facts))
+
+
+def _line_details(
+    lines: list[PlanLine], context: OptionContext
+) -> list[tuple[tuple[SegmentUplift, ...], tuple[LineCrossEffect, ...]]]:
+    """Each plan line's expected units by segment (F-03 AC2), from the same prediction its
+    numbers came from, and every other SKU it moves in its region (ADR 0033)."""
+    if not lines:
+        return []
+    prediction = context.demand_model.predict(
+        lines, PredictionContext(policy=context.policy, competitor_prices=context.competitor_prices)
+    )
+    order = {segment.value: n for n, segment in enumerate(Segment)}
+    by_option = prediction.segments.groupby("option")
+    effects = line_effects(lines, context.relations, context.demand_model, context.products)
+    by_line = effects.groupby("line")
+    details = []
+    for n in range(len(lines)):
+        rows = by_option.get_group(n)
+        segments = tuple(
+            sorted(
+                (
+                    SegmentUplift.of(Segment(segment), units=units, baseline_units=baseline)
+                    for segment, units, baseline in zip(
+                        rows["segment"].astype(str),
+                        rows["units"].to_numpy(dtype=float),
+                        rows["baseline_units"].to_numpy(dtype=float),
+                        strict=True,
+                    )
+                ),
+                key=lambda segment: order[segment.segment.value],
+            )
+        )
+        moved = by_line.get_group(n) if n in by_line.groups else effects.iloc[0:0]
+        details.append(
+            (
+                segments,
+                tuple(
+                    LineCrossEffect(sku_id=sku_id, units_change_pct=pct, profit_change=change)
+                    for sku_id, pct, change in zip(
+                        moved["sku_id"].astype(str),
+                        moved["units_change_pct"].to_numpy(dtype=float),
+                        moved["profit_change"].to_numpy(dtype=float),
+                        strict=True,
+                    )
+                ),
+            )
+        )
+    return details
 
 
 @dataclass(frozen=True)

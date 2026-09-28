@@ -2,6 +2,7 @@ import type { components } from "@/lib/api/schema";
 
 type SessionResponse = components["schemas"]["SessionResponse"];
 type PlanRevisionLine = components["schemas"]["PlanRevisionLine"];
+type CompetitorGap = components["schemas"]["CompetitorGap"];
 
 export const SESSION_ID = "6f1c2c1e-6a53-4a8e-9d3b-0a4f3f0f7b21";
 
@@ -123,6 +124,36 @@ export const planLines: PlanRevisionLine[] = [
         unavailable: ["below_cost"],
       },
     ],
+    baseline_units: 500,
+    uplift_pct: 62.5,
+    // Everyone is offered the line, so every segment lifts (F-03 AC2).
+    segments: [
+      {
+        segment: "Value Seekers",
+        units: 300,
+        baseline_units: 150,
+        uplift_pct: 100,
+      },
+      {
+        segment: "Families",
+        units: 262.5,
+        baseline_units: 175,
+        uplift_pct: 50,
+      },
+      { segment: "Premium", units: 100, baseline_units: 80, uplift_pct: 25 },
+      {
+        segment: "Young Urban",
+        units: 150,
+        baseline_units: 95,
+        uplift_pct: 57.89,
+      },
+    ],
+    // The SKUs it moves in North, largest profit change first (ADR 0033).
+    cross_effects: [
+      { sku_id: "SKU0004", units_change_pct: -12.5, profit_change: -3000 },
+      { sku_id: "SKU0020", units_change_pct: 8, profit_change: 1200 },
+      { sku_id: "SKU0005", units_change_pct: -0.4, profit_change: -35 },
+    ],
   },
   {
     line: {
@@ -144,6 +175,115 @@ export const planLines: PlanRevisionLine[] = [
       best_for_sku_region: false,
     },
     mechanism_comparison: [],
+    baseline_units: 1100,
+    uplift_pct: 40,
+    segments: [
+      {
+        segment: "Value Seekers",
+        units: 440,
+        baseline_units: 300,
+        uplift_pct: 46.67,
+      },
+      {
+        segment: "Families",
+        units: 500,
+        baseline_units: 350,
+        uplift_pct: 42.86,
+      },
+      { segment: "Premium", units: 250, baseline_units: 200, uplift_pct: 25 },
+      {
+        segment: "Young Urban",
+        units: 350,
+        baseline_units: 250,
+        uplift_pct: 40,
+      },
+    ],
+    cross_effects: [],
+  },
+  {
+    // The same SKU as the first line, customised for West (F-07 AC2).
+    line: {
+      sku_id: "SKU0003",
+      region: "West",
+      mechanism: "BOGO",
+      depth_pct: 50,
+      start_week: 106,
+      duration_weeks: 2,
+      target_segment: "Families",
+      bundle_partner_sku_id: null,
+    },
+    expected_units: 420,
+    promo_cost: 9100,
+    expected_incremental_profit: 4250,
+    why_chosen: {
+      reasons: [{ code: "incremental_profit", amount: 4250 }],
+      value: 4250,
+      best_for_sku_region: true,
+    },
+    mechanism_comparison: [],
+    baseline_units: 300,
+    uplift_pct: 40,
+    // A Families-only offer lifts only Families.
+    segments: [
+      {
+        segment: "Value Seekers",
+        units: 90,
+        baseline_units: 90,
+        uplift_pct: 0,
+      },
+      {
+        segment: "Families",
+        units: 210,
+        baseline_units: 90,
+        uplift_pct: 133.33,
+      },
+      { segment: "Premium", units: 50, baseline_units: 50, uplift_pct: 0 },
+      { segment: "Young Urban", units: 70, baseline_units: 70, uplift_pct: 0 },
+    ],
+    cross_effects: [],
+  },
+];
+
+// A line planned before #60 kept no uplift, segments or cross effects.
+export const legacyPlanLine: PlanRevisionLine = {
+  ...planLines[1],
+  baseline_units: null,
+  uplift_pct: null,
+  segments: [],
+  cross_effects: [],
+};
+
+// As GET /api/competitors/gaps?as_of_week=104&kvi_only=true returns them (ADR 0031).
+export const undercutGaps: CompetitorGap[] = [
+  {
+    region: "North",
+    sku_id: "SKU0003",
+    name: "Masala Chips 150g",
+    category: "Snacks",
+    subcategory: "Chips",
+    is_kvi: true,
+    base_price: 100,
+    competitor_price: 88,
+    competitor_on_promo: false,
+    price_week: 103,
+    cpi: 0.88,
+    gap: 0.12,
+    undercut: true,
+  },
+  {
+    region: "West",
+    sku_id: "SKU0011",
+    name: "Cola 750ml",
+    category: "Beverages",
+    subcategory: "Soft drinks",
+    is_kvi: true,
+    base_price: 40,
+    competitor_price: 39,
+    competitor_on_promo: false,
+    price_week: 103,
+    cpi: 0.975,
+    gap: 0.025,
+    undercut: false,
   },
 ];
 
@@ -230,6 +370,17 @@ export const awaitingApprovalSession: SessionResponse = {
           sell_through: null,
           stockout_probability: 0,
         },
+        {
+          sku_id: "SKU0003",
+          region: "West",
+          units: { p10: 350, p50: 418, p90: 470 },
+          revenue: { p10: 17500, p50: 20900, p90: 23500 },
+          gross_profit: { p10: 3500, p50: 4180, p90: 4700 },
+          margin: { p10: 0.2, p50: 0.2, p90: 0.2 },
+          promo_spend: { p10: 8000, p50: 9100, p90: 10000 },
+          sell_through: { p10: 0.5, p50: 0.6, p90: 0.67 },
+          stockout_probability: 0.05,
+        },
       ],
       total: {
         units: { p10: 2150, p50: 2348, p90: 2500 },
@@ -241,7 +392,7 @@ export const awaitingApprovalSession: SessionResponse = {
       },
       regions: [
         { region: "North", stockout_probability: 0.31 },
-        { region: "West", stockout_probability: 0 },
+        { region: "West", stockout_probability: 0.05 },
       ],
     },
     clearance_shortfalls: [],
@@ -252,7 +403,8 @@ export const awaitingApprovalSession: SessionResponse = {
         "Two lines across North and West, expected to add ₹12,731 within a ₹2 lakh budget.",
       rationales: [
         "SKU0003 in North at 20% off is the best option for its SKU and region.",
-        "SKU0011 in West bundles with SKU0042 for its basket lift.",
+        "SKU0011 in West clears overstock at 20% off.",
+        "SKU0003 in West sells best to Families as a BOGO.",
       ],
       source: "llm",
       fallback_reason: null,

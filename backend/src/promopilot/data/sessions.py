@@ -19,6 +19,7 @@ from promopilot.domain import (
     ClarificationQuestion,
     ClearanceShortfall,
     DecisionKind,
+    LineCrossEffect,
     MechanismOutcome,
     NotSelectedOption,
     OpenIssue,
@@ -33,6 +34,7 @@ from promopilot.domain import (
     PolicyFinding,
     Relaxation,
     RevisionDiff,
+    SegmentUplift,
     SessionStatus,
     SolveStatus,
     WhyChosen,
@@ -41,6 +43,8 @@ from promopilot.domain import (
 _BINDING = TypeAdapter(tuple[BindingConstraint, ...])
 _NOT_SELECTED = TypeAdapter(tuple[NotSelectedOption, ...])
 _COMPARISON = TypeAdapter(tuple[MechanismOutcome, ...])
+_SEGMENTS = TypeAdapter(tuple[SegmentUplift, ...])
+_CROSS_EFFECTS = TypeAdapter(tuple[LineCrossEffect, ...])
 _SHORTFALLS = TypeAdapter(tuple[ClearanceShortfall, ...])
 _FINDINGS = TypeAdapter(tuple[PolicyFinding, ...])
 _ISSUES = TypeAdapter(tuple[OpenIssue, ...])
@@ -434,6 +438,10 @@ def _line_row(
         if planned.why_chosen is None
         else planned.why_chosen.model_dump(mode="json"),
         "mechanism_comparison": _COMPARISON.dump_python(planned.mechanism_comparison, mode="json"),
+        "baseline_units": planned.baseline_units,
+        "uplift_pct": planned.uplift_pct,
+        "segments": _SEGMENTS.dump_python(planned.segments, mode="json"),
+        "cross_effects": _CROSS_EFFECTS.dump_python(planned.cross_effects, mode="json"),
     }
 
 
@@ -475,4 +483,8 @@ def _revision_line(row: object) -> PlanRevisionLine:
         if values["why_chosen"] is None
         else WhyChosen.model_validate(values["why_chosen"]),
         mechanism_comparison=_COMPARISON.validate_python(values["mechanism_comparison"] or ()),
+        baseline_units=values["baseline_units"],
+        uplift_pct=values["uplift_pct"],
+        segments=_SEGMENTS.validate_python(values["segments"] or ()),
+        cross_effects=_CROSS_EFFECTS.validate_python(values["cross_effects"] or ()),
     )
