@@ -1141,17 +1141,30 @@
     "tool_calls": [
       {
         "arguments": {
-          "categories": [
-            "Snacks",
-            "Beverages"
-          ],
-          "regions": [
-            "North",
-            "West"
-          ]
+          "request": {
+            "as_of_week": 104,
+            "clearance_targets": [],
+            "marketing_budget": 200000,
+            "min_margin": null,
+            "promo_window": {
+              "end_week": 109,
+              "start_week": 108
+            },
+            "scope": {
+              "categories": [
+                "Snacks",
+                "Beverages"
+              ],
+              "regions": [
+                "North",
+                "West"
+              ],
+              "sku_ids": []
+            }
+          }
         },
-        "id": "call_AbaSUJrLZFT7sPPTFWiJRFdZ",
-        "name": "get_scope_data"
+        "id": "call_8yvsGlqMe7VkkENX3yNsiAgy",
+        "name": "generate_candidates"
       }
     ]
   },
@@ -1160,7 +1173,7 @@
     {
       "input_tokens": 4894,
       "model": "gpt-4.1-mini",
-      "output_tokens": 28
+      "output_tokens": 71
     }
   ]
 }
