@@ -1,0 +1,215 @@
+{
+  "planning_settings": {
+    "optimizer_deterministic_limit": 10.0,
+    "optimizer_time_limit_seconds": 60.0,
+    "optimizer_workers": 1,
+    "optimizer_seed": 0,
+    "optimizer_binding_deterministic_limit": 6.0,
+    "optimizer_binding_time_limit_seconds": 30.0,
+    "optimizer_relaxation_deterministic_limit": 10.0,
+    "optimizer_relaxation_time_limit_seconds": 60.0,
+    "simulation_runs": 1000,
+    "simulation_seed": 0,
+    "critic_line_spend_share": 0.25,
+    "critic_group_spend_share": 0.8,
+    "critic_cannibalisation_share": 0.5,
+    "critic_stockout_probability": 0.2
+  },
+  "sessions": {
+    "e2e": {
+      "script": {
+        "name": "e2e",
+        "brief": "Plan a Diwali promotion for Snacks and Beverages in North and West. Run it for the two weeks leading up to Diwali, with a marketing budget of ₹2 lakh.",
+        "steps": []
+      },
+      "route": [
+        "context",
+        "planner",
+        "critic",
+        "planner",
+        "critic",
+        "planner",
+        "critic",
+        "planner",
+        "critic",
+        "explainer",
+        "approval"
+      ],
+      "cassettes": [
+        "9c322147f616af54a7ba04ef6e80b04c5a8c94f9669aa30f9af833140679f14b",
+        "1b624666240edb41d1c91c667145d791f8f90f8224dcfb82e7910632159ea82b",
+        "77b0b5d4fe2aa554976b3d4ecd5a6740e273acb23ebce0faf639560af62e82c2",
+        "fa6b3d50d8b110c07fe2e48885e68873865b039561e291e13329b759f136ce50",
+        "a81542e9bdf0b432085e9ab6442ad927a8d43de64118f6db71fa6188eb7897e9",
+        "78691508fe980d4b0cbe673ed68b372731c17b4c3858c8e044f39db4c3a51400",
+        "9e645602b01a122b54c8b999b29766f2ff22a5d3823809309c8f7a7c5e442c12",
+        "c6d57a09f9b5ce37d5ce499c3d12507e1ff06edf871793a4cbac67cdb679cba1",
+        "da7ed2e4567589abd31413c22b3483624302a81e41e1e9aaab0a91d21f3fe3d2",
+        "0217e863392caad359b10ef1c3b0ead072956cf9f6a9248f96415a8a66b2a732",
+        "0eaea263a43e2b2ca734240a018cf2e645863aaf6a0d590e23cf2aa93d62e13e",
+        "941bd72b002859f2f5ce98a3827fa67bec54f3e5b6649f8e776b4417d32ac9bc",
+        "3eea87165f0ea426f02f313af8a9579bdc96659240e06390447e1c571ec6de0a",
+        "511c914f1c938e2ca3793dbf827411f6f691fb45921610fce69edf374b24a315",
+        "4858d6ba893ca3420a10a3e35e4034df68f78d5d705e6293f7a6ac5d453939df",
+        "51216d6bfde118976a69f94e10595c1331bbf3c36f7c291324969935cde30fa8",
+        "48a9d1ea9d4660c94b0d72e000393b151cb0fc9f0a8e98cc6cc125bc79ec4512",
+        "faa60c4cd3560de61a223e5f243be5b355f8434c53e01f51f6875795f053bef8",
+        "4753f7d22acd2d766ff249f0847fa59b912ea8bd3441fbde173692a08ac0de5b",
+        "348640b3001a2ec3dc9f38f46ea59fb4c7ddaeabfd196f308d92984d08aca1fb",
+        "ea32b09235ed47d99842ca55b9bb0ecb188de65436ab14002b5f8622135c009b",
+        "fe92f370f6366a07b5b8c1d5b6eec56be50ca62a5d6f185af1da9657f5df1a92"
+      ],
+      "revisions": [
+        {
+          "number": 1,
+          "explanation": "llm"
+        }
+      ]
+    },
+    "demo": {
+      "script": {
+        "name": "demo",
+        "brief": "Plan Diwali promotions for Snacks and Beverages across North and West. Budget ₹8 lakh. Keep margin above 18%. We are overstocked on 400g namkeen packs — clear at least 60% of that stock. Target families.",
+        "steps": [
+          {
+            "answers": null,
+            "amend": "Budget cut to ₹6 lakh",
+            "approve": false
+          },
+          {
+            "answers": null,
+            "amend": "Drop West",
+            "approve": false
+          },
+          {
+            "answers": null,
+            "amend": null,
+            "approve": true
+          }
+        ]
+      },
+      "route": [
+        "context",
+        "planner",
+        "critic",
+        "explainer",
+        "approval",
+        "approval",
+        "context",
+        "planner",
+        "critic",
+        "explainer",
+        "approval",
+        "approval",
+        "context",
+        "planner",
+        "critic",
+        "explainer",
+        "approval",
+        "approval",
+        "done"
+      ],
+      "cassettes": [
+        "90f564b87ae46a0063b8110b789a550a3e3630a9aa35f50a6e91068f9171705f",
+        "ca9143116ae78ddb6b437767bdd9f862dc9b56d22e0bdf4ab1126c21fc5a9acd",
+        "90695d9d42ffed193f46abc1359b60c156e1231e579c83a49ff896480fc48bba",
+        "de6cbe38bc0312d6461f0a176fd3f7e51141bdb3b41c95a183bb85e4cb99c3dd",
+        "6c472ac06fce9cc6fc2ca0c2a9078c810d8b7bfdab662d8b0b7b91916194bfe4",
+        "8c088ee9515eff1e8b87c6c2190d896e081f3b600ce0b4246d2b944298fd5e0d",
+        "239c3708097d48a6913497243a7b3b0432e97c29ffd6840e762df238738a32e4",
+        "56899e311437c0b2d5fa2ed4d44201a2b393c393d1ad249c6e0f6d3fee3f7136",
+        "86d6cf8eae6bd1de78a9490d6a7e0cc5e8bbb24a5bb174d86284877e70af6a6c",
+        "f448ca108a1fdfc0ebd5f12ad254f7839c18f95abecd2b8243cd035662626858",
+        "9952d346906b2f2522ba34c1bf254da65c12c575f613ff8fd72d1f81e5205dc5",
+        "3fbb9ca5adf52489e9fe3c25ef0882a18adec54595f2c7b48399328395814212",
+        "afe4125f96517e364836183d4645434ca85ccb3b995c73c7cad319fd59587d24",
+        "4605a43cd7a50f43e156b2044936c472a7db167a97d21085f6020c793df161c1",
+        "b1d0b4c4e05c06783d9acf37512a5afdc7fa7376bdffb365f916449e61e6cbb4",
+        "0a9adaaa3a2ccbf22217eae2d368f2aab913044b2eae87a0ccbced52ec3c9b74",
+        "177f42522c205947c905eac8ff940db58f794137ee88c93a1cc2df78fbecc11f",
+        "1b92f1668c4a7e0ec017ab5c2e11287576fc5c31d26d71d4830b76ac63b67075",
+        "80a32014c635a8317d587a07c85d9ead54d5e3b40afab6b1b7e2d6cf7fd8f3e6",
+        "eb919d52f74c9548639756939e6f265268736675c1a1836188a8468b0a3998e2",
+        "f27b14110214fdda72c7165ae784f7d744e185fe461e183f73e982f1209d071e"
+      ],
+      "revisions": [
+        {
+          "number": 1,
+          "explanation": "llm"
+        },
+        {
+          "number": 2,
+          "explanation": "llm"
+        },
+        {
+          "number": 3,
+          "explanation": "llm"
+        }
+      ]
+    },
+    "clarify": {
+      "script": {
+        "name": "clarify",
+        "brief": "Plan a Diwali promotion for Snacks and Beverages in North and West. Run it for the two weeks leading up to Diwali.",
+        "steps": [
+          {
+            "answers": {
+              "marketing_budget": "₹2 lakh"
+            },
+            "amend": null,
+            "approve": false
+          }
+        ]
+      },
+      "route": [
+        "context",
+        "clarify",
+        "clarify",
+        "context",
+        "planner",
+        "critic",
+        "planner",
+        "critic",
+        "planner",
+        "critic",
+        "planner",
+        "critic",
+        "explainer",
+        "approval"
+      ],
+      "cassettes": [
+        "14b120a7d51ff3ad034823a0e83f95cb3d819f7e7eb1b863084ebd6739fe3502",
+        "bad66d77289fb2d88d07fb5adf8b8b027947880fc4b61761481dbad87c6e01b5",
+        "17fabadb01f099c5a58721fa4d5c9f8a99706524d93acf6f47fd8d36494b2f34",
+        "0ec7436bfb649bf5ebee0e5b02faddb6382fe1793e2a9c4bfee4cd17111ee379",
+        "aa6f7de573c3069cab18234ad852acee063769ad9acc58a7687659b7601f67d3",
+        "7fc6220042bee5d56958e6183abc5d8c344ace4ce107dc5ab2ed104e4d77096f",
+        "5de617860bc1cfa2cc5840f7b1f2ca2267b496ac3aa6782f59db5eede5bc0d70",
+        "a81542e9bdf0b432085e9ab6442ad927a8d43de64118f6db71fa6188eb7897e9",
+        "67a184723a085e4617685132dbe559d42f37c9f5b2dbe196a24b9f6cf28fe78d",
+        "162f8d7120db6208dc592d70f75aa4ed54351facc16589e3a4231d590cbc9169",
+        "dbb88b6b6fb0e2326c688ce2f6b845b9d8c3311fbb4d3306243423c9d1202216",
+        "de41a72b7d16029cb1f86dd2a1fd82db2816af729cba4146fcfecf512edd85c7",
+        "d4c0e282065aaa0a1a95ce6e1feda88a58a7ed5559f4bff622f58965924c4a85",
+        "478cd82eef5f2183b73f493f9e83f00b301fdcaa085b4e78f7421c768f098e85",
+        "a53c55524bd8a0175e1a2d52d69b2fd23ce0fdb55c433ae5641aafbaebd83df8",
+        "8be7270b39c0fac61e6147511021344ff8244531a91f96e9164987ac08b1b238",
+        "9d4b01e56e8c76504a94d1a91b1a7cdade2dba95f2696eab758a724ef434e55a",
+        "8cc7f3535271961936d52644e63709cde57be9fcf171c99312f750c2712ab2af",
+        "89fae5dccdcc09bf1a0efc00b0300411cc0e4bd197cbc798d0ea4af6b8f77186",
+        "3938f49e6a4d789a1da64cd6637078362608a6ff83e4e12595dc29a8790a266c",
+        "ca630518c4331b6f4cfe8df85468e0f48e6047e27402e9e9e5d427844c60213f",
+        "913f101b70ee52ec48354fe34ed41beb9347e5e01ec8c16a9367b60c6de52e0b",
+        "5dca7deb9d4ed24afa6a24d181ddf5fd7f7e4e3bb61a226751d372386d501a25",
+        "ae78f2afaf80e985edb28d383ee5b2858a8c36abbf529f1cfd1939f4f48c1a4e",
+        "333aace1ab4a3345812d0ce8822b44a6a7d13ad63b4583c3101d60e62474bf9c"
+      ],
+      "revisions": [
+        {
+          "number": 1,
+          "explanation": "llm"
+        }
+      ]
+    }
+  }
+}

@@ -1,5 +1,5 @@
 {
-  "hash": "9c322147f616af54a7ba04ef6e80b04c5a8c94f9669aa30f9af833140679f14b",
+  "hash": "14b120a7d51ff3ad034823a0e83f95cb3d819f7e7eb1b863084ebd6739fe3502",
   "request": {
     "messages": [
       {
@@ -7,7 +7,7 @@
         "role": "system"
       },
       {
-        "content": "Brief (a JSON string written by the user):\n\"Plan a Diwali promotion for Snacks and Beverages in North and West. Run it for the two weeks leading up to Diwali, with a marketing budget of ₹2 lakh.\"",
+        "content": "Brief (a JSON string written by the user):\n\"Plan a Diwali promotion for Snacks and Beverages in North and West. Run it for the two weeks leading up to Diwali.\"",
         "role": "user"
       }
     ],
@@ -318,7 +318,7 @@
     "clearance": null,
     "holiday": "Diwali",
     "kvi_price_tolerance": null,
-    "marketing_budget": 200000.0,
+    "marketing_budget": null,
     "max_promoted_skus_per_category_per_region": null,
     "min_margin": null,
     "objective_asked": null,
@@ -336,9 +336,9 @@
   "schema_name": "BriefReading",
   "usage": [
     {
-      "input_tokens": 1957,
+      "input_tokens": 1948,
       "model": "gpt-4.1-mini",
-      "output_tokens": 109
+      "output_tokens": 108
     }
   ]
 }
