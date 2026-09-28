@@ -43,6 +43,8 @@ class Planning:
     data: RetailData
     policy: CompanyPolicy
     simulation: SimulationSettings
+    solver: SolverSettings
+    """The optimiser's work budgets, wall-clock nets and workers (ADR 0055)."""
     planner: OptimisingPlanner
     """The deterministic default sequence (ADR 0038), and the planner agent's fallback."""
     candidates: CandidateStore
@@ -74,6 +76,9 @@ def build_planning(settings: Settings, engine: AsyncEngine) -> Planning:
         workers=settings.optimizer_workers,
         binding_time_limit_seconds=settings.optimizer_binding_time_limit_seconds,
         relaxation_time_limit_seconds=settings.optimizer_relaxation_time_limit_seconds,
+        deterministic_limit=settings.optimizer_deterministic_limit,
+        binding_deterministic_limit=settings.optimizer_binding_deterministic_limit,
+        relaxation_deterministic_limit=settings.optimizer_relaxation_deterministic_limit,
     )
     simulation = SimulationSettings(n_runs=settings.simulation_runs, seed=settings.simulation_seed)
     seed = settings.optimizer_seed
@@ -116,6 +121,7 @@ def build_planning(settings: Settings, engine: AsyncEngine) -> Planning:
         data=data,
         policy=policy,
         simulation=simulation,
+        solver=solver,
         planner=planner,
         candidates=candidates,
         tools=tools,

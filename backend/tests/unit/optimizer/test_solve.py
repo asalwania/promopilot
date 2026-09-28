@@ -828,6 +828,28 @@ def test_solver_settings_are_validated() -> None:
         SolverSettings(workers=0)
     with pytest.raises(ValueError, match="binding time limit"):
         SolverSettings(binding_time_limit_seconds=-1)
+    with pytest.raises(ValueError, match="deterministic limit"):
+        SolverSettings(deterministic_limit=0)
+    with pytest.raises(ValueError, match="binding deterministic limit"):
+        SolverSettings(binding_deterministic_limit=-1)
+    with pytest.raises(ValueError, match="relaxation deterministic limit"):
+        SolverSettings(relaxation_deterministic_limit=0)
+
+
+def test_the_solver_is_limited_by_deterministic_work_with_wall_clock_only_as_a_safety_net() -> None:
+    # A plan must not depend on how fast or busy the machine is (ADR 0055): each phase stops
+    # on CP-SAT's deterministic time, and the wall-clock limits are generous nets.
+    settings = SolverSettings()
+
+    assert (settings.deterministic_limit, settings.time_limit_seconds) == (10.0, 60.0)
+    assert (settings.binding_deterministic_limit, settings.binding_time_limit_seconds) == (
+        6.0,
+        30.0,
+    )
+    assert (settings.relaxation_deterministic_limit, settings.relaxation_time_limit_seconds) == (
+        10.0,
+        60.0,
+    )
 
 
 # --- per-region differences through option generation ----------------------------------

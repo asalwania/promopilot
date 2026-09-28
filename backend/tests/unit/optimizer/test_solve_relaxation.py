@@ -292,6 +292,33 @@ def test_a_timeout_is_never_reported_infeasible() -> None:
     assert result.clearance_shortfalls
 
 
+def test_a_work_budget_that_runs_out_ends_in_the_same_place_whatever_the_wall_clock_net() -> None:
+    rows = [
+        Row(line(sku_id, depth_pct=depth), float(depth), window_uplift=depth * 10.0)
+        for sku_id in "ABD"
+        for depth in (10, 20)
+    ]
+
+    def solved(wall: float) -> OptimisationResult:
+        return solve(
+            request(clearance_targets=target()),
+            options_of(rows, [D_NORTH]),
+            FakeFacts(),
+            CompanyPolicy(),
+            settings=SolverSettings(
+                deterministic_limit=1e-6,
+                binding_deterministic_limit=1e-6,
+                relaxation_deterministic_limit=1e-6,
+                time_limit_seconds=wall,
+                binding_time_limit_seconds=wall,
+                relaxation_time_limit_seconds=wall,
+            ),
+            seed=SEED,
+        )
+
+    assert solved(5.0) == solved(500.0)
+
+
 def test_relaxation_settings_are_validated() -> None:
     with pytest.raises(ValueError, match="relaxation"):
         SolverSettings(relaxation_time_limit_seconds=0)
