@@ -113,6 +113,11 @@ jobs:
       - name: Train and register the demand model
         timeout-minutes: 5
         run: docker compose exec -T api python -m promopilot.models
+      # Every scripted session plays through the full agent graph on the cassettes alone
+      # (ADR 0054): a cassette miss or a fallback fails here, naming the request.
+      - name: Replay every recorded session with no key
+        timeout-minutes: 15
+        run: docker compose exec -T api python -m promopilot.cassettes --check
       - uses: pnpm/action-setup@v6
         with:
           package_json_file: frontend/package.json

@@ -26,7 +26,7 @@ from promopilot.llm import CassetteMissError, FakeProvider, LLMError
 from tests.unit.agents.fakes import InMemoryRetailData
 
 POLICY = CompanyPolicy()
-DEMO_BRIEF = (  # cassettes/briefs.json
+DEMO_BRIEF = (  # cassettes/sessions.json (e2e)
     "Plan a Diwali promotion for Snacks and Beverages in North and West. Run it for the two "
     "weeks leading up to Diwali, with a marketing budget of ₹2 lakh."
 )

@@ -1,5 +1,5 @@
 {
-  "hash": "9c322147f616af54a7ba04ef6e80b04c5a8c94f9669aa30f9af833140679f14b",
+  "hash": "90f564b87ae46a0063b8110b789a550a3e3630a9aa35f50a6e91068f9171705f",
   "request": {
     "messages": [
       {
@@ -7,7 +7,7 @@
         "role": "system"
       },
       {
-        "content": "Brief (a JSON string written by the user):\n\"Plan a Diwali promotion for Snacks and Beverages in North and West. Run it for the two weeks leading up to Diwali, with a marketing budget of ₹2 lakh.\"",
+        "content": "Brief (a JSON string written by the user):\n\"Plan Diwali promotions for Snacks and Beverages across North and West. Budget ₹8 lakh. Keep margin above 18%. We are overstocked on 400g namkeen packs — clear at least 60% of that stock. Target families.\"",
         "role": "user"
       }
     ],
@@ -315,12 +315,17 @@
       "Beverages"
     ],
     "categories_phrase": "Snacks and Beverages",
-    "clearance": null,
+    "clearance": [
+      {
+        "products": "400g namkeen packs",
+        "sell_through": 0.6
+      }
+    ],
     "holiday": "Diwali",
     "kvi_price_tolerance": null,
-    "marketing_budget": 200000.0,
+    "marketing_budget": 800000.0,
     "max_promoted_skus_per_category_per_region": null,
-    "min_margin": null,
+    "min_margin": 0.18,
     "objective_asked": null,
     "promo_end_week": 109,
     "promo_start_week": 108,
@@ -330,15 +335,15 @@
       "West"
     ],
     "regions_phrase": "North and West",
-    "segment_phrase": null,
+    "segment_phrase": "families",
     "sku_ids": null
   },
   "schema_name": "BriefReading",
   "usage": [
     {
-      "input_tokens": 1957,
+      "input_tokens": 1972,
       "model": "gpt-4.1-mini",
-      "output_tokens": 109
+      "output_tokens": 128
     }
   ]
 }

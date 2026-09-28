@@ -2,6 +2,7 @@
 risk findings go back to the planner agent with feedback, at most 3 times, and the best plan
 goes on to the Explainer with its open issues listed."""
 
+import json
 from collections.abc import Sequence
 from typing import Any
 from uuid import UUID, uuid4
@@ -291,6 +292,21 @@ async def test_the_planner_is_given_the_critics_findings_as_feedback(
     assert "Critic" in second
     assert "BUDGET" in second
     assert "exceeds the marketing budget" in second
+
+
+async def test_the_feedback_shows_each_finding_as_worded_not_its_raw_numbers(
+    data: InMemoryRetailData, request_read: PlanningRequest
+) -> None:
+    # A raw float (0.5183146894877728) differs in its last digits between machines, so a
+    # recorded loop-back would not replay on another (ADR 0054); the message states the
+    # numbers as the finding shows them.
+    run = await run_graph(data, _turns(request_read, 2), attempts=[over_budget(5_000.0), plan()])
+
+    _, second = run.planner_openings()
+    findings = json.loads(second.split("constraints stay as given:\n", 1)[1])
+    assert findings
+    assert all("actual" not in finding and "limit" not in finding for finding in findings)
+    assert all(finding["message"] for finding in findings)
 
 
 async def test_a_plan_that_passes_after_a_loop_is_the_one_saved_with_no_open_issues(

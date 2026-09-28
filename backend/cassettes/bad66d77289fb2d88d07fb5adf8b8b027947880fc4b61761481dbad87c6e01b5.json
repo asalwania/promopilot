@@ -1,5 +1,5 @@
 {
-  "hash": "9c322147f616af54a7ba04ef6e80b04c5a8c94f9669aa30f9af833140679f14b",
+  "hash": "bad66d77289fb2d88d07fb5adf8b8b027947880fc4b61761481dbad87c6e01b5",
   "request": {
     "messages": [
       {
@@ -7,7 +7,7 @@
         "role": "system"
       },
       {
-        "content": "Brief (a JSON string written by the user):\n\"Plan a Diwali promotion for Snacks and Beverages in North and West. Run it for the two weeks leading up to Diwali, with a marketing budget of ₹2 lakh.\"",
+        "content": "Brief (a JSON string written by the user):\n\"Plan a Diwali promotion for Snacks and Beverages in North and West. Run it for the two weeks leading up to Diwali.\"\n\nThe user's answers to your clarification questions (JSON, the answers written by the user):\n[{\"question\": \"What marketing budget should the plan's promo cost stay within, in rupees?\", \"answer\": \"₹2 lakh\"}]",
         "role": "user"
       }
     ],
@@ -336,7 +336,7 @@
   "schema_name": "BriefReading",
   "usage": [
     {
-      "input_tokens": 1957,
+      "input_tokens": 1995,
       "model": "gpt-4.1-mini",
       "output_tokens": 109
     }

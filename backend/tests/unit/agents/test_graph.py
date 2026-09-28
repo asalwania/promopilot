@@ -311,7 +311,7 @@ async def test_a_new_graph_on_the_same_checkpointer_resumes_where_the_old_one_pa
 
 # --- the LLM down at Context: the fallback reading (SF-03, #124, ADR 0053) --------------------
 
-DEMO_BRIEF = (  # cassettes/briefs.json
+DEMO_BRIEF = (  # cassettes/sessions.json (e2e)
     "Plan a Diwali promotion for Snacks and Beverages in North and West. Run it for the two "
     "weeks leading up to Diwali, with a marketing budget of ₹2 lakh."
 )

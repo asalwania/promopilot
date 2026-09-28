@@ -108,9 +108,11 @@ api-types: ## Export OpenAPI and regenerate frontend API types
 data: db ## Generate the seeded synthetic dataset + ground truth into DATA_DIR and load Postgres
 	$(BACKEND) uv run python -m promopilot.datagen --out $(DATA_DIR) --load
 
-.PHONY: record-cassettes
-record-cassettes: db ## Re-record the LLM cassettes live (OPENAI_API_KEY, OPENAI_MODEL; run make data and make train first)
-	$(BACKEND) LLM_PROVIDER=openai uv run python -m promopilot.cassettes --briefs cassettes/briefs.json
+.PHONY: record-cassettes check-cassettes
+record-cassettes: db ## Record every scripted session's LLM calls live (OPENAI_API_KEY, OPENAI_MODEL; make data, make train first; ONLY=name for one)
+	$(BACKEND) LLM_PROVIDER=openai uv run python -m promopilot.cassettes --sessions cassettes/sessions.json $(foreach name,$(ONLY),--only $(name))
+check-cassettes: db ## Replay every scripted session from the cassettes alone, no key (make data, make train first)
+	$(BACKEND) uv run python -m promopilot.cassettes --sessions cassettes/sessions.json --check
 
 .PHONY: train
 train: db ## Fit the demand then relations models on the loaded data (make data first) and register both

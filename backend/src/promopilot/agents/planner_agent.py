@@ -343,7 +343,13 @@ DECISIONS: Final = {
 
 
 def _feedback_message(feedback: Sequence[OpenIssue]) -> str:
-    findings = [issue.model_dump(mode="json", exclude_none=True) for issue in feedback]
+    # Each finding's message states its numbers as they may be cited. The raw `actual` and
+    # `limit` floats are left out: their last digits differ between machines, so a recorded
+    # loop-back would not replay on another (ADR 0054).
+    findings = [
+        issue.model_dump(mode="json", exclude_none=True, exclude={"actual", "limit"})
+        for issue in feedback
+    ]
     return (
         "The Critic reviewed your previous plan and sent it back with these findings (JSON). "
         "Plan again from the start and address each one with the levers you have; the brief's "
