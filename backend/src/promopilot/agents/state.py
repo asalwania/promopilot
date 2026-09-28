@@ -5,9 +5,9 @@ The state is checkpointed after every step, so it holds only values: the brief, 
 request, the Planner's attempts of the planning round (ADR 0051), the plan revision chosen
 from them with its plan facts, the Planner's notes (ADR 0049), the Critic's findings, the
 explanations and the latest decision, with the Context agent's assumptions, open questions and
-answered clarifications (ADR 0048). The diff from the previous revision (#50) joins it with the
-ticket that produces it; the simulation is on the plan revision (ADR 0042). The trace is not
-state: every step is a trace event stored as it happens (ADR 0047).
+answered clarifications (ADR 0048), and every amendment (ADR 0052). The diff from the
+previous revision is on the plan revision (`plan.diff`), as is the simulation (ADR 0042). The
+trace is not state: every step is a trace event stored as it happens (ADR 0047).
 """
 
 from enum import StrEnum
@@ -62,6 +62,8 @@ class PlanningState(BaseModel):
     session_id: UUID
     brief: str
     amendments: tuple[str, ...] = ()
+    """Every amendment's text, oldest first; the Context agent reads them after the brief
+    (ADR 0052)."""
     request: PlanningRequest | None = None
     assumptions: tuple[Assumption, ...] = ()
     """How the Context agent read the brief, from its latest reading (ADR 0048)."""
@@ -76,7 +78,11 @@ class PlanningState(BaseModel):
     3 more, each after the Critic sent its findings back (ADR 0051). An amendment (#50) starts
     a new round."""
     plan: PlanRevision | None = None
-    """The best attempt's plan, saved as the plan revision once the Critic hands it on."""
+    """The best attempt's plan, saved as the plan revision once the Critic hands it on. After
+    an amendment it is the previous revision until the new round's is saved, which is diffed
+    against it (ADR 0052)."""
+    plan_request: PlanningRequest | None = None
+    """The planning request `plan` was planned on, for the next revision's request changes."""
     plan_facts: PlanFacts | None = None
     """The plan-time numbers the plan was chosen on, which the Critic validates."""
     critic_findings: tuple[OpenIssue, ...] = ()
@@ -93,7 +99,8 @@ class PlanningState(BaseModel):
     explanations: PlanExplanation | None = None
     """The Explainer's summary and rationales for the plan revision (ADR 0050)."""
     approval: PlanDecision | None = None
-    """The latest decision on the plan revision; None until one is made."""
+    """The latest decision on the plan revision; None until one is made, and again once the
+    revision is amended."""
 
 
 class ApprovalRequest(BaseModel):
@@ -112,6 +119,15 @@ class ApprovalAnswer(BaseModel):
     decision: DecisionKind
     revision_number: int = Field(ge=1)
     reason: str | None = None
+
+
+class AmendAnswer(BaseModel):
+    """What else resumes the Approval interrupt: an amendment to the planning request, in the
+    manager's words, which starts a new planning round (ADR 0052)."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    amendment: str
 
 
 class ClarificationRequest(BaseModel):

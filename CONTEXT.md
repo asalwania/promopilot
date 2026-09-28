@@ -218,8 +218,12 @@ The set of plan lines produced for a planning request.
 _Avoid_: strategy, schedule, plan (when a specific revision is meant)
 
 **Plan revision**:
-One numbered version of the promo plan within a planning session; every amendment produces a new revision, and a diff compares consecutive revisions. Each of its plan lines carries the expected units, promo cost and expected incremental profit computed by the tool that planned it.
+One numbered version of the promo plan within a planning session; every amendment produces a new revision, and a **revision diff** compares consecutive revisions. Each of its plan lines carries the expected units, promo cost and expected incremental profit computed by the tool that planned it.
 _Avoid_: version, iteration
+
+**Revision diff**:
+What changed from the previous plan revision, stored on the new one: plan lines added, removed and changed (matched by SKU and region; changed when the decision differs, not just its expected numbers), the objective and promo-cost deltas, and the planning-request changes that caused them. It is computed deterministically; the explainer says it in words (ADR 0052).
+_Avoid_: delta (for the whole diff), changelog
 
 **Simulation**:
 The Monte Carlo runs of a promo plan: each run samples the demand model's terms within their uncertainty and weekly demand noise, and caps units at available stock. It reports P10/P50/P90 of each plan line's and the plan's outcomes (ADR 0042).
@@ -238,7 +242,7 @@ One conversation from brief to decision: brief, amendments, clarifications, plan
 _Avoid_: run, conversation, job
 
 **Amendment**:
-A free-text change to the planning request made after planning has started (e.g. "cut budget to ₹6 lakh").
+A free-text change to the planning request made while a plan revision waits for a decision, or after it is rejected (e.g. "cut budget to ₹6 lakh", "drop West"). The context agent reads the brief again with every amendment, oldest first, and a new plan revision is planned. Accepting a relaxation is an amendment that states each change exactly (ADR 0052).
 _Avoid_: edit, update, revision (which is the resulting plan)
 
 **Approval**:

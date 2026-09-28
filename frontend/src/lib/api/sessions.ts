@@ -299,7 +299,38 @@ export const planExplanationSchema = z.object({
     .enum(["ungrounded", "invalid_answer", "llm_unavailable"])
     .nullable()
     .optional(),
+  changes: z.string().nullable().optional(),
 }) satisfies z.ZodType<Schemas["PlanExplanation"]>;
+
+// What changed from the previous plan revision after an amendment (ADR 0052).
+export const revisionDiffSchema = z.object({
+  from_revision: z.number(),
+  added: z.array(planRevisionLineSchema),
+  removed: z.array(planRevisionLineSchema),
+  changed: z.array(
+    z.object({
+      sku_id: z.string(),
+      region: regionSchema,
+      fields: z.array(z.string()),
+      before: planRevisionLineSchema,
+      after: planRevisionLineSchema,
+    }) satisfies z.ZodType<Schemas["LineChange"]>,
+  ),
+  unchanged: z.number(),
+  objective_before: z.number().nullable().optional(),
+  objective_after: z.number().nullable().optional(),
+  objective_delta: z.number().nullable().optional(),
+  promo_cost_before: z.number(),
+  promo_cost_after: z.number(),
+  promo_cost_delta: z.number(),
+  request_changes: z.array(
+    z.object({
+      field: z.string(),
+      before: z.string(),
+      after: z.string(),
+    }) satisfies z.ZodType<Schemas["RequestChange"]>,
+  ),
+}) satisfies z.ZodType<Schemas["RevisionDiff"]>;
 
 export const planRevisionSchema = z.object({
   number: z.number(),
@@ -317,6 +348,7 @@ export const planRevisionSchema = z.object({
   relaxation: relaxationSchema.nullable().optional(),
   open_issues: z.array(openIssueSchema),
   explanation: planExplanationSchema.nullable().optional(),
+  diff: revisionDiffSchema.nullable().optional(),
 }) satisfies z.ZodType<Schemas["PlanRevision"]>;
 
 export const planningRequestSchema = z.object({
@@ -339,6 +371,14 @@ export const planningRequestSchema = z.object({
 
 // What a session's LLM calls used and cost: the sums of its token-usage trace
 // events (ADR 0047).
+// A change to the planning request, kept oldest first (ADR 0052).
+export const amendmentSchema = z.object({
+  text: z.string(),
+  amends_revision: z.number(),
+  relaxation: relaxationSchema.nullable().optional(),
+  amended_at: z.string(),
+}) satisfies z.ZodType<Schemas["Amendment"]>;
+
 const sessionUsageSchema = z.object({
   calls: z.number(),
   input_tokens: z.number(),
@@ -367,6 +407,7 @@ export const sessionSchema = z.object({
   assumptions: z.array(assumptionSchema),
   questions: z.array(clarificationQuestionSchema),
   clarifications: z.array(clarificationSchema),
+  amendments: z.array(amendmentSchema),
 }) satisfies z.ZodType<Schemas["SessionResponse"]>;
 
 export type Session = z.infer<typeof sessionSchema>;

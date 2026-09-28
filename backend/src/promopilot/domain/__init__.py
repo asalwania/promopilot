@@ -12,7 +12,13 @@ from promopilot.domain.explanation import ExplanationSource, FallbackReason, Pla
 from promopilot.domain.plan import PlanLine, PromoPlan
 from promopilot.domain.policy import CompanyPolicy, PolicyFinding
 from promopilot.domain.request import ClearanceTarget, PlanningRequest, PromoWindow, Scope
-from promopilot.domain.revision import PlanRevision, PlanRevisionLine
+from promopilot.domain.revision import (
+    LineChange,
+    PlanRevision,
+    PlanRevisionLine,
+    RequestChange,
+    RevisionDiff,
+)
 from promopilot.domain.risk import OpenIssue, RiskCode, RiskFinding
 from promopilot.domain.selection import (
     BindingConstraint,
@@ -30,7 +36,13 @@ from promopilot.domain.selection import (
     SolveStatus,
     WhyChosen,
 )
-from promopilot.domain.session import DecisionKind, PlanDecision, PlanningSession, SessionStatus
+from promopilot.domain.session import (
+    Amendment,
+    DecisionKind,
+    PlanDecision,
+    PlanningSession,
+    SessionStatus,
+)
 from promopilot.domain.simulation import (
     CompetitorReaction,
     LineSimulation,
@@ -56,6 +68,7 @@ from promopilot.domain.violation import Violation, ViolationCode
 from promopilot.domain.vocabulary import Mechanism, Region, Segment, TargetSegment, Week
 
 __all__ = [
+    "Amendment",
     "Assumption",
     "AssumptionSource",
     "BindingConstraint",
@@ -74,6 +87,7 @@ __all__ = [
     "ExplanationSource",
     "FallbackReason",
     "FindingRaised",
+    "LineChange",
     "LineSimulation",
     "Mechanism",
     "MechanismOption",
@@ -102,6 +116,8 @@ __all__ = [
     "RegionStockout",
     "Relaxation",
     "RelaxedConstraint",
+    "RequestChange",
+    "RevisionDiff",
     "RiskCode",
     "RiskFinding",
     "Scope",

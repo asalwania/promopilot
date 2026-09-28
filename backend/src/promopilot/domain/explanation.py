@@ -35,6 +35,9 @@ class PlanExplanation(BaseModel):
     rationales: tuple[str, ...] = ()
     """One per plan line, in plan-line order."""
     source: ExplanationSource
+    changes: str | None = None
+    """What changed from the previous plan revision and why (ADR 0052); None for a revision
+    that is not an amendment's."""
     fallback_reason: FallbackReason | None = None
     """Why the LLM's explanation was not used; None when it was, or when no LLM was asked."""
 

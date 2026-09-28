@@ -3,10 +3,11 @@ their trace events."""
 
 from promopilot.data.loader import load_dataset, migrate
 from promopilot.data.retail import RetailData
-from promopilot.data.sessions import SessionConflictError, SessionStore
+from promopilot.data.sessions import AMENDABLE, SessionConflictError, SessionStore
 from promopilot.data.trace import TraceRead, TraceStore
 
 __all__ = [
+    "AMENDABLE",
     "RetailData",
     "SessionConflictError",
     "SessionStore",

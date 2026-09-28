@@ -210,6 +210,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/sessions/{session_id}/amend": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Amend Session
+         * @description Amend the planning request (AG-05); a new plan revision, with its diff from the
+         *     previous one, is planned in the background.
+         */
+        post: operations["amend_session_api_sessions__session_id__amend_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/sessions/{session_id}/approve": {
         parameters: {
             query?: never;
@@ -316,6 +337,41 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /**
+         * AmendRequest
+         * @description Amend the planning request of a session awaiting approval or rejected (ADR 0052): in
+         *     plain English, or by accepting the latest revision's relaxation. Exactly one of the two.
+         */
+        AmendRequest: {
+            /**
+             * Accept Relaxation
+             * @description Accept the latest plan revision's smallest relaxation (ADR 0044) as the amendment instead of writing one.
+             * @default false
+             */
+            accept_relaxation: boolean;
+            /**
+             * Text
+             * @description The change, in plain English ("cut budget to ₹6 lakh", "drop West").
+             */
+            text?: string | null;
+        };
+        /**
+         * Amendment
+         * @description A change to the planning request, in the manager's words, made while a plan revision
+         *     waited for a decision (AG-05, ADR 0052). Every amendment is kept, oldest first.
+         */
+        Amendment: {
+            /**
+             * Amended At
+             * Format: date-time
+             */
+            amended_at: string;
+            /** Amends Revision */
+            amends_revision: number;
+            relaxation?: components["schemas"]["Relaxation"] | null;
+            /** Text */
+            text: string;
+        };
         /**
          * ApproveRequest
          * @description Approve a plan revision: it must be the session's latest (ADR 0046).
@@ -700,6 +756,19 @@ export interface components {
         };
         JsonValue: unknown;
         /**
+         * LineChange
+         * @description A plan line whose SKU and region are in both revisions but whose decision changed.
+         */
+        LineChange: {
+            after: components["schemas"]["PlanRevisionLine"];
+            before: components["schemas"]["PlanRevisionLine"];
+            /** Fields */
+            fields: string[];
+            region: components["schemas"]["Region"];
+            /** Sku Id */
+            sku_id: string;
+        };
+        /**
          * LineSimulation
          * @description One plan line's simulated ranges, identified by its SKU and region.
          */
@@ -922,6 +991,8 @@ export interface components {
          * @description What the Explainer wrote for one plan revision.
          */
         PlanExplanation: {
+            /** Changes */
+            changes?: string | null;
             fallback_reason?: components["schemas"]["FallbackReason"] | null;
             /**
              * Rationales
@@ -966,6 +1037,7 @@ export interface components {
              * @default []
              */
             clearance_shortfalls: components["schemas"]["ClearanceShortfall"][];
+            diff?: components["schemas"]["RevisionDiff"] | null;
             explanation?: components["schemas"]["PlanExplanation"] | null;
             /**
              * Lines
@@ -1230,6 +1302,73 @@ export interface components {
             source: components["schemas"]["ConstraintSource"];
         };
         /**
+         * RequestChange
+         * @description A planning-request field an amendment changed, shown as the explanation may cite it.
+         */
+        RequestChange: {
+            /** After */
+            after: string;
+            /** Before */
+            before: string;
+            /** Field */
+            field: string;
+        };
+        /**
+         * RevisionDiff
+         * @description What changed from the previous plan revision (AG-05, ADR 0052): plan lines matched by
+         *     (SKU, region), the objective and promo-cost deltas, and the planning-request changes.
+         */
+        RevisionDiff: {
+            /**
+             * Added
+             * @default []
+             */
+            added: components["schemas"]["PlanRevisionLine"][];
+            /**
+             * Changed
+             * @default []
+             */
+            changed: components["schemas"]["LineChange"][];
+            /** From Revision */
+            from_revision: number;
+            /** Objective After */
+            objective_after?: number | null;
+            /** Objective Before */
+            objective_before?: number | null;
+            /** Objective Delta */
+            objective_delta?: number | null;
+            /**
+             * Promo Cost After
+             * @default 0
+             */
+            promo_cost_after: number;
+            /**
+             * Promo Cost Before
+             * @default 0
+             */
+            promo_cost_before: number;
+            /**
+             * Promo Cost Delta
+             * @default 0
+             */
+            promo_cost_delta: number;
+            /**
+             * Removed
+             * @default []
+             */
+            removed: components["schemas"]["PlanRevisionLine"][];
+            /**
+             * Request Changes
+             * @default []
+             */
+            request_changes: components["schemas"]["RequestChange"][];
+            /**
+             * Unchanged
+             * @default 0
+             */
+            unchanged: number;
+        };
+        /**
          * RiskCode
          * @enum {string}
          */
@@ -1309,6 +1448,11 @@ export interface components {
          */
         SessionResponse: {
             /**
+             * Amendments
+             * @description Every amendment to the planning request, oldest first (ADR 0052).
+             */
+            amendments: components["schemas"]["Amendment"][];
+            /**
              * Assumptions
              * @description How the Context agent read the brief, each with its source and confidence (ADR 0048).
              */
@@ -1349,7 +1493,8 @@ export interface components {
          *
          *     planning -> awaiting_approval -> approved (final) or rejected (open for amendments); any
          *     failure while planning -> failed; planning -> awaiting_clarification -> planning when the
-         *     questions are answered (ADR 0048).
+         *     questions are answered (ADR 0048); awaiting_approval or rejected -> planning when the
+         *     request is amended (ADR 0052).
          * @enum {string}
          */
         SessionStatus: "planning" | "awaiting_clarification" | "awaiting_approval" | "approved" | "rejected" | "failed";
@@ -1971,6 +2116,62 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
+            };
+        };
+    };
+    amend_session_api_sessions__session_id__amend_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AmendRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SessionResponse"];
+                };
+            };
+            /** @description Unknown session */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The session is not awaiting approval or rejected, or (accept_relaxation) its latest revision has no relaxation */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Planning is unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

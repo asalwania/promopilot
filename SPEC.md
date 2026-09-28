@@ -265,7 +265,7 @@ Each feature has an ID used in tickets, tests and the 9-blocker evidence matrix 
 - **AG-02 Clarification:** if a critical field (budget, categories or regions, promo window) is missing and cannot be inferred with confidence ≥ 0.7, the graph interrupts and asks the user a specific question.
 - **AG-03 Tool use:** planner decides which tools to call and in what order; all tool calls are logged.
 - **AG-04 Self-correction:** critic findings loop back to the planner with specific feedback; loop capped at 3; after the cap, return the best feasible plan with open issues listed.
-- **AG-05 Dynamic re-planning:** user can amend the request at any point; the agent re-plans from the current state and produces a diff ("what changed and why").
+- **AG-05 Dynamic re-planning:** user can amend the request whenever a plan revision waits for a decision or has been rejected (ADR 0052); the agent re-plans from the current state and produces a diff ("what changed and why").
 - **AG-06 Infeasibility handling:** when constraints cannot all be met, the agent says so, names the binding constraints, and proposes the smallest relaxation that would make it feasible.
 
 ### Supporting features (count toward F-axis "supporting features")
@@ -346,7 +346,7 @@ flowchart LR
 | `mechanisms` | `compare(sku, region, context) -> list[MechanismOutcome]` | demand, simulator |
 | `agents` | `build_graph(tools, llm, checkpointer) -> CompiledGraph`; nodes: context, planner, critic, explainer, approval | LangGraph, llm |
 | `llm` | `LLMProvider` protocol; `OpenAIProvider`, `AnthropicProvider`, `ReplayProvider`, `FakeProvider` | provider SDKs |
-| `guardrails` | `check_numeric_grounding(text, tool_outputs)`, `validate_plan(plan, request)` | — |
+| `guardrails` | `check_numeric_grounding(text, tool_outputs)`, `validate_plan(plan, request)`, `diff_revisions(previous, current)` (ADR 0052) | — |
 | `evals` | `run(scenarios, provider) -> EvalReport`; `oracle.evaluate(plan)` | ground truth (only module allowed) |
 | `api` | FastAPI routers | all above |
 
@@ -537,7 +537,7 @@ Incremental profit is net of pull-forward; halo and cannibalisation count for ev
 
 ### 9.6 Agents (`agents`, LangGraph)
 
-**State (pydantic):** `brief`, `amendments[]`, `request: PlanningRequest | None`, `assumptions[]`, `clarifications[]`, `candidates_summary`, `plan`, `simulation`, `critic_findings[]`, `iteration`, `diff_from_previous`, `explanations`, `approval`. The trace is not in the state: every step is a trace event stored in order in `trace_events` and streamed over SSE (ADR 0047).
+**State (pydantic):** `brief`, `amendments[]`, `request: PlanningRequest | None`, `assumptions[]`, `clarifications[]`, `candidates_summary`, `plan`, `simulation`, `critic_findings[]`, `iteration`, `diff_from_previous` (stored on the plan revision as `plan.diff`, ADR 0052), `explanations`, `approval`. The trace is not in the state: every step is a trace event stored in order in `trace_events` and streamed over SSE (ADR 0047).
 
 **Graph:**
 
@@ -551,13 +551,13 @@ stateDiagram-v2
   Critic --> Planner: findings and attempts < 4 (ADR 0051)
   Critic --> Explainer: pass, or cap reached (issues listed)
   Explainer --> Approval
-  Approval --> Planner: amend
+  Approval --> Context: amend (ADR 0052)
   Approval --> Approval: reject (reason stored; session open for amend)
   Approval --> Done: approve
   Done --> [*]
 ```
 
-A rejection keeps the session open: the graph waits at Approval again until an amendment (ADR 0046). The Critic loops only a plan the planner agent made: at most 3 loop-backs, so at most 4 planner attempts per planning round; a clean or infeasible plan, or one the default sequence planned, goes straight on, and the best attempt becomes the plan revision (ADR 0051).
+A rejection keeps the session open: the graph waits at Approval again until an amendment (ADR 0046). An amendment goes back to Context, which reads the brief again with every amendment, and the Planner plans a new round whose plan revision stores its diff from the previous one (ADR 0052). The Critic loops only a plan the planner agent made: at most 3 loop-backs, so at most 4 planner attempts per planning round; a clean or infeasible plan, or one the default sequence planned, goes straight on, and the best attempt becomes the plan revision (ADR 0051).
 
 **Nodes:**
 - **Context agent (LLM):** parses brief + amendments into `PlanningRequest` via structured output. Fills gaps from data tools (holiday windows, overstock list, current competitor gaps). Emits assumptions with source and confidence. If the LLM is down, reads the brief by deterministic rules into low-confidence assumptions and asks what they cannot read (ADR 0053).
@@ -583,7 +583,7 @@ A rejection keeps the session open: the graph waits at Approval again until an a
 | GET | `/api/sessions/{id}` | Full state: request, assumptions, plan, simulation, findings, status |
 | GET | `/api/sessions/{id}/events` | SSE stream of trace events |
 | POST | `/api/sessions/{id}/clarify` | Answer clarification questions `{answers: {question_id: text}}` (ADR 0048) |
-| POST | `/api/sessions/{id}/amend` | Amend the request `{text}` → re-plan with diff |
+| POST | `/api/sessions/{id}/amend` | Amend the request `{text}`, or accept the latest relaxation `{accept_relaxation: true}` → re-plan with diff (ADR 0052) |
 | POST | `/api/sessions/{id}/approve` | Approve plan revision `{revision_number}` (ADR 0046) |
 | POST | `/api/sessions/{id}/reject` | Reject plan revision `{revision_number, reason}` (ADR 0046) |
 | POST | `/api/plans/{id}/simulate` | Re-simulate `{n_runs, competitor_reaction}` |

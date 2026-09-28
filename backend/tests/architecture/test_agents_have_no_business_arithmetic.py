@@ -31,6 +31,8 @@ ALLOWED = {
     ("explainer.py", "parts += notes"): "list building",
     ("graph.py", "state.iteration + 1"): "counts the Planner's runs, for the Critic loop cap",
     ("graph.py", "route + list(snapshot.next)"): "list building",
+    ("graph.py", "previous.number + 1"): "numbers plan revisions, one per planning round "
+    "(ADR 0052)",
     ("recording.py", "cassette_dir / cassette.name"): "a file path",
 }
 

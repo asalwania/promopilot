@@ -9,6 +9,7 @@ validates the plan and reviews its risks, sending findings back to the planner a
 the Approval interrupt waits for a decision.
 """
 
+from promopilot.agents.amendments import relaxation_amendment
 from promopilot.agents.assumptions import ContextReading
 from promopilot.agents.checkpoints import Checkpoints, MemoryCheckpoints, PostgresCheckpoints
 from promopilot.agents.context import BriefError, BriefReading, ClearanceAsk, RegionalCap
@@ -17,6 +18,8 @@ from promopilot.agents.explainer import (
     ExplainerAnswer,
     LineRationale,
     explain_plan,
+    explainer_prompt,
+    plan_data,
     template_explanations,
 )
 from promopilot.agents.fallback import FALLBACK_CONFIDENCE, read_by_rules
@@ -29,6 +32,7 @@ from promopilot.agents.graph import (
     build_graph,
     checkpoint_serializer,
     graph_state,
+    resume_with_amendment,
     resume_with_answers,
     resume_with_decision,
     start_planning,
@@ -51,6 +55,7 @@ from promopilot.agents.planner_agent import (
 from promopilot.agents.recording import RecordedPlanning, RecordingError, record_cassettes
 from promopilot.agents.session import BriefData, read_context, read_planning_request
 from promopilot.agents.state import (
+    AmendAnswer,
     ApprovalAnswer,
     ApprovalRequest,
     ClarificationAnswer,
@@ -75,6 +80,7 @@ __all__ = [
     "FALLBACK_CONFIDENCE",
     "MAX_ATTEMPTS",
     "AgentTools",
+    "AmendAnswer",
     "ApprovalAnswer",
     "ApprovalRequest",
     "BriefData",
@@ -120,13 +126,17 @@ __all__ = [
     "checkpoint_serializer",
     "emit",
     "explain_plan",
+    "explainer_prompt",
     "graph_state",
     "loosening",
+    "plan_data",
     "plan_with_tools",
     "read_by_rules",
     "read_context",
     "read_planning_request",
     "record_cassettes",
+    "relaxation_amendment",
+    "resume_with_amendment",
     "resume_with_answers",
     "resume_with_decision",
     "start_planning",

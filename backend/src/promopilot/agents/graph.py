@@ -1,7 +1,8 @@
 """The agent graph (SPEC §9.6, ADR 0046): Context → Planner → Critic → Explainer → Approval
 (interrupt) → Done, checkpointed so an interrupt survives an API restart. Context goes to the
 Clarify interrupt instead when it has questions, and each answer goes back to Context
-(ADR 0048).
+(ADR 0048). An amendment at the Approval interrupt goes back to Context, which reads the brief
+again with every amendment, and the Planner plans a new round (ADR 0052).
 
 In this slice the Context node reads the brief with the LLM into a planning request with its
 assumptions, or clarification questions (ADR 0048), and by rules when the LLM is unavailable,
@@ -12,11 +13,12 @@ the request is infeasible → simulation, ADR 0038/0044). The Critic checks each
 with `validate_plan` and the risk review, and sends its findings back to the planner agent
 with feedback at most 3 times; then the best attempt goes on with its findings as open issues
 (#48, ADR 0051). The Explainer has the LLM explain the plan, checked by numeric grounding, with
-the template as its fallback (ADR 0050). Amendments (#50) extend these edges.
+the template as its fallback (ADR 0050).
 
 Nodes record the session as they go through a `SessionRecorder` (`promopilot.data.
 SessionStore`): the Context node saves its assumptions, the Critic the chosen plan revision
-with its open issues when it hands it on (planner attempts are drafts), the Explainer its
+with its open issues when it hands it on (planner attempts are drafts), numbered after the
+previous revision and with its diff from it (ADR 0052), the Explainer its
 explanation, and Approval each decision once the interrupt is answered. The session moves to
 awaiting approval (or clarification) only once `start_planning` returns with the thread paused
 at the interrupt, so it is checkpointed before anyone can answer it. Every step is checkpointed
@@ -37,7 +39,7 @@ from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.state import CompiledStateGraph
 from langgraph.types import Command, interrupt
-from pydantic import BaseModel
+from pydantic import BaseModel, TypeAdapter
 
 from promopilot.agents.critic import (
     best_attempt,
@@ -51,6 +53,7 @@ from promopilot.agents.planner import PlannedRevision
 from promopilot.agents.planner_agent import AgentTools, plan_with_tools
 from promopilot.agents.session import BriefData, read_context
 from promopilot.agents.state import (
+    AmendAnswer,
     ApprovalAnswer,
     ApprovalRequest,
     ClarificationAnswer,
@@ -80,7 +83,7 @@ from promopilot.domain import (
     PlanningRequest,
     PlanRevision,
 )
-from promopilot.guardrails import RiskThresholds
+from promopilot.guardrails import RiskThresholds, diff_revisions
 from promopilot.llm import LLMProvider
 
 log = structlog.get_logger(__name__)
@@ -94,6 +97,10 @@ CRITIC: Final = "critic"
 EXPLAINER: Final = "explainer"
 APPROVAL: Final = "approval"
 DONE: Final = "done"
+
+_APPROVAL_ANSWER: TypeAdapter[ApprovalAnswer | AmendAnswer] = TypeAdapter(
+    ApprovalAnswer | AmendAnswer
+)
 
 
 class Planner(Protocol):
@@ -259,11 +266,13 @@ def build_graph(
             return {"attempts": attempts, "critic_findings": findings}
         best = best_attempt(attempts)
         await decide(route.value, route_summary(route, attempts, chosen=best))
-        await tools.sessions.save_revision(state.session_id, request, best.plan)
-        await tools.sessions.save_open_issues(state.session_id, best.plan.number, best.findings)
+        revision = _next_revision(best.plan, state.plan, state.plan_request, request)
+        await tools.sessions.save_revision(state.session_id, request, revision)
+        await tools.sessions.save_open_issues(state.session_id, revision.number, best.findings)
         return {
             "attempts": attempts,
-            "plan": best.plan,
+            "plan": revision,
+            "plan_request": request,
             "plan_facts": best.facts,
             "critic_findings": best.findings,
             "planner_notes": best.notes,
@@ -304,9 +313,28 @@ def build_graph(
 
     async def approval(state: PlanningState) -> dict[str, object]:
         plan = _required(state.plan, "a plan revision")
-        answer = ApprovalAnswer.model_validate(
+        answer = _APPROVAL_ANSWER.validate_python(
             interrupt(ApprovalRequest(revision_number=plan.number))
         )
+        if isinstance(answer, AmendAnswer):
+            await emit(
+                DecisionMade(
+                    decision="amended",
+                    summary=f"Plan revision {plan.number} was amended: {answer.amendment}",
+                )
+            )
+            # A new planning round (ADR 0051, ADR 0052): `plan` stays as the revision the next
+            # one is diffed against.
+            return {
+                "amendments": (*state.amendments, answer.amendment),
+                "questions": (),
+                "attempts": (),
+                "critic_findings": (),
+                "planner_notes": (),
+                "planner_degraded": None,
+                "explanations": None,
+                "approval": None,
+            }
         decision = await tools.sessions.record_decision(
             state.session_id, answer.decision, answer.revision_number, answer.reason
         )
@@ -320,12 +348,12 @@ def build_graph(
         )
         return {"approval": decision}
 
-    def after_approval(state: PlanningState) -> Literal["done", "approval"]:
+    def after_approval(state: PlanningState) -> Literal["done", "approval", "context"]:
         decided = state.approval
-        # A rejected revision waits at Approval again, open for an amendment (#50).
-        return (
-            DONE if decided is not None and decided.decision is DecisionKind.APPROVED else APPROVAL
-        )
+        if decided is None:
+            return CONTEXT  # amended: read the request again, then plan a new round
+        # A rejected revision waits at Approval again, open for an amendment (ADR 0052).
+        return DONE if decided.decision is DecisionKind.APPROVED else APPROVAL
 
     async def done(state: PlanningState) -> dict[str, object]:
         return {}
@@ -348,7 +376,7 @@ def build_graph(
     graph.add_edge(PLANNER, CRITIC)
     graph.add_conditional_edges(CRITIC, after_critic, [PLANNER, EXPLAINER])
     graph.add_edge(EXPLAINER, APPROVAL)
-    graph.add_conditional_edges(APPROVAL, after_approval, [DONE, APPROVAL])
+    graph.add_conditional_edges(APPROVAL, after_approval, [DONE, APPROVAL, CONTEXT])
     graph.add_edge(DONE, END)
     return graph.compile(checkpointer=checkpointer)
 
@@ -365,6 +393,7 @@ def checkpoint_serializer() -> JsonPlusSerializer:
                 PlanningState,
                 ApprovalRequest,
                 ApprovalAnswer,
+                AmendAnswer,
                 ClarificationRequest,
                 ClarificationAnswer,
             )
@@ -393,6 +422,12 @@ async def resume_with_decision(
     """Answer the Approval interrupt of a paused thread; returns the nodes it ran, in order."""
     answer = ApprovalAnswer(decision=decision, revision_number=revision_number, reason=reason)
     return await _run(graph, thread_id, Command(resume=answer))
+
+
+async def resume_with_amendment(graph: PlanningGraph, thread_id: str, text: str) -> list[str]:
+    """Amend the request of a thread paused at the Approval interrupt: the Context agent reads
+    it again and a new round is planned (ADR 0052); returns the nodes it ran, in order."""
+    return await _run(graph, thread_id, Command(resume=AmendAnswer(amendment=text)))
 
 
 async def resume_with_answers(
@@ -429,6 +464,20 @@ async def _run(
 
 def _config(thread_id: str) -> Any:
     return {"configurable": {"thread_id": thread_id}}
+
+
+def _next_revision(
+    planned: PlanRevision,
+    previous: PlanRevision | None,
+    previous_request: PlanningRequest | None,
+    request: PlanningRequest,
+) -> PlanRevision:
+    """The round's plan as the session's next plan revision: numbered after the previous one
+    and with its diff from it (ADR 0052); the first revision is number 1 with no diff."""
+    if previous is None:
+        return planned.model_copy(update={"number": 1, "diff": None})
+    diff = diff_revisions(previous, planned, previous_request=previous_request, request=request)
+    return planned.model_copy(update={"number": previous.number + 1, "diff": diff})
 
 
 def _required[T](value: T | None, what: str) -> T:

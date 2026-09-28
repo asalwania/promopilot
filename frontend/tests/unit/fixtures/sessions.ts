@@ -27,6 +27,7 @@ export const planningSession: SessionResponse = {
   assumptions: [],
   questions: [],
   clarifications: [],
+  amendments: [],
 };
 
 export const planLines: PlanRevisionLine[] = [

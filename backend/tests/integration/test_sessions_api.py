@@ -3,6 +3,7 @@ world's fitted models, against real Postgres and the agent graph's Postgres chec
 seam 1, E6 seam 5, E8 #44, #46)."""
 
 import asyncio
+import json
 from collections.abc import AsyncIterator, Callable, Iterator, Sequence
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from pathlib import Path
@@ -1137,3 +1138,242 @@ class NeverRecords:
 
     async def record_decision(self, *args: object) -> Any:
         raise AssertionError("never records")
+
+
+# Amendments (#50, ADR 0052).
+
+CUT = READING.model_copy(update={"marketing_budget": 6_000.0})
+
+
+async def test_an_amendment_replans_a_new_revision_with_its_diff_and_what_changed(
+    postgres_url: str, running_api: Api
+) -> None:
+    async with running_api(
+        postgres_url, FakeProvider([READING, explainer_down(), CUT, explainer_down()])
+    ) as client:
+        session_id = await planned_session(client)
+        first = (await client.get(f"/api/sessions/{session_id}")).json()["plan_revision"]
+        amended = await client.post(
+            f"/api/sessions/{session_id}/amend", json={"text": "cut budget to ₹6,000"}
+        )
+        done = await settled(client, session_id)
+
+    assert amended.status_code == 202, amended.text
+    body = amended.json()
+    assert body["status"] == "planning"
+    [amendment] = body["amendments"]
+    assert (amendment["text"], amendment["amends_revision"], amendment["relaxation"]) == (
+        "cut budget to ₹6,000",
+        1,
+        None,
+    )
+    assert amendment["amended_at"]
+    assert done["status"] == "awaiting_approval", done
+    assert done["amendments"] == body["amendments"]
+    assert done["planning_request"]["marketing_budget"] == 6_000.0
+    revision = done["plan_revision"]
+    assert revision["number"] == 2
+    assert sum(line["promo_cost"] for line in revision["lines"]) <= 6_000.0 + 0.01
+    diff = revision["diff"]
+    assert diff["from_revision"] == 1
+    assert diff["request_changes"] == [
+        {"field": "marketing_budget", "before": "₹20,000", "after": "₹6,000"}
+    ]
+    assert diff["promo_cost_before"] == pytest.approx(
+        sum(line["promo_cost"] for line in first["lines"])
+    )
+    assert diff["objective_delta"] == pytest.approx(revision["objective"] - first["objective"])
+    changes = revision["explanation"]["changes"]
+    assert changes.startswith("Plan revision 2 changes plan revision 1.")
+    assert first["diff"] is None
+
+
+async def test_a_rejected_session_is_amended_and_its_new_revision_can_be_approved(
+    postgres_url: str, running_api: Api
+) -> None:
+    async with running_api(
+        postgres_url, FakeProvider([READING, explainer_down(), CUT, explainer_down()])
+    ) as client:
+        session_id = await planned_session(client)
+        await client.post(
+            f"/api/sessions/{session_id}/reject",
+            json={"revision_number": 1, "reason": "Too much spend"},
+        )
+        amended = await client.post(
+            f"/api/sessions/{session_id}/amend", json={"text": "cut budget to ₹6,000"}
+        )
+        await settled(client, session_id)
+        approved = await client.post(
+            f"/api/sessions/{session_id}/approve", json={"revision_number": 2}
+        )
+
+    assert amended.status_code == 202, amended.text
+    assert approved.status_code == 200, approved.text
+    body = approved.json()
+    assert body["status"] == "approved"
+    assert [(d["decision"], d["revision_number"]) for d in body["decisions"]] == [
+        ("rejected", 1),
+        ("approved", 2),
+    ]
+    assert [a["amends_revision"] for a in body["amendments"]] == [1]
+
+
+async def test_an_amendment_after_a_restart_resumes_the_graph_from_its_checkpoint(
+    postgres_url: str, running_api: Api
+) -> None:
+    async with running_api(postgres_url, FakeProvider([READING, explainer_down()])) as client:
+        session_id = await planned_session(client)
+
+    async with running_api(postgres_url, FakeProvider([CUT, explainer_down()])) as client:
+        amended = await client.post(
+            f"/api/sessions/{session_id}/amend", json={"text": "cut budget to ₹6,000"}
+        )
+        done = await settled(client, session_id)
+
+    assert amended.status_code == 202, amended.text
+    assert done["status"] == "awaiting_approval", done
+    assert done["plan_revision"]["number"] == 2
+
+
+async def test_amending_an_approved_session_is_409(postgres_url: str, running_api: Api) -> None:
+    async with running_api(postgres_url, FakeProvider([READING, explainer_down()])) as client:
+        session_id = await planned_session(client)
+        await client.post(f"/api/sessions/{session_id}/approve", json={"revision_number": 1})
+        response = await client.post(
+            f"/api/sessions/{session_id}/amend", json={"text": "cut budget to ₹6,000"}
+        )
+        after = (await client.get(f"/api/sessions/{session_id}")).json()
+
+    assert response.status_code == 409
+    assert "approved" in response.json()["detail"]
+    assert after["status"] == "approved"
+    assert after["amendments"] == []
+
+
+async def test_amending_while_planning_or_awaiting_clarification_is_409(
+    postgres_url: str, running_api: Api
+) -> None:
+    llm = GatedProvider(FakeProvider([UNBUDGETED]))
+    async with running_api(postgres_url, llm) as client:
+        session_id = (await client.post("/api/sessions", json={"brief": BRIEF})).json()[
+            "session_id"
+        ]
+        planning = await client.post(f"/api/sessions/{session_id}/amend", json={"text": "₹6k"})
+        llm.gate.set()
+        waiting = await settled(client, session_id)
+        clarifying = await client.post(f"/api/sessions/{session_id}/amend", json={"text": "₹6k"})
+
+    assert planning.status_code == 409
+    assert "planning" in planning.json()["detail"]
+    assert waiting["status"] == "awaiting_clarification"
+    assert clarifying.status_code == 409
+
+
+async def test_amending_an_unknown_session_is_404(postgres_url: str, running_api: Api) -> None:
+    async with running_api(postgres_url, FakeProvider([])) as client:
+        response = await client.post(
+            "/api/sessions/00000000-0000-0000-0000-000000000000/amend", json={"text": "₹6k"}
+        )
+
+    assert response.status_code == 404
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        {},
+        {"text": "   "},
+        {"text": "x" * 2001},
+        {"text": "₹6k", "accept_relaxation": True},
+        {"accept_relaxation": False},
+        {"text": "₹6k", "revision_number": 1},
+    ],
+    ids=["empty", "blank", "oversized", "both", "neither", "unknown-field"],
+)
+async def test_an_invalid_amend_body_is_422(
+    postgres_url: str, running_api: Api, body: dict[str, object]
+) -> None:
+    async with running_api(postgres_url, FakeProvider([READING, explainer_down()])) as client:
+        session_id = await planned_session(client)
+        response = await client.post(f"/api/sessions/{session_id}/amend", json=body)
+        after = (await client.get(f"/api/sessions/{session_id}")).json()
+
+    assert response.status_code == 422
+    assert after["status"] == "awaiting_approval"
+
+
+async def test_accepting_a_relaxation_the_revision_does_not_have_is_409(
+    postgres_url: str, running_api: Api
+) -> None:
+    async with running_api(postgres_url, FakeProvider([READING, explainer_down()])) as client:
+        session_id = await planned_session(client)
+        response = await client.post(
+            f"/api/sessions/{session_id}/amend", json={"accept_relaxation": True}
+        )
+
+    assert response.status_code == 409
+    assert "relaxation" in response.json()["detail"]
+
+
+async def test_accepting_the_relaxation_amends_the_request_with_its_changes(
+    postgres_url: str, running_api: Api, small_dataset: GeneratedDataset
+) -> None:
+    snapshot = small_dataset.inventory.query(f"snapshot_week == {HISTORY_WEEKS - 1}")
+    pooled = pooled_stock(snapshot, small_dataset.stores, FREE).query("region == 'North'")
+    snacks = set(small_dataset.products.query("category == 'Snacks'")["sku_id"])
+    covered = pooled[pooled["sku_id"].isin(snacks)].sort_values("days_of_cover")
+    target = ClearanceTarget(sku_id=str(covered["sku_id"].iloc[-1]), sell_through=1.0)
+    llm = FakeProvider([READING, explainer_down(), READING, explainer_down()])
+    async with running_api(postgres_url, llm, lambda inner: Clearing(inner, target)) as client:
+        session_id = await planned_session(client)
+        planned = (await client.get(f"/api/sessions/{session_id}")).json()
+        accepted = await client.post(
+            f"/api/sessions/{session_id}/amend", json={"accept_relaxation": True}
+        )
+        done = await settled(client, session_id)
+
+    assert accepted.status_code == 202, accepted.text
+    [amendment] = accepted.json()["amendments"]
+    assert amendment["relaxation"] == planned["plan_revision"]["relaxation"]
+    assert amendment["text"].startswith("Accept the smallest relaxation: ")
+    assert target.sku_id in amendment["text"]
+    # The Context agent reads the accepted relaxation like any other amendment.
+    reread = [call for call in llm.calls if call.schema is BriefReading][-1]
+    assert json.dumps(amendment["text"], ensure_ascii=False) in reread.messages[-1].content
+    assert done["plan_revision"]["number"] == 2
+
+
+async def test_the_store_keeps_an_amendment_only_for_the_latest_revision_awaiting_a_decision(
+    postgres_url: str,
+) -> None:
+    engine = create_async_engine(postgres_url)
+    store = SessionStore(engine)
+    request = PlanningRequest(
+        as_of_week=HISTORY_WEEKS,
+        scope=Scope(regions=(Region.NORTH,), categories=("Snacks",)),
+        promo_window=PromoWindow(start_week=HISTORY_WEEKS + 2, end_week=HISTORY_WEEKS + 3),
+        marketing_budget=BUDGET,
+    )
+    try:
+        session_id = await store.create(BRIEF)
+        await store.save_revision(session_id, request, PlanRevision(number=1))
+        with pytest.raises(SessionConflictError):  # still planning
+            await store.amend(session_id, "₹6k", 1)
+        await store.await_approval(session_id)
+        with pytest.raises(SessionConflictError):  # not the latest revision
+            await store.amend(session_id, "₹6k", 2)
+        first = await store.amend(session_id, "₹6k", 1)
+        with pytest.raises(SessionConflictError):  # planning again
+            await store.amend(session_id, "₹5k", 1)
+        await store.save_revision(session_id, request, PlanRevision(number=2))
+        await store.await_approval(session_id)
+        await store.record_decision(session_id, DecisionKind.REJECTED, 2, "no")
+        second = await store.amend(session_id, "drop Snacks", 2)
+        saved = await store.get(session_id)
+    finally:
+        await engine.dispose()
+
+    assert saved is not None
+    assert saved.status == "planning"
+    assert saved.amendments == (first, second)
+    assert [a.text for a in saved.amendments] == ["₹6k", "drop Snacks"]

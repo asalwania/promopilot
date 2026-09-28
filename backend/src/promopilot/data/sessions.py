@@ -1,16 +1,18 @@
 """Persistence for planning sessions, their plan revisions, their explanations and every
 decision on them (E3, E8: ADR 0046, ADR 0050), with the Context agent's assumptions and
-clarifications (ADR 0048)."""
+clarifications (ADR 0048) and every amendment, each revision with its diff (ADR 0052)."""
 
 from uuid import UUID, uuid4
 
 from pydantic import TypeAdapter
-from sqlalchemy import func, insert, select, update
+from sqlalchemy import cast, func, insert, select, update
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from promopilot.data.schema import approvals, plan_lines, plan_revisions, planning_sessions
 from promopilot.data.trace import session_usage
 from promopilot.domain import (
+    Amendment,
     Assumption,
     BindingConstraint,
     Clarification,
@@ -30,6 +32,7 @@ from promopilot.domain import (
     PlanSimulation,
     PolicyFinding,
     Relaxation,
+    RevisionDiff,
     SessionStatus,
     SolveStatus,
     WhyChosen,
@@ -44,6 +47,10 @@ _ISSUES = TypeAdapter(tuple[OpenIssue, ...])
 _ASSUMPTIONS = TypeAdapter(tuple[Assumption, ...])
 _QUESTIONS = TypeAdapter(tuple[ClarificationQuestion, ...])
 _CLARIFICATIONS = TypeAdapter(tuple[Clarification, ...])
+_AMENDMENTS = TypeAdapter(tuple[Amendment, ...])
+
+AMENDABLE = (SessionStatus.AWAITING_APPROVAL, SessionStatus.REJECTED)
+"""The statuses an amendment is accepted in: the graph waits at Approval (ADR 0052)."""
 
 INTERRUPTED = "planning was interrupted by an API restart; start a new session"
 
@@ -134,6 +141,7 @@ class SessionStore:
             assumptions=_ASSUMPTIONS.validate_python(session.assumptions or ()),
             questions=_QUESTIONS.validate_python(session.questions or ()),
             clarifications=_CLARIFICATIONS.validate_python(session.clarifications or ()),
+            amendments=_AMENDMENTS.validate_python(session.amendments or ()),
         )
 
     async def save_assumptions(self, session_id: UUID, assumptions: tuple[Assumption, ...]) -> None:
@@ -221,6 +229,7 @@ class SessionStore:
                     explanation=None
                     if revision.explanation is None
                     else revision.explanation.model_dump(mode="json"),
+                    diff=None if revision.diff is None else revision.diff.model_dump(mode="json"),
                 )
             )
             if revision.lines:
@@ -327,6 +336,48 @@ class SessionStore:
             decided_at=decided_at,
         )
 
+    async def amend(
+        self,
+        session_id: UUID,
+        text: str,
+        amends_revision: int,
+        relaxation: Relaxation | None = None,
+    ) -> Amendment:
+        """Keep an amendment of the latest plan revision and move a session awaiting approval,
+        or rejected, back to `planning` (ADR 0052). Raises `SessionConflictError`, changing
+        nothing, when the session is in another status or the revision is not its latest."""
+        latest = (
+            select(func.max(plan_revisions.c.number))
+            .where(plan_revisions.c.session_id == session_id)
+            .scalar_subquery()
+        )
+        async with self._engine.begin() as connection:
+            now = (await connection.execute(select(func.now()))).scalar_one()
+            amendment = Amendment(
+                text=text, amends_revision=amends_revision, relaxation=relaxation, amended_at=now
+            )
+            appended = func.coalesce(planning_sessions.c.amendments, cast([], JSONB)).op("||")(
+                cast([amendment.model_dump(mode="json")], JSONB)
+            )
+            moved = await connection.execute(
+                update(planning_sessions)
+                .where(
+                    planning_sessions.c.id == session_id,
+                    planning_sessions.c.status.in_([status.value for status in AMENDABLE]),
+                    latest == amends_revision,
+                )
+                .values(
+                    status=SessionStatus.PLANNING.value,
+                    amendments=appended,
+                    updated_at=func.now(),
+                )
+            )
+            if moved.rowcount != 1:
+                raise SessionConflictError(
+                    f"plan revision {amends_revision} of session {session_id} cannot be amended"
+                )
+        return amendment
+
     async def save_simulation(
         self, session_id: UUID, revision_number: int, simulation: PlanSimulation
     ) -> None:
@@ -408,6 +459,7 @@ def _revision(row: object, lines: tuple[PlanRevisionLine, ...]) -> PlanRevision:
         explanation=None
         if values["explanation"] is None
         else PlanExplanation.model_validate(values["explanation"]),
+        diff=None if values["diff"] is None else RevisionDiff.model_validate(values["diff"]),
     )
 
 

@@ -6,7 +6,10 @@ optimising planner plans it (ADR 0038), the Critic validates it and the Explaine
 `POST /approve` and `POST /reject` resume the graph from its checkpoint within the request, so
 a decision survives an API restart between planning and deciding. When the Context agent asks
 questions the graph pauses at Clarify instead; `POST /clarify` keeps the answers and resumes it
-in the background, since planning follows (ADR 0048).
+in the background, since planning follows (ADR 0048). `POST /amend` keeps an amendment of a
+session awaiting approval, or rejected, and resumes the graph from Approval in the background:
+the Context agent reads the request again and a new plan revision is planned, with its diff
+from the previous one (ADR 0052).
 
 Every step the graph takes is a trace event in Postgres (ADR 0047). `GET /events` streams them
 over SSE: it replays the events after `Last-Event-ID`, then polls for new ones until the
@@ -31,11 +34,14 @@ from promopilot.agents import (
     PlanningGraph,
     build_graph,
     graph_state,
+    relaxation_amendment,
+    resume_with_amendment,
     resume_with_answers,
     resume_with_decision,
     start_planning,
 )
 from promopilot.api.schemas import (
+    AmendRequest,
     ApproveRequest,
     ClarifyRequest,
     CreateSessionRequest,
@@ -44,7 +50,7 @@ from promopilot.api.schemas import (
     SessionResponse,
     TraceStreamEnd,
 )
-from promopilot.data import SessionConflictError, SessionStore, TraceRead
+from promopilot.data import AMENDABLE, SessionConflictError, SessionStore, TraceRead
 from promopilot.domain import (
     Clarification,
     DecisionKind,
@@ -209,6 +215,59 @@ class SessionService:
         if resumed is None:
             raise SessionNotFoundError(str(session_id))
         return SessionResponse.of(resumed)
+
+    async def amend(
+        self, session_id: UUID, text: str | None, *, accept_relaxation: bool = False
+    ) -> SessionResponse:
+        """Amend the planning request of a session awaiting approval, or rejected, in the
+        manager's words or by accepting the latest revision's relaxation; the session is
+        `planning` again and the graph resumes from Approval in the background (ADR 0052).
+        Raises `SessionNotFoundError`, or `SessionConflictError` when the session is in another
+        status, or there is no relaxation to accept."""
+        graph = self._require_graph()
+        lock = self._locks.setdefault(session_id, asyncio.Lock())
+        with structlog.contextvars.bound_contextvars(session_id=str(session_id)):
+            async with lock:
+                session = await self._store.get(session_id)
+                if session is None:
+                    raise SessionNotFoundError(str(session_id))
+                if session.status not in AMENDABLE:
+                    raise SessionConflictError(
+                        f"the session is {session.status.value}: only a session awaiting "
+                        "approval, or rejected, can be amended"
+                    )
+                latest = session.latest_revision
+                if latest is None:
+                    raise SessionConflictError("the session has no plan revision to amend")
+                relaxation = None
+                if accept_relaxation:
+                    relaxation = latest.relaxation
+                    if relaxation is None or not relaxation.changes:
+                        raise SessionConflictError(
+                            f"plan revision {latest.number} has no relaxation to accept"
+                        )
+                    text = relaxation_amendment(relaxation)
+                if text is None:
+                    raise ValueError("an amendment needs text or an accepted relaxation")
+                thread_id = session.thread_id
+                paused = None if thread_id is None else await graph_state(graph, thread_id)
+                if thread_id is None or paused is None or not paused.awaits_decision:
+                    raise SessionConflictError(
+                        "the session's agent graph is not waiting at approval"
+                    )
+                await self._store.amend(session_id, text, latest.number, relaxation)
+                amendment = text
+                self._spawn(
+                    self._drive(
+                        graph,
+                        session_id,
+                        lambda: resume_with_amendment(graph, thread_id, amendment),
+                    )
+                )
+                amended = await self._store.get(session_id)
+        if amended is None:
+            raise SessionNotFoundError(str(session_id))
+        return SessionResponse.of(amended)
 
     async def recover_interrupted(self) -> None:
         """At startup: sessions left `planning` by a previous process can never finish.
@@ -404,6 +463,32 @@ def sessions_router(sessions: SessionService) -> APIRouter:
             raise HTTPException(status.HTTP_409_CONFLICT, str(error)) from error
         except ClarificationAnswersError as error:
             raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(error)) from error
+        except PlanningUnavailableError as error:
+            raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, str(error)) from error
+
+    @router.post(
+        "/{session_id}/amend",
+        status_code=status.HTTP_202_ACCEPTED,
+        responses={
+            status.HTTP_404_NOT_FOUND: {"description": "Unknown session"},
+            status.HTTP_409_CONFLICT: {
+                "description": "The session is not awaiting approval or rejected, or "
+                "(accept_relaxation) its latest revision has no relaxation"
+            },
+            status.HTTP_503_SERVICE_UNAVAILABLE: {"description": "Planning is unavailable"},
+        },
+    )
+    async def amend_session(session_id: UUID, body: AmendRequest) -> SessionResponse:
+        """Amend the planning request (AG-05); a new plan revision, with its diff from the
+        previous one, is planned in the background."""
+        try:
+            return await sessions.amend(
+                session_id, body.text, accept_relaxation=body.accept_relaxation
+            )
+        except SessionNotFoundError as error:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Unknown session") from error
+        except SessionConflictError as error:
+            raise HTTPException(status.HTTP_409_CONFLICT, str(error)) from error
         except PlanningUnavailableError as error:
             raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, str(error)) from error
 
