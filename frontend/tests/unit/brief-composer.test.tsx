@@ -106,7 +106,7 @@ describe("BriefComposer", () => {
 describe("example briefs", () => {
   it("offers the four recorded examples", () => {
     render(<BriefComposer />);
-    const examples = screen.getByRole("list", { name: "Example briefs" });
+    const examples = screen.getByRole("list", { name: "Try an example" });
 
     expect(within(examples).getAllByRole("listitem")).toHaveLength(4);
     for (const example of EXAMPLE_BRIEFS) {

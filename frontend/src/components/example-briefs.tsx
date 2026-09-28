@@ -20,7 +20,7 @@ export function ExampleBriefs({ examples, onPick }: Props) {
         Try an example
       </h2>
       <ul
-        aria-label="Example briefs"
+        aria-labelledby="examples-heading"
         className="grid grid-cols-1 gap-3 md:grid-cols-2"
       >
         {examples.map((example) => (

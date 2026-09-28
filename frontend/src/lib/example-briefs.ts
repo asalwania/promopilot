@@ -1,6 +1,7 @@
 // One-click trials on the home page (ADR 0058). Each brief is, word for word, a session
 // script in backend/cassettes/sessions.json, so it replays with no API key (ADR 0054).
-// tests/unit/example-briefs.test.ts fails if a brief drifts from its recording.
+// tests/unit/example-briefs.test.ts fails if a brief drifts from its recording. Titles
+// avoid the word "brief": the E3 journey finds the brief box by getByLabel("Brief").
 export type ExampleBrief = {
   /** The recorded session's name in backend/cassettes/sessions.json. */
   session: string;
@@ -30,7 +31,7 @@ export const EXAMPLE_BRIEFS: readonly ExampleBrief[] = [
   },
   {
     session: "clarify",
-    title: "Vague brief: the agent asks",
+    title: "No budget: the agent asks",
     description:
       "No budget is given, so the agent asks for one before planning.",
     brief:
