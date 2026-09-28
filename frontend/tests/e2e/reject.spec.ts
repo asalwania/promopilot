@@ -39,8 +39,11 @@ test("rejecting the plan records the reason and keeps the session open", async (
   await form.getByRole("button", { name: "Send rejection" }).click();
 
   await expect(page.getByRole("status")).toHaveText("Rejected");
+  // The status card's note; the trace timeline's decision event says the same.
   await expect(
-    page.getByText(`Plan revision 1 was rejected: ${REASON}`),
+    page
+      .getByRole("paragraph")
+      .filter({ hasText: `Plan revision 1 was rejected: ${REASON}` }),
   ).toBeVisible();
   // Still open: the manager can amend the brief, but not decide on this revision again.
   await expect(
