@@ -23,7 +23,7 @@ We chose these with the owner (D1–D12 on #49, every recommended option).
   - `source`, `llm` or `template`;
   - `fallback_reason`, set only for a template.
 
-  It sits on `PlanRevision.explanation` and is stored in `plan_revisions.explanation` (migration 0012). It is null until the Explainer has run, and for revisions planned before #49. The graph's state holds the same type, and the Explainer writes it through a new `SessionRecorder.save_explanation`. The read model shows it with the revision. This supersedes ADR 0046 D13's "the explanations live in the graph's state only".
+  It sits on `PlanRevision.explanation` and is stored in `plan_revisions.explanation` (migration 0010). It is null until the Explainer has run, and for revisions planned before #49. The graph's state holds the same type, and the Explainer writes it through a new `SessionRecorder.save_explanation`. The read model shows it with the revision. This supersedes ADR 0046 D13's "the explanations live in the graph's state only".
   - We rejected text columns (`plan_revisions.summary` and `plan_lines.rationale`), which need an update per line.
   - We rejected an `explanations` table, which adds a join for no present need. #50's "what changed and why" can become a field of `PlanExplanation`.
 - **D12. The frontend follows the contract.** The zod schema and fixtures carry `explanation`; showing it is E10's.
@@ -113,7 +113,7 @@ We chose these with the owner (D1–D12 on #49, every recommended option).
 
 ## Consequences
 
-- **Migration 0012** adds `plan_revisions.explanation`.
+- **Migration 0010** adds `plan_revisions.explanation`.
 - **New public names:**
   - domain: `PlanExplanation`, `ExplanationSource`, `FallbackReason`;
   - agents: `explain_plan`, `ExplainerAnswer`, `LineRationale`;

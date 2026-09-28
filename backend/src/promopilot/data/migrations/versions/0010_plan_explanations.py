@@ -4,7 +4,7 @@
   them (the LLM or the template) and why the template was used; null until the Explainer has
   run, and for revisions planned before #49.
 
-Revision ID: 0012
+Revision ID: 0010
 Revises: 0009
 Create Date: 2026-09-28
 """
@@ -15,7 +15,7 @@ import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import postgresql
 
-revision: str = "0012"
+revision: str = "0010"
 down_revision: str | None = "0009"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
