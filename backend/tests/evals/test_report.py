@@ -4,11 +4,23 @@ ADR 0056)."""
 from datetime import UTC, datetime
 from pathlib import Path
 
-from promopilot.domain import Region, SolveStatus, Violation, ViolationCode
+from promopilot.domain import (
+    ExplanationSource,
+    FallbackReason,
+    Region,
+    SessionUsage,
+    SolveStatus,
+    Violation,
+    ViolationCode,
+)
 from promopilot.evals.report import (
     Breach,
+    ClarificationCheck,
     ConstraintCheck,
     EvalReport,
+    ExplainerRun,
+    FieldMatch,
+    InfeasibilityCheck,
     Metric,
     OracleScore,
     PropertyResult,
@@ -16,6 +28,7 @@ from promopilot.evals.report import (
     RunOutcome,
     RunResult,
     ScenarioResult,
+    render_markdown,
     write_report,
 )
 
@@ -130,3 +143,101 @@ def test_only_timing_is_left_out_of_the_comparable_report() -> None:
 
     assert later.comparable() == REPORT.comparable()
     assert "provider" in REPORT.comparable()
+
+
+# ---------------------------------------------------------------- agent behaviour (#55)
+
+BEHAVED_RUN = FAILED_RUN.model_copy(
+    update={
+        "questions_asked": ("promo_window",),
+        "extraction": (
+            FieldMatch(field="regions", expected="North", got="North", matched=True),
+            FieldMatch(field="marketing_budget", expected="200000", got="150000", matched=False),
+        ),
+        "flagged": ("objective",),
+        "clarification": ClarificationCheck(
+            named=("marketing_budget",), asked=(), flagged=(), passed=False
+        ),
+        "infeasibility": InfeasibilityCheck(
+            revision=2, declared=False, relaxation=True, binding_named=False, passed=False
+        ),
+        "explanations": (
+            ExplainerRun(revision=1, source=ExplanationSource.LLM, fallback_reason=None),
+            ExplainerRun(
+                revision=2,
+                source=ExplanationSource.TEMPLATE,
+                fallback_reason=FallbackReason.UNGROUNDED,
+            ),
+        ),
+        "session_s": 12.34,
+        "usage": SessionUsage(calls=5, input_tokens=9_000, output_tokens=800, cost_inr=4.5),
+    }
+)
+BEHAVED = REPORT.model_copy(
+    update={
+        "metrics": (
+            *REPORT.metrics,
+            Metric(
+                name="session_latency_p50",
+                label="P50 session time",
+                value=12.34,
+                count=1,
+                of=1,
+                unit="seconds",
+            ),
+            Metric(
+                name="session_cost_p50",
+                label="P50 session cost",
+                value=4.5,
+                count=1,
+                of=1,
+                unit="rupees",
+            ),
+        ),
+        "scenarios": (REPORT.scenarios[0].model_copy(update={"runs": (BEHAVED_RUN,)}),),
+    }
+)
+
+
+def test_the_markdown_shows_latency_and_cost_in_their_units() -> None:
+    markdown = render_markdown(BEHAVED)
+
+    assert "| P50 session time | 12.3 s (1 of 1) | report | — |" in markdown
+    assert "| P50 session cost | ₹4.50 (1 of 1) | report | — |" in markdown
+
+
+def test_the_markdown_has_an_agent_behaviour_row_per_run_and_its_failures() -> None:
+    markdown = render_markdown(BEHAVED)
+
+    assert "## Agent behaviour" in markdown
+    assert (
+        "| amend-drop-west | 1 | 1/2 | promo_window | objective | llm, template (ungrounded) "
+        "| 12.3 s | ₹4.50, 5 calls |"
+    ) in markdown
+    where = "- **amend-drop-west** run 1:"
+    assert f"{where} read `marketing_budget` as 150000, labelled 200000" in markdown
+    assert f"{where} neither asked about nor flagged marketing_budget" in markdown
+    assert (
+        f"{where} revision 2 is not declared infeasible and names no binding constraint" in markdown
+    )
+
+
+def test_session_time_and_the_latency_value_are_left_out_of_the_comparable_report() -> None:
+    later = BEHAVED.model_copy(
+        update={
+            "metrics": tuple(
+                metric.model_copy(update={"value": 99.0, "breakdown": {"max_s": 99}})
+                if metric.unit == "seconds"
+                else metric
+                for metric in BEHAVED.metrics
+            ),
+            "scenarios": (
+                BEHAVED.scenarios[0].model_copy(
+                    update={"runs": (BEHAVED_RUN.model_copy(update={"session_s": 99.0}),)}
+                ),
+            ),
+        }
+    )
+
+    assert later.comparable() == BEHAVED.comparable()
+    assert later.comparable()["metrics"][-1]["value"] == 4.5, "cost is deterministic in replay"

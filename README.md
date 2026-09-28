@@ -303,9 +303,15 @@ labels:                        # the planning-request fields it states, for extr
 expect:                        # properties of the outcome, never an exact plan
   - asks_clarification: marketing_budget
   - declares_infeasible: false
-  - excludes_region: West
+  - excludes_region: West       # the final revision, after every amendment
   - meets_clearance: SKU0002
+  - relaxation_touches: clearance_target   # a ConstraintKind the relaxation changes
+  - flags_assumption: min_margin           # the final reading flags this field
+  - diff_changes: scope.regions            # the final revision's diff changes this field
+  - kvi_response_present: true             # the undercut-KVI response is in notes and summary
 ```
+
+A `vague_or_conflicting` scenario must name at least one field with `asks_clarification` or `flags_assumption` (ADR 0062).
 
 The eval builds its own world: the seed-42 dataset `make data` writes, with its hidden ground truth, and demand and relations models fitted in memory as of each scenario's week (35–60 s per week), so no sales after that week reach them. It needs no Docker, `make data` or `make train`. The LLM is whatever `LLM_PROVIDER` names; with the default `replay`, requests with no cassette fall back as the stack does: the Context agent reads by rules, the planner runs the default sequence and the Explainer uses its template, and each run lists what fell back. The three starter scenarios are the recorded sessions' briefs (`e2e`, `clarify`, `demo`), and on the seed-42 world they replay the committed cassettes whole, taking the recorded routes with nothing falling back; a new scenario falls back until its cassettes are recorded (#57). A full run of the three takes about 10 minutes, fitting the models included. A question the scenario does not answer ends its run with no plan, and a failed session is reported without stopping the others.
 
@@ -313,7 +319,14 @@ The report goes to `backend/evals/reports/` (gitignored) as `<UTC timestamp>.jso
 
 - **Constraint satisfaction** (target 100%): the share of final plans that keep every hard constraint on their own plan-time numbers, checked by `validate_plan` independently of the optimiser (ADR 0012). Infeasible revisions and runs without a plan are counted but not scored.
 - **Oracle breach rate** (reported, no target): the share of the same plans whose true outcome, scored by the oracle on the hidden demand, spends over the budget, misses the minimum margin or sells more than the stock, with a count of each.
+- **Extraction accuracy** (target ≥ 95%): correct labelled fields over labelled fields, on the final planning request. Sets match as sets, money within ₹1, fractions within 0.01 points, windows and the SKU cap exactly; a run with no request gets every labelled field wrong. A mismatch is listed but does not fail its run (ADR 0062).
+- **Clarification behaviour** (target 100%): the share of `vague_or_conflicting` runs that asked about, or flagged, a field the scenario names. Runs of other scenarios that asked a question they do not expect are counted as unneeded asks, with no target.
+- **Infeasibility handling** (target 100%): the share of `infeasible_constraints` runs whose final revision is `INFEASIBLE`, proposes a relaxation and names a binding constraint. A solver timeout is not a declaration.
+- **Grounding** (target ≥ 98%): the share of Explainer runs the LLM answered (one per revision that waited for approval, amendments included) whose explanation passed numeric grounding. A template for an ungrounded or invalid answer fails; one because the LLM was unavailable, a cassette miss included, is counted but not scored.
+- **P50 session time and cost** (reported): the median wall-clock time of the sessions that did not fail, without fitting the models, and their median LLM cost in rupees, the sum of each session's token-usage events priced with `LLM_PRICES`. Replay reports the recorded usage again, so a cassette miss costs nothing. SPEC §6 aims for under 60 s with a live LLM and under ₹20 a session.
 - **Expected properties**: each scenario's `expect` list, pass or fail per run.
+
+A second table, **Agent behaviour**, shows per run the fields read right, the questions asked, the flagged assumptions, each Explainer run's source, the session time and its cost.
 
 ## Repository layout
 
@@ -385,6 +398,7 @@ docs/agents/ Agent workflow config (issue tracker, triage labels, domain docs)
 - [ADR 0058: The home page offers four recorded example briefs, and its optional constraint form adds sentences to the brief rather than changing the API](docs/adr/0058-home-page-example-briefs-and-constraint-form.md)
 - [ADR 0059: The Critic loop converges: the planner leaves a flagged SKU out with `exclude_sku_ids`, analyses may narrow the scope, and repeated findings end the loop early](docs/adr/0059-critic-loop-converges.md)
 - [ADR 0061: The session page lists every assumption and highlights readings below 0.9 confidence, flagged values and rule readings, and asks open questions as a form whose answers resume planning at once](docs/adr/0061-assumptions-panel-and-clarification-form.md)
+- [ADR 0062: Agent-behaviour metrics score each session's final request, questions, flags, infeasibility and Explainer runs, and its time and cost from its trace](docs/adr/0062-agent-behaviour-metrics.md)
 
 The domain glossary is [CONTEXT.md](CONTEXT.md).
 

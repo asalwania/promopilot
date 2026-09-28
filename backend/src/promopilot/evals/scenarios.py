@@ -9,11 +9,12 @@ expected to have: never an exact plan.
 
 from enum import StrEnum
 from pathlib import Path
+from typing import Literal, Self
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from promopilot.domain import ClearanceTarget, PromoWindow, Region
+from promopilot.domain import ClearanceTarget, ConstraintKind, PromoWindow, Region
 
 SCENARIO_DIR = Path("evals/scenarios")
 """The committed scenario suite, relative to backend/."""
@@ -78,7 +79,55 @@ class MeetsClearance(_Frozen):
         return f"meets_clearance: {self.meets_clearance}"
 
 
-type ExpectedProperty = AsksClarification | DeclaresInfeasible | ExcludesRegion | MeetsClearance
+class RelaxationTouches(_Frozen):
+    """The final plan revision's relaxation changes a constraint of this kind (#55)."""
+
+    relaxation_touches: ConstraintKind
+
+    def describe(self) -> str:
+        return f"relaxation_touches: {self.relaxation_touches.value}"
+
+
+class FlagsAssumption(_Frozen):
+    """The final reading of the brief flags this field's assumption (ADR 0048), such as a
+    minimum margin below company policy's floor (#55)."""
+
+    flags_assumption: str = Field(min_length=1)
+
+    def describe(self) -> str:
+        return f"flags_assumption: {self.flags_assumption}"
+
+
+class DiffChanges(_Frozen):
+    """The final plan revision's diff lists a change to this planning-request field, such as
+    `scope.regions` or `marketing_budget` (ADR 0052, #55)."""
+
+    diff_changes: str = Field(min_length=1)
+
+    def describe(self) -> str:
+        return f"diff_changes: {self.diff_changes}"
+
+
+class KviResponsePresent(_Frozen):
+    """The planner's response to the undercut KVIs in scope, recomputed from the competitor
+    gaps for the final plan, is in its notes and the plan summary (F-08 AC2, #55)."""
+
+    kvi_response_present: Literal[True]
+
+    def describe(self) -> str:
+        return "kvi_response_present: true"
+
+
+type ExpectedProperty = (
+    AsksClarification
+    | DeclaresInfeasible
+    | ExcludesRegion
+    | MeetsClearance
+    | RelaxationTouches
+    | FlagsAssumption
+    | DiffChanges
+    | KviResponsePresent
+)
 
 
 # ---------------------------------------------------------------- the scenario
@@ -114,6 +163,26 @@ class Scenario(_Frozen):
     """Made in order, each once the session waits for approval."""
     labels: RequestLabels = RequestLabels()
     expect: tuple[ExpectedProperty, ...] = ()
+
+    @property
+    def clarified_fields(self) -> tuple[str, ...]:
+        """The fields its `asks_clarification` and `flags_assumption` properties name."""
+        named: list[str] = []
+        for prop in self.expect:
+            if isinstance(prop, AsksClarification):
+                named.append(prop.asks_clarification)
+            elif isinstance(prop, FlagsAssumption):
+                named.append(prop.flags_assumption)
+        return tuple(named)
+
+    @model_validator(mode="after")
+    def _a_vague_scenario_names_what_to_clarify(self) -> Self:
+        if self.group is ScenarioGroup.VAGUE_OR_CONFLICTING and not self.clarified_fields:
+            raise ValueError(
+                "a vague or conflicting scenario expects asks_clarification or flags_assumption "
+                "on at least one field (#55)"
+            )
+        return self
 
 
 def load_scenario(path: Path) -> Scenario:
