@@ -1,0 +1,18 @@
+# The clarify brief (ADR 0054): no budget, so the Context agent must ask for one.
+name: diwali-no-budget
+group: vague_or_conflicting
+brief: >-
+  Plan a Diwali promotion for Snacks and Beverages in North and West. Run it for the two weeks
+  leading up to Diwali.
+as_of_week: 104
+seed: 0
+clarifications:
+  marketing_budget: "₹2 lakh"
+labels:
+  regions: [North, West]
+  categories: [Snacks, Beverages]
+  promo_window: {start_week: 108, end_week: 109}
+  marketing_budget: 200000
+expect:
+  - asks_clarification: marketing_budget
+  - declares_infeasible: false

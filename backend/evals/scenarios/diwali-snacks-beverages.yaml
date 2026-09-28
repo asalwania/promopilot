@@ -1,0 +1,16 @@
+# The e2e brief (ADR 0022): a standard festive plan at the default as-of week.
+name: diwali-snacks-beverages
+group: standard_festive
+brief: >-
+  Plan a Diwali promotion for Snacks and Beverages in North and West. Run it for the two weeks
+  leading up to Diwali, with a marketing budget of ₹2 lakh.
+as_of_week: 104
+seed: 0
+labels:
+  regions: [North, West]
+  categories: [Snacks, Beverages]
+  promo_window: {start_week: 108, end_week: 109}
+  marketing_budget: 200000
+expect:
+  - declares_infeasible: false
+  - excludes_region: South

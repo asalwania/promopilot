@@ -136,7 +136,8 @@ def check_property(
     missed = [s for s in revision.clearance_shortfalls if s.sku_id == prop.meets_clearance]
     detail = (
         ", ".join(
-            f"{s.region.value} reaches {s.expected_sell_through:.0%} of a {s.target:.0%} target"
+            f"{s.region.value} reaches {s.expected_sell_through:.2%} of a {s.target:.0%} "
+            f"target, {s.shortfall_units:,.0f} units short"
             for s in missed
         )
         or f"no clearance shortfall in revision {revision.number}"

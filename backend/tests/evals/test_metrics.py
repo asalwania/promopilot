@@ -259,5 +259,7 @@ def test_meets_clearance_holds_when_the_final_revision_has_no_shortfall_for_the_
     )
 
     assert check_property(prop, asked=(), revision=revision()).passed
-    assert not check_property(prop, asked=(), revision=revision(shortfalls=(short,))).passed
+    missed = check_property(prop, asked=(), revision=revision(shortfalls=(short,)))
+    assert not missed.passed
+    assert missed.detail == "North reaches 40.00% of a 60% target, 20 units short"
     assert not check_property(prop, asked=(), revision=None).passed
