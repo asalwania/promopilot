@@ -16,5 +16,9 @@
     "name": "clarify",
     "brief": "Plan a Diwali promotion for Snacks and Beverages in North and West. Run it for the two weeks leading up to Diwali.",
     "steps": [{ "answers": { "marketing_budget": "₹2 lakh" } }]
+  },
+  {
+    "name": "regional",
+    "brief": "Plan a Christmas promotion for Snacks and Beverages across all regions. Marketing budget ₹5 lakh, with no more than ₹1 lakh in South. Stay within 3% of competitor prices on KVIs. Target young urban shoppers."
   }
 ]

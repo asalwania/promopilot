@@ -1,25 +1,74 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState, type FormEvent } from "react";
+import { useRef, useState, type FormEvent } from "react";
 
+import { ConstraintForm } from "@/components/constraint-form";
+import { ExampleBriefs } from "@/components/example-briefs";
 import { Button } from "@/components/ui/button";
 import { createSession } from "@/lib/api/sessions";
+import {
+  composeBrief,
+  EMPTY_CONSTRAINTS,
+  validateConstraints,
+  type ConstraintErrors,
+  type ConstraintValues,
+} from "@/lib/brief-constraints";
+import { EXAMPLE_BRIEFS, type ExampleBrief } from "@/lib/example-briefs";
 
 // Mirrors the API's brief limits (ADR 0020); the API still validates.
 const BRIEF_MAX_CHARS = 2000;
 
 export function BriefComposer() {
   const router = useRouter();
+  const briefRef = useRef<HTMLTextAreaElement>(null);
   const [brief, setBrief] = useState("");
+  const [constraints, setConstraints] =
+    useState<ConstraintValues>(EMPTY_CONSTRAINTS);
+  const [constraintErrors, setConstraintErrors] = useState<ConstraintErrors>(
+    {},
+  );
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // What is sent: the brief plus a sentence per valid constraint (ADR 0058). While a
+  // field is invalid, the preview and the count fall back to the brief alone.
+  const checked = validateConstraints(constraints);
+  const composed = checked.ok ? composeBrief(brief, checked.value) : brief;
+  const addsConstraints = checked.ok && composed !== brief.trim();
+  const tooLong = composed.length > BRIEF_MAX_CHARS;
+
+  function changeConstraint(
+    field: keyof ConstraintValues,
+    values: ConstraintValues,
+  ) {
+    setConstraints(values);
+    // Editing a field clears its error; the next Plan it checks it again.
+    setConstraintErrors((errors) => {
+      const rest = { ...errors };
+      delete rest[field];
+      return rest;
+    });
+  }
+
+  // An example replays only as recorded, so it replaces the brief and clears the form.
+  function pickExample(example: ExampleBrief) {
+    setBrief(example.brief);
+    setConstraints(EMPTY_CONSTRAINTS);
+    setConstraintErrors({});
+    setError(null);
+    briefRef.current?.focus();
+  }
+
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (!checked.ok) {
+      setConstraintErrors(checked.errors);
+      return;
+    }
     setSubmitting(true);
     setError(null);
-    const result = await createSession(brief);
+    const result = await createSession(composed);
     if (result.ok) {
       router.push(`/sessions/${result.sessionId}`);
       return;
@@ -29,32 +78,73 @@ export function BriefComposer() {
   }
 
   return (
-    <form onSubmit={submit} className="flex w-full max-w-2xl flex-col gap-3">
-      <label htmlFor="brief" className="text-sm font-medium">
-        Brief
-      </label>
-      <textarea
-        id="brief"
-        value={brief}
-        onChange={(event) => setBrief(event.target.value)}
-        maxLength={BRIEF_MAX_CHARS}
-        rows={5}
-        placeholder="e.g. Plan a Diwali push for Snacks in North and West over the next four weeks with a budget of 2 lakh."
-        className="border-input bg-background focus-visible:border-ring focus-visible:ring-ring/50 rounded-lg border px-3 py-2 text-sm outline-none focus-visible:ring-3"
-      />
-      <div className="flex items-center justify-between gap-4">
-        <span className="text-muted-foreground text-xs tabular-nums">
-          {brief.length} / {BRIEF_MAX_CHARS}
-        </span>
-        <Button type="submit" disabled={submitting || brief.trim() === ""}>
-          Plan it
-        </Button>
+    <form
+      onSubmit={submit}
+      noValidate
+      className="grid w-full gap-8 lg:grid-cols-[minmax(0,1fr)_20rem]"
+    >
+      <div className="flex min-w-0 flex-col gap-6">
+        <ExampleBriefs examples={EXAMPLE_BRIEFS} onPick={pickExample} />
+        <div className="flex flex-col gap-3">
+          <label htmlFor="brief" className="text-sm font-medium">
+            Brief
+          </label>
+          <textarea
+            id="brief"
+            ref={briefRef}
+            value={brief}
+            onChange={(event) => setBrief(event.target.value)}
+            maxLength={BRIEF_MAX_CHARS}
+            rows={5}
+            placeholder="e.g. Plan a Diwali push for Snacks in North and West over the next four weeks with a budget of 2 lakh."
+            className="border-input bg-background focus-visible:border-ring focus-visible:ring-ring/50 rounded-lg border px-3 py-2 text-sm outline-none focus-visible:ring-3"
+          />
+          {addsConstraints && (
+            <div className="flex flex-col gap-1">
+              <span id="composed-label" className="text-sm font-medium">
+                PromoPilot will read
+              </span>
+              <p
+                aria-labelledby="composed-label"
+                role="note"
+                className="bg-muted rounded-lg px-3 py-2 text-sm whitespace-pre-wrap"
+              >
+                {composed}
+              </p>
+            </div>
+          )}
+          <div className="flex items-center justify-between gap-4">
+            <span
+              className={
+                tooLong
+                  ? "text-destructive text-xs tabular-nums"
+                  : "text-muted-foreground text-xs tabular-nums"
+              }
+            >
+              {composed.length} / {BRIEF_MAX_CHARS}
+              {tooLong && " (shorten the brief or remove constraints)"}
+            </span>
+            <Button
+              type="submit"
+              disabled={submitting || brief.trim() === "" || tooLong}
+            >
+              Plan it
+            </Button>
+          </div>
+          {error && (
+            <p role="alert" className="text-destructive text-sm">
+              {error}
+            </p>
+          )}
+        </div>
       </div>
-      {error && (
-        <p role="alert" className="text-destructive text-sm">
-          {error}
-        </p>
-      )}
+      <aside className="bg-card ring-foreground/10 rounded-xl p-4 ring-1">
+        <ConstraintForm
+          values={constraints}
+          errors={constraintErrors}
+          onChange={changeConstraint}
+        />
+      </aside>
     </form>
   );
 }

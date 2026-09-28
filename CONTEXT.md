@@ -123,6 +123,9 @@ _Avoid_: post-promo dip (as a separate term)
 **Brief**:
 The user's free-text planning request. It is data to interpret, never instructions to follow.
 
+**Example brief**:
+One of the four briefs the home page offers for a one-click trial. Each is, word for word, a recorded session script, so it replays with no API key. The home page's optional constraints are added to the brief as sentences, so a brief with them is no longer an example brief (ADR 0058).
+
 **Planning request**:
 The structured, validated reading of a brief plus amendments: scope, promo window, marketing budget, constraints.
 _Avoid_: request (bare), query

@@ -15,7 +15,7 @@ make setup   # creates .env from .env.example, installs backend + frontend deps,
 make dev     # Postgres in Docker; API on :8000 and web on :3000 with hot reload
 ```
 
-Open http://localhost:3000. Type a brief and click **Plan it**. The app starts a planning session and opens `/sessions/<id>`. That page polls the session every second while it is `planning`. It then shows the planning request the agent read and the plan table, or the reason the session failed (ADR 0021). Beside it, a live **agent trace** streams every step from `/api/sessions/<id>/events`: each node run (Context agent, Planner and its attempts, Critic, Explainer, Approval) with its tool calls, decisions, findings, clarification questions and LLM calls. After a network blip it resumes where it left off, with no event shown twice. An **LLM usage** meter shows the session's calls, tokens and cost in rupees and dollars (ADR 0057). The home page also fetches `/api/health` from its own origin and shows the database status.
+Open http://localhost:3000. Click **Try it** on one of the four example briefs, or type your own, and click **Plan it**. Each example is word for word a recorded session script, so it replays with no API key. The optional **Constraints** form (marketing budget, minimum margin, regions, categories, a holiday for the promo window, a clearance target) adds one sentence per constraint after the brief, and the page shows the exact text it will send. Picking an example clears the form, so the example replays as recorded (ADR 0058). The app starts a planning session and opens `/sessions/<id>`. That page polls the session every second while it is `planning`. It then shows the planning request the agent read and the plan table, or the reason the session failed (ADR 0021). Beside it, a live **agent trace** streams every step from `/api/sessions/<id>/events`: each node run (Context agent, Planner and its attempts, Critic, Explainer, Approval) with its tool calls, decisions, findings, clarification questions and LLM calls. After a network blip it resumes where it left off, with no event shown twice. An **LLM usage** meter shows the session's calls, tokens and cost in rupees and dollars (ADR 0057). The home page also fetches `/api/health` from its own origin and shows the database status.
 
 The **Models** link in the header opens `/models`. It lists every registered model version, one table per kind, with its training time, as-of week and metrics, and marks the live one. **Retrain** calls `POST /api/models/retrain` and shows the elapsed time until the new version is live, then reloads the list; a failure shows the API's reason (ADR 0030).
 
@@ -202,6 +202,9 @@ The committed cassettes in `backend/cassettes/` are the recording of every sessi
 - `e2e`: the Playwright brief, planned;
 - `demo`: the SPEC §3.2 brief, planned, amended ("Budget cut to ₹6 lakh", then "Drop West") and approved;
 - `clarify`: a brief with no budget, whose question is answered "₹2 lakh".
+- `regional`: a Christmas brief across all regions with a South budget cap and a KVI price tolerance, planned (ADR 0058).
+
+The home page's four example briefs are these four scripts, word for word; `frontend/tests/unit/example-briefs.test.ts` fails if one drifts from its recording.
 
 A script is `{name, brief, steps}`, and each step is one of `{"answers": {question_id: text}}`, `{"amend": text}` or `{"approve": true}`. `backend/cassettes/manifest.json` lists each session's script, route, cassettes in call order and plan revisions, and the planning settings it was recorded with.
 
@@ -227,7 +230,7 @@ make up                 # rebuild the api image with the new cassettes
 - asks a question its script does not answer;
 - records an answer citing a number its tool data does not show.
 
-A request asked again, in the same session or another, is answered from the cassette of its first answer, so every session replays as recorded. A full run removes every cassette no session lists, so commit the whole directory. `make record-cassettes ONLY=demo` re-records one session and keeps the others. It prints each session's route and the live cost (a few tenths of a dollar for all three).
+A request asked again, in the same session or another, is answered from the cassette of its first answer, so every session replays as recorded. A full run removes every cassette no session lists, so commit the whole directory. `make record-cassettes ONLY=demo` re-records one session and keeps the others. It prints each session's route and the live cost (a few tenths of a dollar for all four).
 
 ## API
 
@@ -341,6 +344,7 @@ docs/agents/ Agent workflow config (issue tracker, triage labels, domain docs)
 - [ADR 0054: Cassettes record scripted sessions through the full agent graph, listed in a manifest, checked for grounding offline and replayed in CI](docs/adr/0054-full-graph-session-cassettes.md)
 - [ADR 0055: Each optimiser phase stops on a CP-SAT deterministic-time budget, with wall-clock limits only as safety nets, so a plan never depends on the machine](docs/adr/0055-deterministic-time-optimiser-budgets.md)
 - [ADR 0057: The session page streams its trace with the browser's EventSource, reopens a stream it gave up on with backoff and drops repeated event ids, and shows each node run with its steps beside the session](docs/adr/0057-live-session-page-trace-timeline.md)
+- [ADR 0058: The home page offers four recorded example briefs, and its optional constraint form adds sentences to the brief rather than changing the API](docs/adr/0058-home-page-example-briefs-and-constraint-form.md)
 - [ADR 0059: The Critic loop converges: the planner leaves a flagged SKU out with `exclude_sku_ids`, analyses may narrow the scope, and repeated findings end the loop early](docs/adr/0059-critic-loop-converges.md)
 
 The domain glossary is [CONTEXT.md](CONTEXT.md).
