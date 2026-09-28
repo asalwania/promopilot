@@ -548,7 +548,7 @@ stateDiagram-v2
   Clarify --> Context: user answers (interrupt/resume)
   Context --> Planner
   Planner --> Critic
-  Critic --> Planner: violations and iteration < 3 (#48)
+  Critic --> Planner: findings and attempts < 4 (ADR 0051)
   Critic --> Explainer: pass, or cap reached (issues listed)
   Explainer --> Approval
   Approval --> Planner: amend
@@ -557,12 +557,12 @@ stateDiagram-v2
   Done --> [*]
 ```
 
-A rejection keeps the session open: the graph waits at Approval again until an amendment (ADR 0046). Until #48 the Critic does not loop: its violations go to the Explainer and Approval as open issues.
+A rejection keeps the session open: the graph waits at Approval again until an amendment (ADR 0046). The Critic loops only a plan the planner agent made: at most 3 loop-backs, so at most 4 planner attempts per planning round; a clean or infeasible plan, or one the default sequence planned, goes straight on, and the best attempt becomes the plan revision (ADR 0051).
 
 **Nodes:**
 - **Context agent (LLM):** parses brief + amendments into `PlanningRequest` via structured output. Fills gaps from data tools (holiday windows, overstock list, current competitor gaps). Emits assumptions with source and confidence.
 - **Planner agent (LLM + tools):** chooses which analyses to run, calls tools, interprets results, decides trade-offs (e.g. respond to competitor vs protect margin) and sets optimiser weights/options. Never computes numbers itself.
-- **Critic (deterministic first, LLM second):** `validate_plan` checks every hard constraint; LLM reviews risks (over-concentration, heavy cannibalisation, stock-out risk) and writes actionable feedback.
+- **Critic (deterministic first, LLM second):** `validate_plan` checks every hard constraint; `review_risks` finds the risks (over-concentration, heavy cannibalisation, stock-out risk) against configured thresholds, and the LLM writes their actionable feedback, kept only when numerically grounded (ADR 0051).
 - **Explainer (LLM):** writes a rationale per line item and the plan summary using only tool outputs; then `check_numeric_grounding` verifies every number in the text exists in tool outputs (tolerance for rounding). Failed check → regenerate once, then fall back to a template explanation.
 - **Approval (interrupt):** waits for approve / reject / amend.
 

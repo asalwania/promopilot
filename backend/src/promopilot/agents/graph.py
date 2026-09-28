@@ -7,19 +7,20 @@ In this slice the Context node reads the brief with the LLM into a planning requ
 assumptions, or clarification questions (ADR 0048), the Planner is the LLM
 planner agent over the tool registry when it is given one (#47, ADR 0049), falling back to
 the deterministic default sequence (option generation → optimiser, with the relaxation when
-the request is infeasible → simulation, ADR 0038/0044), the Critic runs `validate_plan` and
-keeps what it finds as open issues, and the Explainer has the LLM explain the plan, checked
-by numeric grounding, with the template as its fallback (ADR 0050). The Critic
-loop (#48) and amendments (#50) extend these edges.
+the request is infeasible → simulation, ADR 0038/0044). The Critic checks each planner attempt
+with `validate_plan` and the risk review, and sends its findings back to the planner agent
+with feedback at most 3 times; then the best attempt goes on with its findings as open issues
+(#48, ADR 0051). The Explainer has the LLM explain the plan, checked by numeric grounding, with
+the template as its fallback (ADR 0050). Amendments (#50) extend these edges.
 
 Nodes record the session as they go through a `SessionRecorder` (`promopilot.data.
-SessionStore`): the Context node saves its assumptions, the Planner the plan revision, the
-Critic its open issues, the Explainer its explanation, and Approval each decision once the
-interrupt is answered. The session moves to awaiting approval (or clarification) only once
-`start_planning` returns with the thread paused at the interrupt, so it is checkpointed before
-anyone can answer it. Every step is checkpointed before the next runs (durability "sync"). On
-resume LangGraph re-runs an interrupted node from its start, so Approval and Clarify do
-nothing before their interrupts.
+SessionStore`): the Context node saves its assumptions, the Critic the chosen plan revision
+with its open issues when it hands it on (planner attempts are drafts), the Explainer its
+explanation, and Approval each decision once the interrupt is answered. The session moves to
+awaiting approval (or clarification) only once `start_planning` returns with the thread paused
+at the interrupt, so it is checkpointed before anyone can answer it. Every step is checkpointed
+before the next runs (durability "sync"). On resume LangGraph re-runs an interrupted node from
+its start, so Approval and Clarify do nothing before their interrupts.
 """
 
 import enum
@@ -37,6 +38,13 @@ from langgraph.graph.state import CompiledStateGraph
 from langgraph.types import Command, interrupt
 from pydantic import BaseModel
 
+from promopilot.agents.critic import (
+    best_attempt,
+    decide,
+    handoff,
+    review_attempt,
+    route_summary,
+)
 from promopilot.agents.explainer import explain_plan
 from promopilot.agents.planner import PlannedRevision
 from promopilot.agents.planner_agent import AgentTools, plan_with_tools
@@ -46,6 +54,7 @@ from promopilot.agents.state import (
     ApprovalRequest,
     ClarificationAnswer,
     ClarificationRequest,
+    PlanAttempt,
     PlanningState,
 )
 from promopilot.agents.trace import (
@@ -64,14 +73,13 @@ from promopilot.domain import (
     CompanyPolicy,
     DecisionKind,
     DecisionMade,
-    FindingRaised,
+    OpenIssue,
     PlanDecision,
     PlanExplanation,
     PlanningRequest,
     PlanRevision,
-    Violation,
 )
-from promopilot.guardrails import validate_plan
+from promopilot.guardrails import RiskThresholds
 from promopilot.llm import LLMProvider
 
 log = structlog.get_logger(__name__)
@@ -105,7 +113,7 @@ class SessionRecorder(Protocol):
     ) -> None: ...
 
     async def save_open_issues(
-        self, session_id: UUID, revision_number: int, issues: tuple[Violation, ...]
+        self, session_id: UUID, revision_number: int, issues: tuple[OpenIssue, ...]
     ) -> None: ...
 
     async def save_explanation(
@@ -137,6 +145,8 @@ class GraphTools:
     """Where the graph's trace events go (ADR 0047); dropped by default."""
     pricing: LLMPricing = field(default_factory=LLMPricing)
     """The prices token-usage events are costed with (ADR 0027)."""
+    risk_thresholds: RiskThresholds = field(default_factory=RiskThresholds)
+    """When the Critic's risk review flags a plan (`CRITIC_*` settings, ADR 0051)."""
 
 
 @dataclass(frozen=True)
@@ -205,38 +215,52 @@ def build_graph(
         if tools.agent is None:
             planned = await tools.planner.plan(request)
         else:
-            planned = await plan_with_tools(state.brief, request, llm, tools.agent, tools.planner)
-        await tools.sessions.save_revision(state.session_id, request, planned.revision)
-        return {
-            "plan": planned.revision,
-            "plan_facts": planned.facts,
-            "iteration": state.iteration + 1,
-            "planner_notes": planned.notes,
-            "planner_degraded": planned.degraded,
-        }
+            # A loop-back from the Critic: its findings are the planner's feedback (ADR 0051).
+            feedback = state.critic_findings if state.attempts else ()
+            planned = await plan_with_tools(
+                state.brief, request, llm, tools.agent, tools.planner, feedback=feedback
+            )
+        attempt = PlanAttempt(
+            plan=planned.revision,
+            facts=planned.facts,
+            notes=planned.notes,
+            degraded=planned.degraded,
+        )
+        return {"attempts": (*state.attempts, attempt), "iteration": state.iteration + 1}
 
     async def critic(state: PlanningState) -> dict[str, object]:
         request = _required(state.request, "a planning request")
-        plan = _required(state.plan, "a plan revision")
-        findings = validate_plan(_required(state.plan_facts, "plan facts"), request, tools.policy)
-        for finding in findings:
-            await emit(
-                FindingRaised(
-                    source="plan_validation", code=finding.code.value, message=finding.message
-                )
-            )
-        await tools.sessions.save_open_issues(state.session_id, plan.number, findings)
-        await emit(
-            DecisionMade(
-                decision="open_issues",
-                summary="The plan breaks hard constraints; they go to approval as open issues.",
-            )
-            if findings
-            else DecisionMade(
-                decision="plan_valid", summary="The plan meets every hard constraint."
-            )
+        if not state.attempts:
+            raise RuntimeError("the agent graph reached this node without a planner attempt")
+        latest = state.attempts[-1]
+        findings = await review_attempt(
+            latest,
+            request=request,
+            policy=tools.policy,
+            thresholds=tools.risk_thresholds,
+            llm=llm,
         )
-        return {"critic_findings": findings}
+        attempts = (*state.attempts[:-1], latest.model_copy(update={"findings": findings}))
+        route = handoff(attempts, agent_plans=tools.agent is not None)
+        if route is None:
+            await decide("loop_back", route_summary(None, attempts))
+            return {"attempts": attempts, "critic_findings": findings}
+        best = best_attempt(attempts)
+        await decide(route.value, route_summary(route, attempts, chosen=best))
+        await tools.sessions.save_revision(state.session_id, request, best.plan)
+        await tools.sessions.save_open_issues(state.session_id, best.plan.number, best.findings)
+        return {
+            "attempts": attempts,
+            "plan": best.plan,
+            "plan_facts": best.facts,
+            "critic_findings": best.findings,
+            "planner_notes": best.notes,
+            "planner_degraded": best.degraded,
+        }
+
+    def after_critic(state: PlanningState) -> Literal["planner", "explainer"]:
+        loops = handoff(state.attempts, agent_plans=tools.agent is not None) is None
+        return PLANNER if loops else EXPLAINER
 
     async def explainer(state: PlanningState) -> dict[str, object]:
         plan = _required(state.plan, "a plan revision")
@@ -310,7 +334,7 @@ def build_graph(
     graph.add_conditional_edges(CONTEXT, after_context, [CLARIFY, PLANNER])
     graph.add_edge(CLARIFY, CONTEXT)
     graph.add_edge(PLANNER, CRITIC)
-    graph.add_edge(CRITIC, EXPLAINER)
+    graph.add_conditional_edges(CRITIC, after_critic, [PLANNER, EXPLAINER])
     graph.add_edge(EXPLAINER, APPROVAL)
     graph.add_conditional_edges(APPROVAL, after_approval, [DONE, APPROVAL])
     graph.add_edge(DONE, END)
@@ -405,6 +429,8 @@ def _types_of(*roots: type[BaseModel]) -> set[tuple[str, str]]:
     found: set[tuple[str, str]] = set()
 
     def visit(annotation: object) -> None:
+        if isinstance(annotation, typing.TypeAliasType):
+            visit(annotation.__value__)
         for argument in typing.get_args(annotation):
             visit(argument)
         if not isinstance(annotation, type):

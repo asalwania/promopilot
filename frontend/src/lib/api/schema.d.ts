@@ -882,6 +882,7 @@ export interface components {
          * @enum {string}
          */
         NotSelectedReason: "low_uplift" | "out_of_stock" | "breaks_policy" | "over_budget" | "over_regional_budget" | "breaks_margin" | "max_promoted_skus" | "misses_clearance_target" | "breaks_kvi_tolerance" | "cannibalises" | "time_limit";
+        OpenIssue: components["schemas"]["Violation"] | components["schemas"]["RiskFinding"];
         /**
          * Percentiles
          * @description The 10th, 50th and 90th percentiles of one simulated metric across the runs.
@@ -979,7 +980,7 @@ export interface components {
              * Open Issues
              * @default []
              */
-            open_issues: components["schemas"]["Violation"][];
+            open_issues: components["schemas"]["OpenIssue"][];
             /**
              * Policy Findings
              * @default []
@@ -1222,6 +1223,38 @@ export interface components {
             sku_id?: string | null;
             /** @default brief */
             source: components["schemas"]["ConstraintSource"];
+        };
+        /**
+         * RiskCode
+         * @enum {string}
+         */
+        RiskCode: "OVER_CONCENTRATION" | "HEAVY_CANNIBALISATION" | "STOCKOUT_RISK";
+        /**
+         * RiskFinding
+         * @description One risk the Critic's review found, with feedback specific enough for the planner to act
+         *     on. Its numbers come from the plan's tool outputs, never from the LLM.
+         */
+        RiskFinding: {
+            /** Actual */
+            actual: number;
+            /** Category */
+            category?: string | null;
+            code: components["schemas"]["RiskCode"];
+            /** Feedback */
+            feedback: string;
+            /**
+             * Kind
+             * @default risk
+             * @constant
+             */
+            kind: "risk";
+            /** Limit */
+            limit: number;
+            /** Message */
+            message: string;
+            region?: components["schemas"]["Region"] | null;
+            /** Sku Id */
+            sku_id?: string | null;
         };
         /**
          * Scope
@@ -1513,6 +1546,12 @@ export interface components {
             /** Actual */
             actual?: number | null;
             code: components["schemas"]["ViolationCode"];
+            /**
+             * Kind
+             * @default violation
+             * @constant
+             */
+            kind: "violation";
             /** Limit */
             limit?: number | null;
             /** Message */

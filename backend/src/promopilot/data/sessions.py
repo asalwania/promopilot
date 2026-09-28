@@ -19,6 +19,7 @@ from promopilot.domain import (
     DecisionKind,
     MechanismOutcome,
     NotSelectedOption,
+    OpenIssue,
     PlanDecision,
     PlanExplanation,
     PlanLine,
@@ -31,7 +32,6 @@ from promopilot.domain import (
     Relaxation,
     SessionStatus,
     SolveStatus,
-    Violation,
     WhyChosen,
 )
 
@@ -40,7 +40,7 @@ _NOT_SELECTED = TypeAdapter(tuple[NotSelectedOption, ...])
 _COMPARISON = TypeAdapter(tuple[MechanismOutcome, ...])
 _SHORTFALLS = TypeAdapter(tuple[ClearanceShortfall, ...])
 _FINDINGS = TypeAdapter(tuple[PolicyFinding, ...])
-_ISSUES = TypeAdapter(tuple[Violation, ...])
+_ISSUES = TypeAdapter(tuple[OpenIssue, ...])
 _ASSUMPTIONS = TypeAdapter(tuple[Assumption, ...])
 _QUESTIONS = TypeAdapter(tuple[ClarificationQuestion, ...])
 _CLARIFICATIONS = TypeAdapter(tuple[Clarification, ...])
@@ -238,9 +238,9 @@ class SessionStore:
             )
 
     async def save_open_issues(
-        self, session_id: UUID, revision_number: int, issues: tuple[Violation, ...]
+        self, session_id: UUID, revision_number: int, issues: tuple[OpenIssue, ...]
     ) -> None:
-        """Store the violations the Critic left open on a plan revision."""
+        """Store the violations and risk findings the Critic left open on a plan revision."""
         async with self._engine.begin() as connection:
             await connection.execute(
                 update(plan_revisions)

@@ -66,3 +66,13 @@ class Settings(BaseSettings):
     # the simulator's MIN_RUNS..MAX_RUNS, and the seed that makes it reproducible.
     simulation_runs: int = Field(default=1_000, ge=100, le=5_000)
     simulation_seed: int = Field(default=0, ge=0)
+
+    # The Critic's risk review (ADR 0051): a plan line above this share of the plan's promo
+    # spend, or a category or region above the group share when the scope has more than one,
+    # is over-concentrated; cannibalisation at or above this share of a line's incremental
+    # profit is heavy; a line that runs out in at least this share of simulated runs is a
+    # stock-out risk.
+    critic_line_spend_share: float = Field(default=0.25, gt=0, le=1)
+    critic_group_spend_share: float = Field(default=0.80, gt=0, le=1)
+    critic_cannibalisation_share: float = Field(default=0.50, gt=0)
+    critic_stockout_probability: float = Field(default=0.20, gt=0, le=1)

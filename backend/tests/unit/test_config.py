@@ -1,8 +1,12 @@
 """Runtime configuration read from the environment (.env.example)."""
 
 import pytest
+from pydantic import ValidationError
+from sqlalchemy.ext.asyncio import create_async_engine
 
+from promopilot.api.planning import build_planning
 from promopilot.config import Settings
+from promopilot.guardrails import RiskThresholds
 
 
 def test_the_optimiser_is_deterministic_by_default(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -95,3 +99,39 @@ def test_the_trace_poll_interval_and_log_format_come_from_the_environment(
     monkeypatch.setenv("LOG_FORMAT", "xml")
     with pytest.raises(ValueError, match="log_format"):
         Settings()
+
+
+def test_the_critics_risk_thresholds_come_from_the_environment(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("CRITIC_LINE_SPEND_SHARE", "0.3")
+    monkeypatch.setenv("CRITIC_GROUP_SPEND_SHARE", "0.9")
+    monkeypatch.setenv("CRITIC_CANNIBALISATION_SHARE", "0.6")
+    monkeypatch.setenv("CRITIC_STOCKOUT_PROBABILITY", "0.1")
+    engine = create_async_engine("postgresql+asyncpg://unused@127.0.0.1:1/unused")
+
+    planning = build_planning(Settings(), engine)
+
+    assert planning.risk_thresholds == RiskThresholds(
+        line_spend_share=0.3,
+        group_spend_share=0.9,
+        cannibalisation_share=0.6,
+        stockout_probability=0.1,
+    )
+    with monkeypatch.context() as patched:
+        patched.setenv("CRITIC_STOCKOUT_PROBABILITY", "1.5")
+        with pytest.raises(ValidationError):
+            Settings()
+
+
+def test_the_critics_risk_thresholds_default_to_adr_0051(monkeypatch: pytest.MonkeyPatch) -> None:
+    for name in (
+        "CRITIC_LINE_SPEND_SHARE",
+        "CRITIC_GROUP_SPEND_SHARE",
+        "CRITIC_CANNIBALISATION_SHARE",
+        "CRITIC_STOCKOUT_PROBABILITY",
+    ):
+        monkeypatch.delenv(name, raising=False)
+    engine = create_async_engine("postgresql+asyncpg://unused@127.0.0.1:1/unused")
+
+    assert build_planning(Settings(), engine).risk_thresholds == RiskThresholds()

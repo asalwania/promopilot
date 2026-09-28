@@ -379,3 +379,33 @@ export const rejectedSession: SessionResponse = {
     },
   ],
 };
+
+// A revision the Critic handed on with a violation and a risk finding still open (ADR 0051).
+export const openIssuesSession: SessionResponse = {
+  ...awaitingApprovalSession,
+  plan_revision: {
+    ...awaitingApprovalSession.plan_revision!,
+    open_issues: [
+      {
+        kind: "violation",
+        code: "BUDGET",
+        message:
+          "total promo cost ₹2,10,000 exceeds the marketing budget ₹2,00,000",
+        actual: 210000,
+        limit: 200000,
+      },
+      {
+        kind: "risk",
+        code: "STOCKOUT_RISK",
+        message:
+          "SKU0013 in North runs out of stock in 24% of the simulated runs, at or above the 20% limit",
+        feedback:
+          "Promote SKU0013 in North less deeply, or leave SKU0013 out of generate_candidates' sku_ids.",
+        sku_id: "SKU0013",
+        region: "North",
+        actual: 0.24,
+        limit: 0.2,
+      },
+    ],
+  },
+};

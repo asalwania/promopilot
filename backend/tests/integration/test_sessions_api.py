@@ -59,11 +59,14 @@ from promopilot.domain import (
     Region,
     Relaxation,
     RelaxedConstraint,
+    RiskCode,
+    RiskFinding,
     Scope,
     SolveStatus,
     Violation,
     ViolationCode,
 )
+from promopilot.guardrails import RiskThresholds
 from promopilot.llm import FakeProvider, LLMError, LLMProvider, Message, ToolSpec, ToolTurn
 from promopilot.models.demand import DemandModel
 from promopilot.models.registry import ModelKind
@@ -131,6 +134,11 @@ def postgres_url(
 
 type Api = Callable[..., AbstractAsyncContextManager[AsyncClient]]
 
+QUIET = RiskThresholds(line_spend_share=1.0)
+"""The small world's plans put most of their spend on one line; these API tests are not about
+the Critic's risk review (ADR 0051), so it flags no over-concentrated line and makes no LLM
+call unless a test asks for the default thresholds."""
+
 
 @pytest.fixture
 def running_api(small_models: tuple[DemandModel, Relations]) -> Api:
@@ -138,9 +146,13 @@ def running_api(small_models: tuple[DemandModel, Relations]) -> Api:
     wraps its planner."""
 
     def start(
-        url: str, llm: LLMProvider, planning: Callable[[Planner], Planner] | None = None
+        url: str,
+        llm: LLMProvider,
+        planning: Callable[[Planner], Planner] | None = None,
+        *,
+        risk_thresholds: RiskThresholds = QUIET,
     ) -> AbstractAsyncContextManager[AsyncClient]:
-        return api_process(url, llm, small_models, planning)
+        return api_process(url, llm, small_models, planning, risk_thresholds=risk_thresholds)
 
     return start
 
@@ -151,9 +163,11 @@ async def api_process(
     llm: LLMProvider,
     models: tuple[DemandModel, Relations] | None,
     planning: Callable[[Planner], Planner] | None = None,
+    *,
+    risk_thresholds: RiskThresholds = QUIET,
 ) -> AsyncIterator[AsyncClient]:
     """One API process: its own engine, startup and shutdown, like a uvicorn worker."""
-    async with api_app(url, llm, models, planning) as app:
+    async with api_app(url, llm, models, planning, risk_thresholds=risk_thresholds) as app:
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             yield client
@@ -167,6 +181,7 @@ async def api_app(
     planning: Callable[[Planner], Planner] | None = None,
     *,
     trace_poll_interval_s: float = 0.05,
+    risk_thresholds: RiskThresholds = QUIET,
 ) -> AsyncIterator[FastAPI]:
     """The app of one API process, started up; it shuts down on leaving."""
     engine = create_async_engine(url)
@@ -193,6 +208,7 @@ async def api_app(
             policy=FREE,
             trace=trace,
             pricing=LLMPricing(prices=DEFAULT_LLM_PRICES, usd_inr_rate=96.0),
+            risk_thresholds=risk_thresholds,
         ),
         llm=llm,
         checkpoints=PostgresCheckpoints(url),
@@ -650,6 +666,15 @@ async def test_a_plan_revision_keeps_its_clearance_shortfalls_and_the_briefs_con
         actual=0.6,
         limit=0.9,
     )
+    risk = RiskFinding(
+        code=RiskCode.STOCKOUT_RISK,
+        message="SKU0005 in North runs out of stock in 30% of the simulated runs",
+        feedback="Promote SKU0005 in North less deeply.",
+        sku_id="SKU0005",
+        region=Region.NORTH,
+        actual=0.3,
+        limit=0.2,
+    )
     explanation = PlanExplanation(
         summary="Infeasible: SKU0005 reaches 60% of a 90% target.",
         source=ExplanationSource.TEMPLATE,
@@ -658,7 +683,7 @@ async def test_a_plan_revision_keeps_its_clearance_shortfalls_and_the_briefs_con
     try:
         session_id = await store.create(BRIEF)
         await store.save_revision(session_id, request, revision)
-        await store.save_open_issues(session_id, 1, (issue,))
+        await store.save_open_issues(session_id, 1, (issue, risk))
         await store.save_explanation(session_id, 1, explanation)
         await store.await_approval(session_id)
         saved = await store.get(session_id)
@@ -670,7 +695,7 @@ async def test_a_plan_revision_keeps_its_clearance_shortfalls_and_the_briefs_con
     assert saved.thread_id == str(session_id)
     assert saved.planning_request == request
     assert saved.latest_revision == revision.model_copy(
-        update={"open_issues": (issue,), "explanation": explanation}
+        update={"open_issues": (issue, risk), "explanation": explanation}
     )
 
 
@@ -902,18 +927,29 @@ class Overspending:
         return PlannedRevision(planned.revision, facts)
 
 
-async def test_violations_the_critic_finds_are_open_issues_on_the_revision(
+async def test_violations_and_risk_findings_the_critic_finds_are_open_issues_on_the_revision(
     postgres_url: str, running_api: Api
 ) -> None:
+    critic_down = LLMError("the Critic's LLM is down in this test")
     async with running_api(
-        postgres_url, FakeProvider([READING, explainer_down()]), Overspending
+        postgres_url,
+        FakeProvider([READING, critic_down, explainer_down()]),
+        Overspending,
+        risk_thresholds=RiskThresholds(),
     ) as client:
         session_id = await planned_session(client)
         body = (await client.get(f"/api/sessions/{session_id}")).json()
 
     issues = body["plan_revision"]["open_issues"]
-    assert [issue["code"] for issue in issues] == ["BUDGET"]
-    assert issues[0]["limit"] == BUDGET
+    assert (issues[0]["kind"], issues[0]["code"], issues[0]["limit"]) == (
+        "violation",
+        "BUDGET",
+        BUDGET,
+    )
+    # The overspending line takes most of the plan's spend; its template feedback stands.
+    risks = [issue for issue in issues if issue["kind"] == "risk"]
+    assert "OVER_CONCENTRATION" in [risk["code"] for risk in risks]
+    assert all(risk["feedback"] for risk in risks)
 
 
 async def test_deciding_on_an_unknown_session_is_404(postgres_url: str, running_api: Api) -> None:

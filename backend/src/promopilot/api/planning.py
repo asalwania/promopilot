@@ -1,5 +1,6 @@
-"""The planning stack a session plans with: the models, the data, the default sequence and the
-planner agent's tool registry (ADR 0025, ADR 0038, ADR 0049).
+"""The planning stack a session plans with: the models, the data, the default sequence, the
+planner agent's tool registry and the Critic's risk thresholds (ADR 0025, ADR 0038, ADR 0049,
+ADR 0051).
 
 The API and `make record-cassettes` build it the same way, so the recorded planner turns are
 the ones a session replays.
@@ -25,6 +26,7 @@ from promopilot.agents.tools.simulate_plan import simulate_plan_tool
 from promopilot.config import Settings
 from promopilot.data import RetailData
 from promopilot.domain import CompanyPolicy
+from promopilot.guardrails import RiskThresholds
 from promopilot.models.demand import DemandModel
 from promopilot.models.registry import LatestModel, ModelKind, ModelRegistry
 from promopilot.models.relations import Relations
@@ -46,6 +48,8 @@ class Planning:
     candidates: CandidateStore
     tools: ToolRegistry
     """Every SPEC §9.6 tool, which the planner agent is offered (ADR 0049)."""
+    risk_thresholds: RiskThresholds
+    """When the Critic's risk review flags a plan (`CRITIC_*`, ADR 0051)."""
 
     @property
     def agent(self) -> AgentTools:
@@ -115,4 +119,10 @@ def build_planning(settings: Settings, engine: AsyncEngine) -> Planning:
         planner=planner,
         candidates=candidates,
         tools=tools,
+        risk_thresholds=RiskThresholds(
+            line_spend_share=settings.critic_line_spend_share,
+            group_spend_share=settings.critic_group_spend_share,
+            cannibalisation_share=settings.critic_cannibalisation_share,
+            stockout_probability=settings.critic_stockout_probability,
+        ),
     )

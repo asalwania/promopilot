@@ -1180,6 +1180,16 @@
         "title": "NotSelectedReason",
         "type": "string"
       },
+      "OpenIssue": {
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/Violation"
+          },
+          {
+            "$ref": "#/components/schemas/RiskFinding"
+          }
+        ]
+      },
       "Percentiles": {
         "description": "The 10th, 50th and 90th percentiles of one simulated metric across the runs.",
         "properties": {
@@ -1397,7 +1407,7 @@
           "open_issues": {
             "default": [],
             "items": {
-              "$ref": "#/components/schemas/Violation"
+              "$ref": "#/components/schemas/OpenIssue"
             },
             "title": "Open Issues",
             "type": "array"
@@ -2023,6 +2033,86 @@
           "change"
         ],
         "title": "RelaxedConstraint",
+        "type": "object"
+      },
+      "RiskCode": {
+        "enum": [
+          "OVER_CONCENTRATION",
+          "HEAVY_CANNIBALISATION",
+          "STOCKOUT_RISK"
+        ],
+        "title": "RiskCode",
+        "type": "string"
+      },
+      "RiskFinding": {
+        "description": "One risk the Critic's review found, with feedback specific enough for the planner to act\non. Its numbers come from the plan's tool outputs, never from the LLM.",
+        "properties": {
+          "actual": {
+            "title": "Actual",
+            "type": "number"
+          },
+          "category": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category"
+          },
+          "code": {
+            "$ref": "#/components/schemas/RiskCode"
+          },
+          "feedback": {
+            "title": "Feedback",
+            "type": "string"
+          },
+          "kind": {
+            "const": "risk",
+            "default": "risk",
+            "title": "Kind",
+            "type": "string"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "number"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "region": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Region"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "sku_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sku Id"
+          }
+        },
+        "required": [
+          "code",
+          "message",
+          "feedback",
+          "actual",
+          "limit"
+        ],
+        "title": "RiskFinding",
         "type": "object"
       },
       "Scope": {
@@ -2672,6 +2762,12 @@
           },
           "code": {
             "$ref": "#/components/schemas/ViolationCode"
+          },
+          "kind": {
+            "const": "violation",
+            "default": "violation",
+            "title": "Kind",
+            "type": "string"
           },
           "limit": {
             "anyOf": [

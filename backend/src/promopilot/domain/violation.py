@@ -5,6 +5,7 @@ They live in the domain because a plan revision carries its unresolved ones as o
 """
 
 from enum import StrEnum
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
 
@@ -31,6 +32,7 @@ class Violation(BaseModel):
 
     model_config = ConfigDict(frozen=True)
 
+    kind: Literal["violation"] = "violation"
     code: ViolationCode
     message: str
     sku_id: str | None = None

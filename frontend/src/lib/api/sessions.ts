@@ -167,6 +167,7 @@ export const policyFindingSchema = z.object({
 
 // A violation the Critic left open on the plan revision (ADR 0046).
 export const violationSchema = z.object({
+  kind: z.literal("violation"),
   code: z.enum([
     "BUDGET",
     "REGIONAL_BUDGET",
@@ -187,6 +188,28 @@ export const violationSchema = z.object({
   actual: z.number().nullable().optional(),
   limit: z.number().nullable().optional(),
 }) satisfies z.ZodType<Schemas["Violation"]>;
+
+// A risk the Critic's review found and left open, with its feedback (ADR 0051).
+export const riskFindingSchema = z.object({
+  kind: z.literal("risk"),
+  code: z.enum([
+    "OVER_CONCENTRATION",
+    "HEAVY_CANNIBALISATION",
+    "STOCKOUT_RISK",
+  ]),
+  message: z.string(),
+  feedback: z.string(),
+  sku_id: z.string().nullable().optional(),
+  region: regionSchema.nullable().optional(),
+  category: z.string().nullable().optional(),
+  actual: z.number(),
+  limit: z.number(),
+}) satisfies z.ZodType<Schemas["RiskFinding"]>;
+
+export const openIssueSchema = z.discriminatedUnion("kind", [
+  violationSchema,
+  riskFindingSchema,
+]) satisfies z.ZodType<Schemas["OpenIssue"]>;
 
 // One approval or rejection of a plan revision: the session's audit trail (ADR 0046).
 export const planDecisionSchema = z.object({
@@ -290,7 +313,7 @@ export const planRevisionSchema = z.object({
   clearance_shortfalls: z.array(clearanceShortfallSchema),
   policy_findings: z.array(policyFindingSchema),
   relaxation: relaxationSchema.nullable().optional(),
-  open_issues: z.array(violationSchema),
+  open_issues: z.array(openIssueSchema),
   explanation: planExplanationSchema.nullable().optional(),
 }) satisfies z.ZodType<Schemas["PlanRevision"]>;
 

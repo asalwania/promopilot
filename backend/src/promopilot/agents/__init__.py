@@ -3,7 +3,8 @@
 `build_graph` compiles the checkpointed agent graph (ADR 0046): the Context agent reads the
 brief into a planning request with its assumptions, or asks at the Clarify interrupt
 (ADR 0048), the planner agent plans it through the tools, falling back to the optimising planner
-(ADR 0038, ADR 0049), the Critic validates the plan, the Explainer writes grounded
+(ADR 0038, ADR 0049), the Critic validates the plan and reviews its risks, sending findings back
+to the planner at most 3 times (ADR 0051), the Explainer writes grounded
 explanations with a template fallback (ADR 0050), and the Approval interrupt waits for a
 decision.
 """
@@ -11,6 +12,7 @@ decision.
 from promopilot.agents.assumptions import ContextReading
 from promopilot.agents.checkpoints import Checkpoints, MemoryCheckpoints, PostgresCheckpoints
 from promopilot.agents.context import BriefError, BriefReading, ClearanceAsk, RegionalCap
+from promopilot.agents.critic import MAX_ATTEMPTS, CriticFeedback, FindingFeedback
 from promopilot.agents.explainer import (
     ExplainerAnswer,
     LineRationale,
@@ -53,6 +55,7 @@ from promopilot.agents.state import (
     ClarificationAnswer,
     ClarificationRequest,
     DegradedReason,
+    PlanAttempt,
     PlanningState,
 )
 from promopilot.agents.trace import (
@@ -68,6 +71,7 @@ from promopilot.agents.trace import (
 )
 
 __all__ = [
+    "MAX_ATTEMPTS",
     "AgentTools",
     "ApprovalAnswer",
     "ApprovalRequest",
@@ -79,9 +83,11 @@ __all__ = [
     "ClarificationRequest",
     "ClearanceAsk",
     "ContextReading",
+    "CriticFeedback",
     "DefaultSequence",
     "DegradedReason",
     "ExplainerAnswer",
+    "FindingFeedback",
     "GraphSnapshot",
     "GraphTools",
     "LLMPricing",
@@ -90,6 +96,7 @@ __all__ = [
     "MemoryTrace",
     "NoTrace",
     "OptimisingPlanner",
+    "PlanAttempt",
     "PlannedRevision",
     "Planner",
     "PlannerData",
