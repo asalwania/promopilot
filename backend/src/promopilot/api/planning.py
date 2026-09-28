@@ -2,8 +2,10 @@
 planner agent's tool registry and the Critic's risk thresholds (ADR 0025, ADR 0038, ADR 0049,
 ADR 0051).
 
-The API and `make record-cassettes` build it the same way, so the recorded planner turns are
-the ones a session replays.
+The tools and the default sequence are assembled by `promopilot.agents.planning_stack`, as
+`make record-cassettes` and the eval harness assemble them, so the recorded planner turns are
+the ones a session replays (ADR 0054, ADR 0056). Here they plan on Postgres at the latest week
+with the registered models.
 """
 
 from dataclasses import dataclass
@@ -11,19 +13,15 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncEngine
 
-from promopilot.agents import AgentTools, OptimisingPlanner, RecordedPlanning, StoredRevisions
+from promopilot.agents import (
+    AgentTools,
+    OptimisingPlanner,
+    PlanningSettings,
+    RecordedPlanning,
+    StoredRevisions,
+    planning_stack,
+)
 from promopilot.agents.tools import ToolRegistry
-from promopilot.agents.tools.compare_mechanisms import compare_mechanisms_tool
-from promopilot.agents.tools.estimate_demand import estimate_demand_tool
-from promopilot.agents.tools.generate_candidates import generate_candidates_tool
-from promopilot.agents.tools.get_competitor_gaps import get_competitor_gaps_tool
-from promopilot.agents.tools.get_relations import get_relations_tool
-from promopilot.agents.tools.holidays import get_holidays_tool
-from promopilot.agents.tools.inventory_status import get_inventory_status_tool
-from promopilot.agents.tools.relax_constraints import relax_constraints_tool
-from promopilot.agents.tools.run_optimizer import run_optimizer_tool
-from promopilot.agents.tools.scope_data import get_scope_data_tool
-from promopilot.agents.tools.simulate_plan import simulate_plan_tool
 from promopilot.config import Settings
 from promopilot.data import RetailData
 from promopilot.domain import CompanyPolicy
@@ -85,48 +83,20 @@ def build_planning(settings: Settings, engine: AsyncEngine) -> Planning:
     )
     data = RetailData(engine)
     policy = CompanyPolicy()
-    solver = SolverSettings(
-        time_limit_seconds=settings.optimizer_time_limit_seconds,
-        workers=settings.optimizer_workers,
-        binding_time_limit_seconds=settings.optimizer_binding_time_limit_seconds,
-        relaxation_time_limit_seconds=settings.optimizer_relaxation_time_limit_seconds,
-        deterministic_limit=settings.optimizer_deterministic_limit,
-        binding_deterministic_limit=settings.optimizer_binding_deterministic_limit,
-        relaxation_deterministic_limit=settings.optimizer_relaxation_deterministic_limit,
-    )
-    simulation = SimulationSettings(n_runs=settings.simulation_runs, seed=settings.simulation_seed)
-    seed = settings.optimizer_seed
+    planning = PlanningSettings.from_settings(settings)
     # The models are resolved per call, so a retrain is picked up, and so is the as-of week,
     # so newly loaded data moves the data tools' clock (ADR 0025, ADR 0032). Generated promo
     # options wait in the candidate store for the optimiser (ADR 0035, ADR 0036); the
     # simulator samples with the session's seed and default runs (ADR 0042).
-    candidates = CandidateStore()
-    week = data.default_as_of_week
-    tools = ToolRegistry(
-        [
-            estimate_demand_tool(demand_model, policy=policy),
-            get_scope_data_tool(data),
-            get_inventory_status_tool(data, week, policy=policy),
-            get_holidays_tool(data, week),
-            get_competitor_gaps_tool(data, week, policy=policy),
-            get_relations_tool(relations_model, data),
-            generate_candidates_tool(
-                demand_model, relations_model, data, week, policy=policy, store=candidates
-            ),
-            run_optimizer_tool(candidates, policy=policy, settings=solver, seed=seed),
-            relax_constraints_tool(candidates, policy=policy, settings=solver, seed=seed),
-            compare_mechanisms_tool(demand_model, relations_model, data, week, policy=policy),
-            simulate_plan_tool(demand_model, data, week, policy=policy, defaults=simulation),
-        ]
-    )
-    planner = OptimisingPlanner(
+    stack = planning_stack(
         demand_model,
         relations_model,
         data,
         policy=policy,
-        settings=solver,
-        seed=seed,
-        simulation=simulation,
+        solver=planning.solver,
+        simulation=planning.simulation,
+        seed=planning.seed,
+        as_of_week=data.default_as_of_week,
     )
     return Planning(
         registry=registry,
@@ -134,37 +104,11 @@ def build_planning(settings: Settings, engine: AsyncEngine) -> Planning:
         relations_model=relations_model,
         data=data,
         policy=policy,
-        simulation=simulation,
-        solver=solver,
-        planner=planner,
-        candidates=candidates,
-        tools=tools,
-        risk_thresholds=RiskThresholds(
-            line_spend_share=settings.critic_line_spend_share,
-            group_spend_share=settings.critic_group_spend_share,
-            cannibalisation_share=settings.critic_cannibalisation_share,
-            stockout_probability=settings.critic_stockout_probability,
-        ),
-        recorded_settings=settings.model_dump(include=RECORDED_SETTINGS),
+        simulation=planning.simulation,
+        solver=planning.solver,
+        planner=stack.planner,
+        candidates=stack.candidates,
+        tools=stack.tools,
+        risk_thresholds=planning.risk_thresholds,
+        recorded_settings=planning.recorded,
     )
-
-
-RECORDED_SETTINGS = {
-    "optimizer_deterministic_limit",
-    "optimizer_binding_deterministic_limit",
-    "optimizer_relaxation_deterministic_limit",
-    "optimizer_time_limit_seconds",
-    "optimizer_workers",
-    "optimizer_seed",
-    "optimizer_binding_time_limit_seconds",
-    "optimizer_relaxation_time_limit_seconds",
-    "simulation_runs",
-    "simulation_seed",
-    "critic_line_spend_share",
-    "critic_group_spend_share",
-    "critic_cannibalisation_share",
-    "critic_stockout_probability",
-}
-"""What a plan, and so every Critic and Explainer request, depends on besides the data and the
-models (ADR 0054): the optimiser's work budgets decide it (ADR 0055), and its wall-clock nets
-only when one is hit."""

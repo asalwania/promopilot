@@ -314,6 +314,20 @@ _Avoid_: default explanation, canned text
 
 **Scenario**:
 A fully specified test case for evals: brief, optional amendments, as-of week, seed and expected properties.
+It also has its group, the answers the manager gives if asked, and the planning-request fields it states (labels). One YAML file each (ADR 0056).
+
+**Expected property**:
+Something a scenario's outcome must show, from a closed vocabulary, such as "asks about the marketing budget" or "excludes West after the amendment". It is never an exact plan.
+_Avoid_: assertion, expectation
+
+**Final plan revision**:
+The plan revision a scenario's session waits for approval with once every answer and amendment is in. It is the one the eval scores.
+
+**Constraint satisfaction**:
+The share of final plan revisions that keep every hard constraint on their own plan-time numbers, checked by plan validation (ADR 0012). Target 100%.
+
+**Oracle breach rate**:
+The share of the same plans whose true outcome, by the oracle, breaks the budget, the minimum margin or the stock. Reported, with no target (ADR 0012).
 
 **Ground truth**:
 The hidden true parameters used to generate the synthetic data. Only evals may read it.

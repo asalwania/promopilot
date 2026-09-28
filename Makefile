@@ -118,8 +118,10 @@ check-cassettes: db ## Replay every scripted session from the cassettes alone, n
 train: db ## Fit the demand then relations models on the loaded data (make data first) and register both
 	$(BACKEND) uv run python -m promopilot.models
 
-.PHONY: eval demo
-eval: ## (E9) Run the eval suite
-	@echo "make eval arrives in epic E9 (SPEC.md §15)" >&2; exit 1
+.PHONY: eval
+eval: ## Run the eval scenarios on their own seeded world into backend/evals/reports/ (ONLY=name, RUNS=n, SEED=n; no Docker)
+	$(BACKEND) uv run python -m promopilot.evals $(foreach name,$(ONLY),--only $(name)) $(if $(RUNS),--runs $(RUNS)) $(if $(SEED),--seed $(SEED))
+
+.PHONY: demo
 demo: ## (E11) One-command demo, no API key
 	@echo "make demo arrives in epic E11 (SPEC.md §15)" >&2; exit 1

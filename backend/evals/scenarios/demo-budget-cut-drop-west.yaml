@@ -1,0 +1,24 @@
+# The demo brief (SPEC §3.2), amended twice as the demo session is (ADR 0054).
+name: demo-budget-cut-drop-west
+group: mid_plan_amendments
+brief: >-
+  Plan Diwali promotions for Snacks and Beverages across North and West. Budget ₹8 lakh. Keep
+  margin above 18%. We are overstocked on 400g namkeen packs — clear at least 60% of that stock.
+  Target families.
+as_of_week: 104
+seed: 0
+amendments:
+  - "Budget cut to ₹6 lakh"
+  - "Drop West"
+labels:
+  regions: [North]
+  categories: [Snacks, Beverages]
+  marketing_budget: 600000
+  min_margin: 0.18
+  clearance_targets:
+    - {sku_id: SKU0002, sell_through: 0.6}
+    - {sku_id: SKU0006, sell_through: 0.6}
+expect:
+  - excludes_region: West
+  - meets_clearance: SKU0002
+  - meets_clearance: SKU0006

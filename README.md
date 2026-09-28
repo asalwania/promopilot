@@ -54,7 +54,8 @@ The Docker stack needs no API key. Compose runs the api with `LLM_PROVIDER=repla
 | `make record-cassettes` | Record every scripted session's LLM calls with a live OpenAI key; `ONLY=name` re-records one session (see [Recording cassettes](#recording-cassettes)) |
 | `make check-cassettes` | Replay every scripted session through the full agent graph from the cassettes alone, with no key |
 | `make train` | Fit the demand model, then the relations model, on the loaded data (`make data` first) and register both (see [Demand model](#demand-model) and [Relations](#relations)) |
-| `make eval`, `make demo` | Arrive in epics E9, E11 |
+| `make eval` | Play the eval scenarios on their own seeded world and write the report to `backend/evals/reports/`; `ONLY="a b"`, `RUNS=n`, `SEED=n` (see [Evals](#evals)). Needs no Docker, `make data` or `make train` |
+| `make demo` | Arrives in epic E11 |
 
 ## Synthetic data
 
@@ -278,6 +279,42 @@ The Critic and the Explainer call them.
 
 Interactive docs are at http://localhost:8000/docs. The machine-readable contract is [docs/openapi.json](docs/openapi.json).
 
+## Evals
+
+`make eval` measures the reliability claim (SPEC §12, ADR 0056). It plays every scenario in [`backend/evals/scenarios/`](backend/evals/scenarios) as a planning session through the full agent graph, in process, and scores each session's final plan revision. `ONLY="a b"` runs the named scenarios, `RUNS=n` runs each n times, and `SEED=n` picks the world.
+
+A scenario is one YAML file, named after it:
+
+```yaml
+name: demo-budget-cut-drop-west
+group: mid_plan_amendments     # one of the nine SPEC §12.1 groups
+brief: >-
+  Plan Diwali promotions for Snacks and Beverages across North and West. Budget ₹8 lakh. …
+as_of_week: 104                # the week it treats as today (ADR 0008)
+seed: 0                        # its sessions' optimiser and simulation seed
+clarifications:                # answers by question id, given only if that question is asked
+  marketing_budget: "₹2 lakh"
+amendments:                    # made in order, each once a plan waits for approval
+  - "Budget cut to ₹6 lakh"
+  - "Drop West"
+labels:                        # the planning-request fields it states, for extraction accuracy
+  regions: [North]
+  marketing_budget: 600000
+expect:                        # properties of the outcome, never an exact plan
+  - asks_clarification: marketing_budget
+  - declares_infeasible: false
+  - excludes_region: West
+  - meets_clearance: SKU0002
+```
+
+The eval builds its own world: the seed-42 dataset `make data` writes, with its hidden ground truth, and demand and relations models fitted in memory as of each scenario's week (35–60 s per week), so no sales after that week reach them. It needs no Docker, `make data` or `make train`. The LLM is whatever `LLM_PROVIDER` names; with the default `replay`, requests with no cassette fall back as the stack does: the Context agent reads by rules, the planner runs the default sequence and the Explainer uses its template, and each run lists what fell back. The three starter scenarios are the recorded sessions' briefs (`e2e`, `clarify`, `demo`), and on the seed-42 world they replay the committed cassettes whole, taking the recorded routes with nothing falling back; a new scenario falls back until its cassettes are recorded (#57). A full run of the three takes about 10 minutes, fitting the models included. A question the scenario does not answer ends its run with no plan, and a failed session is reported without stopping the others.
+
+The report goes to `backend/evals/reports/` (gitignored) as `<UTC timestamp>.json` and `.md`, plus `latest.json` and `latest.md`. It shows each metric against its SPEC §12.2 target, one row per run and every failure:
+
+- **Constraint satisfaction** (target 100%): the share of final plans that keep every hard constraint on their own plan-time numbers, checked by `validate_plan` independently of the optimiser (ADR 0012). Infeasible revisions and runs without a plan are counted but not scored.
+- **Oracle breach rate** (reported, no target): the share of the same plans whose true outcome, scored by the oracle on the hidden demand, spends over the budget, misses the minimum margin or sells more than the stock, with a count of each.
+- **Expected properties**: each scenario's `expect` list, pass or fail per run.
+
 ## Repository layout
 
 ```
@@ -343,6 +380,7 @@ docs/agents/ Agent workflow config (issue tracker, triage labels, domain docs)
 - [ADR 0053: When the LLM is down, the Context agent reads the brief by strict rules into low-confidence assumptions, and asks about anything the rules cannot read](docs/adr/0053-deterministic-context-fallback.md)
 - [ADR 0054: Cassettes record scripted sessions through the full agent graph, listed in a manifest, checked for grounding offline and replayed in CI](docs/adr/0054-full-graph-session-cassettes.md)
 - [ADR 0055: Each optimiser phase stops on a CP-SAT deterministic-time budget, with wall-clock limits only as safety nets, so a plan never depends on the machine](docs/adr/0055-deterministic-time-optimiser-budgets.md)
+- [ADR 0056: The eval runner plays YAML scenarios through the agent graph in process, on its own seeded world, and checks each final plan on its plan-time values before scoring it with the oracle](docs/adr/0056-eval-runner-and-scenarios.md)
 - [ADR 0057: The session page streams its trace with the browser's EventSource, reopens a stream it gave up on with backoff and drops repeated event ids, and shows each node run with its steps beside the session](docs/adr/0057-live-session-page-trace-timeline.md)
 - [ADR 0058: The home page offers four recorded example briefs, and its optional constraint form adds sentences to the brief rather than changing the API](docs/adr/0058-home-page-example-briefs-and-constraint-form.md)
 - [ADR 0059: The Critic loop converges: the planner leaves a flagged SKU out with `exclude_sku_ids`, analyses may narrow the scope, and repeated findings end the loop early](docs/adr/0059-critic-loop-converges.md)
