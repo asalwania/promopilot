@@ -769,6 +769,19 @@ export interface components {
             sku_id: string;
         };
         /**
+         * LineCrossEffect
+         * @description Another SKU a plan line moves in its region, as the relations calculators give it
+         *     (ADR 0033): a fall in profit is cannibalisation, a rise is halo.
+         */
+        LineCrossEffect: {
+            /** Profit Change */
+            profit_change: number;
+            /** Sku Id */
+            sku_id: string;
+            /** Units Change Pct */
+            units_change_pct: number;
+        };
+        /**
          * LineSimulation
          * @description One plan line's simulated ranges, identified by its SKU and region.
          */
@@ -1072,6 +1085,13 @@ export interface components {
          * @description A plan line with the expected numbers the planning tool computed for it (rupees).
          */
         PlanRevisionLine: {
+            /** Baseline Units */
+            baseline_units?: number | null;
+            /**
+             * Cross Effects
+             * @default []
+             */
+            cross_effects: components["schemas"]["LineCrossEffect"][];
             /** Expected Incremental Profit */
             expected_incremental_profit: number;
             /** Expected Units */
@@ -1084,6 +1104,13 @@ export interface components {
             mechanism_comparison: components["schemas"]["MechanismOutcome"][];
             /** Promo Cost */
             promo_cost: number;
+            /**
+             * Segments
+             * @default []
+             */
+            segments: components["schemas"]["SegmentUplift"][];
+            /** Uplift Pct */
+            uplift_pct?: number | null;
             why_chosen?: components["schemas"]["WhyChosen"] | null;
         };
         /**
@@ -1421,6 +1448,20 @@ export interface components {
          * @enum {string}
          */
         Segment: "Value Seekers" | "Families" | "Premium" | "Young Urban";
+        /**
+         * SegmentUplift
+         * @description A plan line's expected units in one customer segment against its no-promotion baseline,
+         *     the anchor SKU's over the promo weeks (F-03 AC2).
+         */
+        SegmentUplift: {
+            /** Baseline Units */
+            baseline_units: number;
+            segment: components["schemas"]["Segment"];
+            /** Units */
+            units: number;
+            /** Uplift Pct */
+            uplift_pct: number | null;
+        };
         /** SelectionReason */
         SelectionReason: {
             /** Amount */

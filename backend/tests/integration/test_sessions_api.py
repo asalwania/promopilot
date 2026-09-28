@@ -277,6 +277,17 @@ async def test_a_session_goes_from_planning_to_awaiting_approval_with_an_optimis
         assert chosen["best"]["option"] == line["line"]
         mechanisms = [outcome["mechanism"] for outcome in line["mechanism_comparison"]]
         assert {"PCT_OFF", "FIXED_PRICE"} <= set(mechanisms)
+    # Each line keeps its uplift, by segment too, and the SKUs it moves (#60).
+    for line in revision["lines"]:
+        assert line["baseline_units"] > 0
+        assert line["uplift_pct"] is not None
+        assert [s["segment"] for s in line["segments"]] == [
+            "Value Seekers",
+            "Families",
+            "Premium",
+            "Young Urban",
+        ]
+    assert any(line["cross_effects"] for line in revision["lines"])
     assert len(revision["not_selected"]) <= 5
     assert all(entry["reasons"] for entry in revision["not_selected"])
     # The stored simulation of the revision (ADR 0042).

@@ -32,7 +32,9 @@ from promopilot.domain import (
     PromoWindow,
     Region,
     Scope,
+    Segment,
     SolveStatus,
+    uplift_pct,
 )
 from promopilot.guardrails import validate_plan
 from promopilot.llm import FakeProvider, LLMError, LLMProvider
@@ -180,6 +182,55 @@ async def test_every_plan_line_carries_a_comparison_of_mechanisms(
                     line.sku_id,
                     line.region,
                 )
+
+
+async def test_every_plan_line_carries_its_uplift_overall_and_by_segment(
+    data: InMemoryRetailData, planner: OptimisingPlanner
+) -> None:
+    llm = FakeProvider([reading()])
+
+    result = await plan_session("Snacks push in the North, ₹20k, weeks 54-55", llm, data, planner)
+
+    assert result.revision.lines
+    for planned in result.revision.lines:
+        assert planned.baseline_units is not None
+        assert planned.baseline_units > 0
+        assert planned.uplift_pct == pytest.approx(
+            uplift_pct(planned.expected_units, planned.baseline_units)
+        )
+        assert [segment.segment for segment in planned.segments] == list(Segment)
+        assert sum(s.units for s in planned.segments) == pytest.approx(planned.expected_units)
+        assert sum(s.baseline_units for s in planned.segments) == pytest.approx(
+            planned.baseline_units
+        )
+        for segment in planned.segments:
+            assert segment.uplift_pct == pytest.approx(
+                uplift_pct(segment.units, segment.baseline_units)
+            )
+
+
+async def test_every_plan_lines_cross_effects_add_up_to_its_cannibalisation_and_halo(
+    data: InMemoryRetailData, planner: OptimisingPlanner
+) -> None:
+    llm = FakeProvider([reading()])
+
+    result = await plan_session("Snacks push in the North, ₹20k, weeks 54-55", llm, data, planner)
+
+    lines = result.revision.lines
+    assert any(planned.cross_effects for planned in lines), "the small world has substitutes"
+    for planned in lines:
+        [chosen] = [outcome for outcome in planned.mechanism_comparison if outcome.chosen]
+        assert chosen.best is not None
+        changes = [effect.profit_change for effect in planned.cross_effects]
+        assert sum(-min(change, 0.0) for change in changes) == pytest.approx(
+            chosen.best.cannibalised_profit
+        )
+        assert sum(max(change, 0.0) for change in changes) == pytest.approx(chosen.best.halo_profit)
+        assert [abs(change) for change in changes] == sorted(
+            (abs(change) for change in changes), reverse=True
+        )
+        own = {planned.line.sku_id, planned.line.bundle_partner_sku_id}
+        assert not own & {effect.sku_id for effect in planned.cross_effects}
 
 
 async def test_every_plan_revision_is_simulated_with_the_default_settings(

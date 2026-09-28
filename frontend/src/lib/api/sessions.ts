@@ -250,6 +250,24 @@ export const planRevisionLineSchema = z.object({
   expected_incremental_profit: z.number(),
   why_chosen: whyChosenSchema.nullable().optional(),
   mechanism_comparison: z.array(mechanismOutcomeSchema),
+  // Null or empty for lines planned before #60 (ADR 0060).
+  baseline_units: z.number().nullable().optional(),
+  uplift_pct: z.number().nullable().optional(),
+  segments: z.array(
+    z.object({
+      segment: z.enum(["Value Seekers", "Families", "Premium", "Young Urban"]),
+      units: z.number(),
+      baseline_units: z.number(),
+      uplift_pct: z.number().nullable(),
+    }) satisfies z.ZodType<Schemas["SegmentUplift"]>,
+  ),
+  cross_effects: z.array(
+    z.object({
+      sku_id: z.string(),
+      units_change_pct: z.number(),
+      profit_change: z.number(),
+    }) satisfies z.ZodType<Schemas["LineCrossEffect"]>,
+  ),
 }) satisfies z.ZodType<Schemas["PlanRevisionLine"]>;
 
 const percentilesSchema = z.object({
@@ -414,6 +432,12 @@ export type Session = z.infer<typeof sessionSchema>;
 export type SessionStatus = Session["status"];
 export type SessionUsage = Session["usage"];
 export type PlanRevisionLine = z.infer<typeof planRevisionLineSchema>;
+export type PlanRevision = z.infer<typeof planRevisionSchema>;
+export type PlanSimulation = z.infer<typeof planSimulationSchema>;
+export type LineSimulation = PlanSimulation["lines"][number];
+export type MechanismOutcome = z.infer<typeof mechanismOutcomeSchema>;
+export type PlanExplanation = z.infer<typeof planExplanationSchema>;
+export type Region = PlanRevisionLine["line"]["region"];
 export type PlanningRequest = z.infer<typeof planningRequestSchema>;
 export type PlanDecision = z.infer<typeof planDecisionSchema>;
 export type ClarificationQuestion = z.infer<typeof clarificationQuestionSchema>;

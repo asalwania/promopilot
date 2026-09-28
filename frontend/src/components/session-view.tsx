@@ -14,6 +14,7 @@ import {
   getSession,
   SessionLoadError,
 } from "@/lib/api/sessions";
+import { useCompetitorGaps } from "@/lib/competitor-gaps";
 import { useTraceStream } from "@/lib/trace-stream";
 
 const POLL_INTERVAL_MS = 1000;
@@ -51,6 +52,9 @@ export function SessionView({ sessionId }: { sessionId: string }) {
     },
   };
 
+  // Undercut callouts on the plan; the plan still shows if the gaps fail (ADR 0060).
+  const gaps = useCompetitorGaps(query.data?.planning_request?.as_of_week);
+
   if (isNotFound(query.error)) {
     return <Notice title="Session not found" />;
   }
@@ -72,7 +76,13 @@ export function SessionView({ sessionId }: { sessionId: string }) {
       </Notice>
     );
   } else if (query.data) {
-    main = <SessionDetails session={query.data} actions={actions} />;
+    main = (
+      <SessionDetails
+        session={query.data}
+        actions={actions}
+        competitorGaps={gaps.data?.gaps}
+      />
+    );
   } else {
     main = <Notice title="Loading session…" />;
   }

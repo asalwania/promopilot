@@ -864,6 +864,30 @@
         "title": "LineChange",
         "type": "object"
       },
+      "LineCrossEffect": {
+        "description": "Another SKU a plan line moves in its region, as the relations calculators give it\n(ADR 0033): a fall in profit is cannibalisation, a rise is halo.",
+        "properties": {
+          "profit_change": {
+            "title": "Profit Change",
+            "type": "number"
+          },
+          "sku_id": {
+            "title": "Sku Id",
+            "type": "string"
+          },
+          "units_change_pct": {
+            "title": "Units Change Pct",
+            "type": "number"
+          }
+        },
+        "required": [
+          "sku_id",
+          "units_change_pct",
+          "profit_change"
+        ],
+        "title": "LineCrossEffect",
+        "type": "object"
+      },
       "LineSimulation": {
         "description": "One plan line's simulated ranges, identified by its SKU and region.",
         "properties": {
@@ -1583,6 +1607,26 @@
       "PlanRevisionLine": {
         "description": "A plan line with the expected numbers the planning tool computed for it (rupees).",
         "properties": {
+          "baseline_units": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Baseline Units"
+          },
+          "cross_effects": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/LineCrossEffect"
+            },
+            "title": "Cross Effects",
+            "type": "array"
+          },
           "expected_incremental_profit": {
             "title": "Expected Incremental Profit",
             "type": "number"
@@ -1607,6 +1651,25 @@
             "minimum": 0.0,
             "title": "Promo Cost",
             "type": "number"
+          },
+          "segments": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/SegmentUplift"
+            },
+            "title": "Segments",
+            "type": "array"
+          },
+          "uplift_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Uplift Pct"
           },
           "why_chosen": {
             "anyOf": [
@@ -2408,6 +2471,43 @@
         ],
         "title": "Segment",
         "type": "string"
+      },
+      "SegmentUplift": {
+        "description": "A plan line's expected units in one customer segment against its no-promotion baseline,\nthe anchor SKU's over the promo weeks (F-03 AC2).",
+        "properties": {
+          "baseline_units": {
+            "minimum": 0.0,
+            "title": "Baseline Units",
+            "type": "number"
+          },
+          "segment": {
+            "$ref": "#/components/schemas/Segment"
+          },
+          "units": {
+            "minimum": 0.0,
+            "title": "Units",
+            "type": "number"
+          },
+          "uplift_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Uplift Pct"
+          }
+        },
+        "required": [
+          "segment",
+          "units",
+          "baseline_units",
+          "uplift_pct"
+        ],
+        "title": "SegmentUplift",
+        "type": "object"
       },
       "SelectionReason": {
         "properties": {

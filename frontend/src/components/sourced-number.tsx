@@ -12,6 +12,7 @@ export type SourcedNumberProps = {
 
 // Every number the UI shows names the tool it came from (SPEC §11 UX rule).
 // A native tooltip keeps long tables light; the plan table reuses this (#60).
+// It takes keyboard focus, so the tooltip is not for mouse users only (ADR 0060).
 export function SourcedNumber({
   value,
   format = (n) => defaultFormat.format(n),
@@ -24,6 +25,7 @@ export function SourcedNumber({
   return (
     <span
       title={tooltip}
+      tabIndex={0}
       className="cursor-help tabular-nums underline decoration-dotted decoration-1 underline-offset-4"
     >
       {format(value)}

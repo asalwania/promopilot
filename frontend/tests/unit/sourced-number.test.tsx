@@ -33,4 +33,10 @@ describe("SourcedNumber", () => {
       screen.getByTitle("Source: get_inventory_status · stock at end of W104"),
     ).toHaveTextContent("1,200");
   });
+
+  it("takes keyboard focus so the tooltip reaches keyboard users", () => {
+    render(<SourcedNumber value={3} source="simulate_plan" />);
+
+    expect(screen.getByText("3")).toHaveAttribute("tabindex", "0");
+  });
 });

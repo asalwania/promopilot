@@ -13,6 +13,7 @@ import {
   planLines,
   planningSession,
   rejectedSession,
+  undercutGaps,
 } from "./fixtures/sessions";
 
 describe("SessionDetails", () => {
@@ -52,10 +53,50 @@ describe("SessionDetails", () => {
 
     expect(screen.getByText("Plan revision 1")).toBeInTheDocument();
     expect(
-      within(screen.getByRole("table", { name: "Plan lines" })).getAllByRole(
-        "row",
-      ),
-    ).toHaveLength(1 + planLines.length);
+      within(screen.getByRole("tablist", { name: "Plan regions" }))
+        .getAllByRole("tab")
+        .map((tab) => tab.textContent),
+    ).toEqual(["North (1)", "West (2)", "Compare regions"]);
+    expect(
+      within(
+        screen.getByRole("table", { name: "Plan lines in North" }),
+      ).getAllByRole("row"),
+    ).toHaveLength(
+      1 + planLines.filter((l) => l.line.region === "North").length,
+    );
+  });
+
+  it("shows the Explainer's plan summary above the region tabs", () => {
+    render(<SessionDetails session={awaitingApprovalSession} />);
+
+    expect(
+      screen.getByRole("region", { name: "Plan summary" }),
+    ).toHaveTextContent(
+      "Two lines across North and West, expected to add ₹12,731 within a ₹2 lakh budget.",
+    );
+    expect(screen.queryByText("Template explanation")).not.toBeInTheDocument();
+  });
+
+  it("says when the plan summary came from the template", () => {
+    render(<SessionDetails session={infeasibleSession} />);
+
+    const summary = screen.getByRole("region", { name: "Plan summary" });
+    expect(summary).toHaveTextContent("Template explanation");
+    expect(summary).toHaveTextContent(
+      "Written from a template: the language model was unavailable.",
+    );
+  });
+
+  it("puts undercut callouts on the lines whose SKU and region are undercut", () => {
+    render(
+      <SessionDetails
+        session={awaitingApprovalSession}
+        competitorGaps={undercutGaps}
+      />,
+    );
+
+    const north = screen.getByRole("table", { name: "Plan lines in North" });
+    expect(within(north).getByText("Undercut")).toBeInTheDocument();
   });
 
   it("shows what the session's LLM calls used and cost", () => {

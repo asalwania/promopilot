@@ -5,9 +5,11 @@ import {
   ClarificationForm,
   type SubmitAnswers,
 } from "@/components/clarification-form";
-import { PlanTable } from "@/components/plan-table";
+import { PlanSummary } from "@/components/plan-summary";
+import { RegionPlanTabs } from "@/components/region-plan-tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { UsageMeter } from "@/components/usage-meter";
+import type { CompetitorGap } from "@/lib/api/catalog";
 import type { PlanDecision, Session, SessionStatus } from "@/lib/api/sessions";
 
 const STATUS_LABELS: Record<SessionStatus, string> = {
@@ -31,9 +33,12 @@ const NO_ACTIONS: SessionActions = {
 export function SessionDetails({
   session,
   actions = NO_ACTIONS,
+  competitorGaps,
 }: {
   session: Session;
   actions?: SessionActions;
+  // The KVI gaps at the request's as-of week, for the plan's undercut callouts.
+  competitorGaps?: CompetitorGap[];
 }) {
   const decision = latestDecision(session);
   return (
@@ -89,8 +94,15 @@ export function SessionDetails({
                 brief&apos;s constraints.
               </p>
             )}
+            {session.plan_revision.explanation && (
+              <PlanSummary explanation={session.plan_revision.explanation} />
+            )}
             {session.plan_revision.lines.length > 0 ? (
-              <PlanTable lines={session.plan_revision.lines} />
+              <RegionPlanTabs
+                revision={session.plan_revision}
+                regions={session.planning_request?.scope.regions ?? []}
+                competitorGaps={competitorGaps}
+              />
             ) : (
               session.plan_revision.solver_status !== "INFEASIBLE" && (
                 <p className="text-muted-foreground text-sm">

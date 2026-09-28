@@ -3,6 +3,7 @@ import { TriangleAlert } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import type { components } from "@/lib/api/schema";
 import { formatPrice } from "@/lib/format";
+import { SOURCES } from "@/lib/sources";
 
 type CompetitorGap = components["schemas"]["CompetitorGap"];
 
@@ -29,6 +30,7 @@ export function UndercutCallout({ gaps }: { gaps: CompetitorGap[] }) {
         {undercuts.map((gap) => (
           <li
             key={`${gap.region}-${gap.sku_id}`}
+            title={`Source: ${SOURCES.competitorGaps}`}
             className="flex flex-wrap items-center gap-2"
           >
             <span>

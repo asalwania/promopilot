@@ -35,6 +35,42 @@ test("a typed brief becomes a plan table with no API key", async ({ page }) => {
   await expect(plan).toBeVisible({ timeout: PLANNING_MS });
   await expect(plan.getByRole("row").nth(1)).toBeVisible();
 
+  // The plan is reviewed region by region, every number naming its tool (F-07, ADR 0060).
+  const regions = page.getByRole("tablist", { name: "Plan regions" });
+  await expect(regions.getByRole("tab")).toHaveText([
+    /^North/,
+    /^West/,
+    "Compare regions",
+  ]);
+  const north = page.getByRole("table", { name: "Plan lines in North" });
+  await expect(north.locator("[title^='Source: ']").first()).toBeVisible();
+  await north
+    .getByRole("button", { name: /^Details for / })
+    .first()
+    .click();
+  await expect(
+    page.getByRole("table", { name: /^Uplift by segment for / }),
+  ).toBeVisible();
+  await north
+    .getByRole("button", { name: /^Compare mechanisms for / })
+    .first()
+    .click();
+  const drawer = page.getByRole("dialog", { name: /^Mechanisms for / });
+  await expect(
+    drawer.getByRole("table", { name: "Mechanism comparison" }),
+  ).toBeVisible();
+  await expect(drawer.getByText("Chosen")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(drawer).toBeHidden();
+  await regions.getByRole("tab", { name: /^West/ }).click();
+  await expect(
+    page.getByRole("table", { name: "Plan lines in West" }),
+  ).toBeVisible();
+  await regions.getByRole("tab", { name: "Compare regions" }).click();
+  await expect(
+    page.getByRole("table", { name: "Regions side by side" }),
+  ).toBeVisible();
+
   // The live trace streamed the agent at work through the proxy (ADR 0047, ADR 0057).
   const trace = page.getByRole("list", { name: "Trace timeline" });
   await expect(

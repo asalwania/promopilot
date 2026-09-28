@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { SessionView } from "@/components/session-view";
@@ -11,17 +11,32 @@ import {
   awaitingClarificationSession,
   planningSession,
   SESSION_ID,
+  undercutGaps,
 } from "./fixtures/sessions";
 import { traceEvents } from "./fixtures/trace";
 
-// Each call to the stubbed proxy takes the next answer; the last one repeats.
-function stubSessionApi(answers: Array<() => Response>) {
+// Each session read from the stubbed proxy takes the next answer; the last one
+// repeats. Competitor gaps (the plan's undercut callouts) are answered apart.
+function stubSessionApi(
+  answers: Array<() => Response>,
+  gaps: () => Response = () =>
+    Response.json({
+      as_of_week: 104,
+      undercut_threshold: 0.05,
+      kvi_price_tolerance: 0.05,
+      gaps: undercutGaps,
+    }),
+) {
   const requested: string[] = [];
-  vi.stubGlobal("fetch", async (input: RequestInfo | URL) => {
-    requested.push(String(input));
-    const answer = answers[Math.min(requested.length, answers.length) - 1];
-    return answer();
-  });
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input).startsWith("/api/competitors/gaps")) return gaps();
+      requested.push(String(input));
+      const answer = answers[Math.min(requested.length, answers.length) - 1];
+      return answer();
+    }),
+  );
   return requested;
 }
 
@@ -58,6 +73,10 @@ function stubClarifyApi(reads: Session[], clarify: () => Response) {
   vi.stubGlobal(
     "fetch",
     async (input: RequestInfo | URL, init?: RequestInit) => {
+      // The plan's undercut callouts read gaps; they are not a session read.
+      if (String(input).startsWith("/api/competitors/gaps")) {
+        return Response.json({ detail: "no gaps here" }, { status: 404 });
+      }
       if (String(input).endsWith("/clarify")) {
         posted.push(JSON.parse(String(init?.body)));
         return clarify();
@@ -102,7 +121,9 @@ describe("SessionView", () => {
     expect(screen.getByText("Planning…")).toBeInTheDocument();
     await advance(1000);
     expect(await screen.findByText("Awaiting approval")).toBeInTheDocument();
-    expect(screen.getByRole("table", { name: "Plan lines" })).toBeVisible();
+    expect(
+      screen.getByRole("table", { name: "Plan lines in North" }),
+    ).toBeVisible();
 
     await advance(5000);
     expect(requested).toEqual(Array(3).fill(`/api/sessions/${SESSION_ID}`));
@@ -134,7 +155,9 @@ describe("SessionView", () => {
     await advance(1000);
     await advance(1000);
     expect(await screen.findByText("Awaiting approval")).toBeInTheDocument();
-    expect(screen.getByRole("table", { name: "Plan lines" })).toBeVisible();
+    expect(
+      screen.getByRole("table", { name: "Plan lines in North" }),
+    ).toBeVisible();
   });
 
   it("says the questions were already answered and reloads the session", async () => {
@@ -254,5 +277,46 @@ describe("SessionView", () => {
     );
     expect(screen.queryByRole("progressbar")).not.toBeInTheDocument();
     expect(requested).toHaveLength(settled);
+  });
+
+  it("marks undercut lines from the KVI gaps at the request's as-of week", async () => {
+    const fetched: string[] = [];
+    stubSessionApi([answer(awaitingApprovalSession)], () => {
+      fetched.push("gaps");
+      return Response.json({
+        as_of_week: 104,
+        undercut_threshold: 0.05,
+        kvi_price_tolerance: 0.05,
+        gaps: undercutGaps,
+      });
+    });
+    const spy = vi.mocked(fetch);
+
+    renderSessionView();
+
+    const north = await screen.findByRole("table", {
+      name: "Plan lines in North",
+    });
+    expect(await within(north).findByText("Undercut")).toBeInTheDocument();
+    expect(spy).toHaveBeenCalledWith(
+      "/api/competitors/gaps?as_of_week=104&kvi_only=true",
+      { cache: "no-store" },
+    );
+    expect(fetched).toHaveLength(1);
+  });
+
+  it("still shows the plan when the competitor gaps cannot be read", async () => {
+    stubSessionApi(
+      [answer(awaitingApprovalSession)],
+      () => new Response("down", { status: 502 }),
+    );
+
+    renderSessionView();
+
+    const north = await screen.findByRole("table", {
+      name: "Plan lines in North",
+    });
+    await advance(10_000);
+    expect(within(north).queryByText("Undercut")).not.toBeInTheDocument();
   });
 });
