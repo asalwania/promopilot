@@ -182,14 +182,16 @@ CANDIDATE_SET_NAMESPACE = UUID("6f1c3b0e-47a1-4c55-9d1e-5a2d3c4b7e81")
 
 
 def candidate_set_id(arguments: GenerateCandidatesInput, loaded: LoadedOptionContext) -> UUID:
-    """The same call on the same model versions gets the same id, so a replayed tool round can
-    pass a recorded id back to `run_optimizer` (ADR 0049). The model ids are left out: they
-    change with every retrain of the same data, and the version numbers do not."""
+    """The same call on models fitted through the same week gets the same id, so a replayed
+    tool round can pass a recorded id back to `run_optimizer` (ADR 0049). The model ids and
+    version numbers are left out: ids change with every retrain, and version numbers with how
+    often a registry was trained, so CI's version 1 would miss a set recorded on version 5
+    (ADR 0054). A retrain mid-session may hand `run_optimizer` the newer model's set."""
     key = {
         "arguments": arguments.model_dump(mode="json"),
         "as_of_week": loaded.as_of_week,
-        "demand_model_version": loaded.demand_model.version,
-        "relations_model_version": loaded.relations_model.version,
+        "demand_model_as_of_week": loaded.demand_model.as_of_week,
+        "relations_model_as_of_week": loaded.relations_model.as_of_week,
     }
     return uuid5(CANDIDATE_SET_NAMESPACE, json.dumps(key, sort_keys=True, separators=(",", ":")))
 
