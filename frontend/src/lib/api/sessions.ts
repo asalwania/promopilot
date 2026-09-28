@@ -226,6 +226,8 @@ export const assumptionSchema = z.object({
   confidence: z.number(),
   flagged: z.boolean(),
   note: z.string().nullable().optional(),
+  // Read by rules while the LLM was unavailable (ADR 0053).
+  fallback: z.boolean(),
 }) satisfies z.ZodType<Schemas["Assumption"]>;
 
 export const clarificationQuestionSchema = z.object({

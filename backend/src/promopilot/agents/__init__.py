@@ -2,11 +2,11 @@
 
 `build_graph` compiles the checkpointed agent graph (ADR 0046): the Context agent reads the
 brief into a planning request with its assumptions, or asks at the Clarify interrupt
-(ADR 0048), the planner agent plans it through the tools, falling back to the optimising planner
-(ADR 0038, ADR 0049), the Critic validates the plan and reviews its risks, sending findings back
-to the planner at most 3 times (ADR 0051), the Explainer writes grounded
-explanations with a template fallback (ADR 0050), and the Approval interrupt waits for a
-decision.
+(ADR 0048), reading it by rules when the LLM is down (ADR 0053), the planner agent plans it
+through the tools, falling back to the optimising planner (ADR 0038, ADR 0049), the Critic
+validates the plan and reviews its risks, sending findings back to the planner at most 3 times
+(ADR 0051), the Explainer writes grounded explanations with a template fallback (ADR 0050), and
+the Approval interrupt waits for a decision.
 """
 
 from promopilot.agents.assumptions import ContextReading
@@ -19,6 +19,7 @@ from promopilot.agents.explainer import (
     explain_plan,
     template_explanations,
 )
+from promopilot.agents.fallback import FALLBACK_CONFIDENCE, read_by_rules
 from promopilot.agents.graph import (
     GraphSnapshot,
     GraphTools,
@@ -71,6 +72,7 @@ from promopilot.agents.trace import (
 )
 
 __all__ = [
+    "FALLBACK_CONFIDENCE",
     "MAX_ATTEMPTS",
     "AgentTools",
     "ApprovalAnswer",
@@ -121,6 +123,7 @@ __all__ = [
     "graph_state",
     "loosening",
     "plan_with_tools",
+    "read_by_rules",
     "read_context",
     "read_planning_request",
     "record_cassettes",

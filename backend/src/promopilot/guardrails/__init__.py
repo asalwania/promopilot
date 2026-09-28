@@ -5,7 +5,8 @@
 `review_risks` flags a plan's over-concentration, heavy cannibalisation and stock-out risk
 (ADR 0051). `check_numeric_grounding` checks that every number in a text comes from tool
 outputs, and `format_rupees`, `format_percent` and `format_units` show numbers so that it
-always accepts them (ADR 0050).
+always accepts them (ADR 0050). `read_stated_numbers` reads the rupees and percentages a brief
+states, for the Context agent's fallback reading (ADR 0053).
 """
 
 from promopilot.domain import Violation, ViolationCode
@@ -13,6 +14,7 @@ from promopilot.guardrails.formatting import format_percent, format_rupees, form
 from promopilot.guardrails.grounding import GroundingReport, check_numeric_grounding
 from promopilot.guardrails.limits import PlanLimits, plan_limits
 from promopilot.guardrails.risks import RiskThresholds, review_risks
+from promopilot.guardrails.stated import StatedKind, StatedNumber, read_stated_numbers
 from promopilot.guardrails.validation import (
     ClearanceFacts,
     LineFacts,
@@ -29,6 +31,8 @@ __all__ = [
     "PlanLimits",
     "RiskThresholds",
     "SkuFacts",
+    "StatedKind",
+    "StatedNumber",
     "Violation",
     "ViolationCode",
     "check_numeric_grounding",
@@ -36,6 +40,7 @@ __all__ = [
     "format_rupees",
     "format_units",
     "plan_limits",
+    "read_stated_numbers",
     "review_risks",
     "validate_plan",
 ]

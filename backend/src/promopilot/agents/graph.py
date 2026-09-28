@@ -4,7 +4,8 @@ Clarify interrupt instead when it has questions, and each answer goes back to Co
 (ADR 0048).
 
 In this slice the Context node reads the brief with the LLM into a planning request with its
-assumptions, or clarification questions (ADR 0048), the Planner is the LLM
+assumptions, or clarification questions (ADR 0048), and by rules when the LLM is unavailable,
+a cassette miss included (ADR 0053), so no LLM failure stops a session. The Planner is the LLM
 planner agent over the tool registry when it is given one (#47, ADR 0049), falling back to
 the deterministic default sequence (option generation → optimiser, with the relaxation when
 the request is infeasible → simulation, ADR 0038/0044). The Critic checks each planner attempt
@@ -185,7 +186,17 @@ def build_graph(
             policy=tools.policy,
             clarifications=state.clarifications,
             amendments=state.amendments,
+            fallback=True,
         )
+        if reading.degraded is not None:
+            await emit(
+                DecisionMade(
+                    decision="context_fallback",
+                    summary="The language model was unavailable "
+                    f"({reading.degraded.value}), so the brief was read by rules; every value "
+                    "read from it is a low-confidence assumption.",
+                )
+            )
         await tools.sessions.save_assumptions(state.session_id, reading.assumptions)
         if reading.questions:
             # Emitted here, not in Clarify: an interrupted node re-runs from its start on resume,
@@ -195,6 +206,7 @@ def build_graph(
             "request": reading.request,
             "assumptions": reading.assumptions,
             "questions": reading.questions,
+            "context_degraded": reading.degraded,
         }
 
     def after_context(state: PlanningState) -> Literal["clarify", "planner"]:

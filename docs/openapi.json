@@ -27,6 +27,11 @@
             "title": "Confidence",
             "type": "number"
           },
+          "fallback": {
+            "default": false,
+            "title": "Fallback",
+            "type": "boolean"
+          },
           "field": {
             "title": "Field",
             "type": "string"

@@ -167,3 +167,84 @@ async def test_resolution_is_deterministic(default_dataset: GeneratedDataset) ->
         assert first.products(phrase) == second.products(phrase) == first.products(phrase)
         assert first.categories(phrase) == second.categories(phrase)
         assert first.regions(phrase) == second.regions(phrase)
+
+
+# Every region or category (#46 follow-up, ADR 0053)
+
+ALL_REGIONS = (Region.NORTH, Region.SOUTH, Region.EAST, Region.WEST)
+
+
+@pytest.mark.parametrize(
+    "phrase",
+    [
+        "all regions",
+        "pan-India",
+        "Pan India",
+        "all-India",
+        "nationwide",
+        "across India",
+        "every region",
+        "all four regions",
+        "all zones",
+    ],
+)
+def test_a_phrase_naming_every_region_resolves_to_all_of_them(
+    resolver: BriefResolver, phrase: str
+) -> None:
+    resolution = resolver.regions(phrase)
+
+    assert resolution.best is not None
+    assert resolution.best.value == ALL_REGIONS
+    assert resolution.best.score == 1.0
+    assert not resolution.ambiguous
+
+
+@pytest.mark.parametrize("phrase", ["all categories", "every category", "the entire range"])
+def test_a_phrase_naming_every_category_resolves_to_all_of_them(
+    resolver: BriefResolver, default_dataset: GeneratedDataset, phrase: str
+) -> None:
+    resolution = resolver.categories(phrase)
+
+    assert resolution.best is not None
+    categories = default_dataset.products.sort_values("sku_id")["category"]
+    assert resolution.best.value == tuple(dict.fromkeys(categories))
+    assert resolution.best.score == 1.0
+
+
+def test_every_region_but_one_is_not_read_as_every_region(resolver: BriefResolver) -> None:
+    resolution = resolver.regions("all regions except West")
+
+    assert resolution.best is None or resolution.best.value != ALL_REGIONS
+
+
+# Mentions: the entities a whole text names, for the fallback reading (ADR 0053)
+
+SPEC_BRIEF = (
+    "Plan Diwali promotions for Snacks and Beverages across North and West. Budget ₹8 lakh. "
+    "Keep margin above 18%. We are overstocked on 400g namkeen packs — clear at least 60% of "
+    "that stock. Target families."
+)
+
+
+def test_the_spec_briefs_mentions_are_its_regions_categories_holiday_and_packs(
+    resolver: BriefResolver,
+) -> None:
+    mentions = resolver.mentions(SPEC_BRIEF)
+
+    assert mentions.regions == (Region.NORTH, Region.WEST)
+    assert mentions.categories == ("Snacks", "Beverages")
+    assert mentions.holidays == ("Diwali",)
+    assert set(mentions.products) >= {"400g", "Namkeen", "Snacks", "Beverages"}
+
+
+def test_a_mention_needs_every_word_of_a_term_in_order(resolver: BriefResolver) -> None:
+    # Fuzzy neighbours ("month" and North, "best" and West) and scattered words are no mention.
+    mentions = resolver.mentions("Our best month for new products this year, with care")
+
+    assert mentions.regions == ()
+    assert mentions.categories == ()
+    assert mentions.holidays == ()
+
+
+def test_a_text_naming_every_region_mentions_all_of_them(resolver: BriefResolver) -> None:
+    assert resolver.mentions("A pan-India snacks push").regions == ALL_REGIONS

@@ -30,13 +30,14 @@ from promopilot.guardrails import PlanFacts
 
 
 class DegradedReason(StrEnum):
-    """Why the deterministic default sequence planned instead of the planner agent (SF-03,
-    ADR 0049)."""
+    """Why a deterministic path ran instead of the LLM (SF-03): the default sequence instead of
+    the planner agent (ADR 0049), or the fallback reading instead of the Context agent's LLM
+    (ADR 0053)."""
 
     LLM_UNAVAILABLE = "llm_unavailable"
     """The LLM failed after its retries and fallback provider, and after one restart."""
     CASSETTE_MISSING = "cassette_missing"
-    """Replay has no cassette for the planner's request (`make record-cassettes`)."""
+    """Replay has no cassette for the request (`make record-cassettes`)."""
     NO_OPTIMISED_PLAN = "no_optimised_plan"
     """The planner stopped, or reached its step or tool-call limit, with no optimiser plan."""
 
@@ -68,6 +69,8 @@ class PlanningState(BaseModel):
     """What the Context agent asks before planning; the Clarify interrupt waits on them."""
     clarifications: tuple[Clarification, ...] = ()
     """Every question answered so far, oldest first."""
+    context_degraded: DegradedReason | None = None
+    """Why the latest reading of the brief was by rules; None when the LLM read it (ADR 0053)."""
     attempts: tuple[PlanAttempt, ...] = ()
     """The Planner's attempts in the current planning round, oldest first: the first and up to
     3 more, each after the Critic sent its findings back (ADR 0051). An amendment (#50) starts

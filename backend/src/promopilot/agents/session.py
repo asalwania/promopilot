@@ -1,9 +1,11 @@
-"""Reading a brief into a planning request: the Context node's step (ADR 0046, ADR 0048)."""
+"""Reading a brief into a planning request: the Context node's step (ADR 0046, ADR 0048), by
+rules when the LLM is unavailable (ADR 0053)."""
 
 from collections.abc import Sequence
 from typing import Protocol
 
 import pandas as pd
+import structlog
 
 from promopilot.agents.assumptions import (
     ContextReading,
@@ -12,9 +14,13 @@ from promopilot.agents.assumptions import (
     missing_fields_message,
 )
 from promopilot.agents.context import BriefError, context_messages, read_brief, week_table
+from promopilot.agents.fallback import read_by_rules
+from promopilot.agents.state import DegradedReason
 from promopilot.agents.tools.inventory_status import pooled_stock
 from promopilot.domain import Clarification, CompanyPolicy, PlanningRequest
-from promopilot.llm import LLMProvider
+from promopilot.llm import CassetteMissError, LLMError, LLMProvider
+
+log = structlog.get_logger(__name__)
 
 
 class BriefData(Protocol):
@@ -36,31 +42,42 @@ async def read_context(
     policy: CompanyPolicy,
     clarifications: Sequence[Clarification] = (),
     amendments: Sequence[str] = (),
+    fallback: bool = False,
 ) -> ContextReading:
     """Read the brief, the answers so far and any amendments at the default as-of week: a
     planning request with its assumptions, or the questions to ask first (ADR 0048).
 
     Raises `BriefError` when the reading cannot form a planning request and `LLMError` when
-    the LLM fails.
+    the LLM fails, unless `fallback`: then the brief is read by rules instead, a cassette miss
+    included, and the reading says why (ADR 0053).
     """
     as_of_week = await data.default_as_of_week()
     products = await data.products()
     calendar = await data.calendar()
     as_of_rows = calendar[calendar["week_id"] == as_of_week]["week_start"]
     as_of_date = str(as_of_rows.iloc[0]) if len(as_of_rows) else "unknown"
-    reading = await read_brief(
-        llm,
-        context_messages(
-            brief,
-            as_of_week=as_of_week,
-            as_of_date=as_of_date,
-            table=week_table(calendar, as_of_week),
-            regions=sorted(calendar["region"].unique()),
-            categories=sorted(products["category"].unique()),
-            clarifications=clarifications,
-            amendments=amendments,
-        ),
+    messages = context_messages(
+        brief,
+        as_of_week=as_of_week,
+        as_of_date=as_of_date,
+        table=week_table(calendar, as_of_week),
+        regions=sorted(calendar["region"].unique()),
+        categories=sorted(products["category"].unique()),
+        clarifications=clarifications,
+        amendments=amendments,
     )
+    reading, degraded = None, None
+    try:
+        reading = await read_brief(llm, messages)
+    except LLMError as error:
+        if not fallback:
+            raise
+        degraded = (
+            DegradedReason.CASSETTE_MISSING
+            if isinstance(error, CassetteMissError)
+            else DegradedReason.LLM_UNAVAILABLE
+        )
+        log.warning("context_fallback", reason=degraded.value, error=str(error))
     try:
         snapshot = await data.inventory(as_of_week)
     except LookupError:
@@ -76,6 +93,14 @@ async def read_context(
         competitor_prices=await data.latest_competitor_prices(as_of_week),
         policy=policy,
     )
+    if reading is None:
+        return read_by_rules(
+            brief,
+            world,
+            clarifications=clarifications,
+            amendments=amendments,
+            degraded=degraded or DegradedReason.LLM_UNAVAILABLE,
+        )
     return interpret(reading, world)
 
 
