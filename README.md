@@ -35,7 +35,7 @@ docker compose exec api python -m promopilot.datagen --out /tmp/data --load   # 
 docker compose exec api python -m promopilot.models   # train and register the demand and relations models, about two minutes
 ```
 
-The Docker stack needs no API key. Compose runs the api with `LLM_PROVIDER=replay` and the cassettes baked into its image, whatever `.env` says (ADR 0022). CI runs exactly these steps, then Playwright types the brief from `backend/cassettes/briefs.json`, clicks **Plan it** and waits for the plan table.
+The Docker stack needs no API key. Compose runs the api with `LLM_PROVIDER=replay` and the cassettes baked into its image, whatever `.env` says (ADR 0022). CI runs exactly these steps, replays every recorded session from the cassettes alone (`python -m promopilot.cassettes --check`, ADR 0054), then Playwright types the `e2e` brief from `backend/cassettes/sessions.json`, clicks **Plan it**, waits for the plan table and checks that the Explainer's recorded answer explains it.
 
 ## Commands
 
@@ -51,7 +51,8 @@ The Docker stack needs no API key. Compose runs the api with `LLM_PROVIDER=repla
 | `make typecheck` | mypy strict, tsc strict |
 | `make api-types` | Export OpenAPI to `docs/openapi.json` and regenerate frontend types |
 | `make data` | Generate the seeded synthetic dataset into `data/generated/` (Parquet) and its hidden ground truth into `data/ground_truth/`, then load the tables into Postgres (starts it if needed) |
-| `make record-cassettes` | Re-record the LLM cassettes with a live OpenAI key (see [LLM providers](#llm-providers)) |
+| `make record-cassettes` | Record every scripted session's LLM calls with a live OpenAI key; `ONLY=name` re-records one session (see [Recording cassettes](#recording-cassettes)) |
+| `make check-cassettes` | Replay every scripted session through the full agent graph from the cassettes alone, with no key |
 | `make train` | Fit the demand model, then the relations model, on the loaded data (`make data` first) and register both (see [Demand model](#demand-model) and [Relations](#relations)) |
 | `make eval`, `make demo` | Arrive in epics E9, E11 |
 
@@ -115,7 +116,7 @@ The API serves the latest relations model only while it was fitted on the live d
 
 A SKU the brief names for clearance must be in scope and counts as overstocked in every scope region, so it may sell below cost and earns clearance value (ADR 0014). Its options, as anchor or BUNDLE partner, carry their uplift over the promo window, net of the pull-forward dip inside it, and `PromoOptions.clearance` holds each target's window baseline and available stock. A KVI the competitor undercuts gets a **price match**: PCT_OFF at the smallest whole-percent depth that reaches the competitor's price, listed in `PromoOptions.price_matches` (ADR 0040).
 
-The `generate_candidates` tool takes a planning request plus optional mechanisms, target segments and SKU ids. It keeps the full set in an in-process `CandidateStore` and returns a summary: counts, pruned counts per reason, counts per region and mechanism, the price matches offered, the top 20 options by value, and a `candidate_set_id` for the optimiser. On the seed-42 demo brief (Snacks and Beverages, North and West, Diwali weeks 108–109) it enumerates 29,025 options, 45 of them price matches for the three KVIs undercut in the North (13–14% off), keeps 10,435 and takes about 7–12 s. About 1,900 of them have positive value, some 500 of those without clearing overstock (ADR 0037).
+The `generate_candidates` tool takes a planning request plus optional mechanisms, target segments and SKU ids. It keeps the full set in an in-process `CandidateStore` and returns a summary: counts, pruned counts per reason, counts per region and mechanism, the price matches offered, the top 20 options by value, and a `candidate_set_id` for the optimiser. The id is deterministic: the same call on models fitted through the same week gets the same id, whatever their version numbers, so a recorded planner round replays on a freshly trained registry (ADR 0049, ADR 0054). On the seed-42 demo brief (Snacks and Beverages, North and West, Diwali weeks 108–109) it enumerates 29,025 options, 45 of them price matches for the three KVIs undercut in the North (13–14% off), keeps 10,435 and takes about 7–12 s. About 1,900 of them have positive value, some 500 of those without clearing overstock (ADR 0037).
 
 ## Optimiser
 
@@ -192,20 +193,41 @@ Agents reach an LLM only through `promopilot.llm` (ADR 0001, ADR 0019, ADR 0027)
 
 A live provider retries timeouts, rate limits and server errors up to 3 attempts (waiting 1 s, then 2 s). If it still fails and the other live provider has a key and model, that provider answers instead. Otherwise the API logs `llm_no_fallback` at startup. Every call's tokens are counted per planning session, and the cost is priced from `LLM_PRICES` when the call is made: each call is a `token_usage` trace event, and the session's `usage` is their sum (ADR 0047).
 
-In replay mode, a request with no recorded cassette fails with `CassetteMissError` naming its hash. This usually means a prompt or schema changed and the cassettes need re-recording. Replay never falls back to another provider. A tool-calling request's hash covers the tools and every call the model made (names, arguments, ids) but not the tools' results, so a recorded planner round replays after a retrain or on another machine (ADR 0049). In a planning session the planner and the Context agent treat a miss as the LLM being unavailable: the planner logs `planner_cassette_miss` and plans with the default sequence, and the Context agent reads the brief by rules (below), so a session still gets a plan. `make record-cassettes` and the committed-cassette test still fail on a miss (ADR 0053). Cassettes store only the request content, the parsed response and the tokens it was billed for, never headers or keys. Tests use `FakeProvider` or `ReplayProvider` and never call a real LLM. The live smoke checks in `backend/tests/live` are marked `live` and excluded by default. Run them deliberately with keys exported: `uv run pytest -m live tests/live`.
+In replay mode, a request with no recorded cassette fails with `CassetteMissError` naming its hash. This usually means a prompt or schema changed and the cassettes need re-recording. Replay never falls back to another provider. A tool-calling request's hash covers the tools and every call the model made (names, arguments, ids) but not the tools' results, so a recorded planner round replays after a retrain or on another machine (ADR 0049). In a planning session the planner and the Context agent treat a miss as the LLM being unavailable: the planner logs `planner_cassette_miss` and plans with the default sequence, and the Context agent reads the brief by rules (below), so a session still gets a plan. `make record-cassettes`, `make check-cassettes` and the committed-cassette test still fail on a miss (ADR 0053, ADR 0054). Cassettes store only the request content, the parsed response and the tokens it was billed for, never headers or keys. Tests use `FakeProvider` or `ReplayProvider` and never call a real LLM. The live smoke checks in `backend/tests/live` are marked `live` and excluded by default. Run them deliberately with keys exported: `uv run pytest -m live tests/live`.
 
 ### Recording cassettes
 
-The committed cassettes in `backend/cassettes/` answer every brief in `backend/cassettes/briefs.json` over the seed-42 world. A unit test checks this, so CI fails when they go stale. To re-record them after changing a prompt, a schema or the default world:
+The committed cassettes in `backend/cassettes/` are the recording of every session script in `backend/cassettes/sessions.json`, played through the full agent graph (ADR 0054):
+
+- `e2e`: the Playwright brief, planned;
+- `demo`: the SPEC §3.2 brief, planned, amended ("Budget cut to ₹6 lakh", then "Drop West") and approved;
+- `clarify`: a brief with no budget, whose question is answered "₹2 lakh".
+
+A script is `{name, brief, steps}`, and each step is one of `{"answers": {question_id: text}}`, `{"amend": text}` or `{"approve": true}`. `backend/cassettes/manifest.json` lists each session's script, route, cassettes in call order and plan revisions, and the planning settings it was recorded with.
+
+Three checks keep them honest:
+
+- A unit test checks the manifest against the scripts and replays every Context reading over the default world.
+- An architecture test runs numeric grounding over every recorded Explainer and Critic answer (SPEC §13.4).
+- CI's images job replays every whole session on the composed stack.
+
+To re-record after changing a prompt, a schema, a script, the default world or a planning setting, run from the repository root:
 
 ```bash
 make data               # the world the cassettes are recorded against
 make train              # the models the planner agent's tools plan with
-make record-cassettes   # needs OPENAI_API_KEY and OPENAI_MODEL in .env; makes a few live calls per brief
+make record-cassettes   # needs OPENAI_API_KEY and OPENAI_MODEL=gpt-4.1-mini in .env
+make check-cassettes    # replays every session from the cassettes alone, with no key
 make up                 # rebuild the api image with the new cassettes
 ```
 
-`make record-cassettes` reads each brief into a planning request through OpenAI, then plans it with the planner agent on the trained models, and records every LLM request: the reading and each of the planner's tool-calling steps. So it needs trained models as well as data (ADR 0049, amending ADR 0038). A brief that would need a clarification cannot be recorded, so every brief in `briefs.json` must state its scope, window and budget (ADR 0048). It replaces the cassettes only if every brief becomes a planning request and the planner agent plans it without falling back to the default sequence. If one fails, it names the brief, exits non-zero and changes nothing. A full run removes stale cassettes, so commit the whole directory (ADR 0022).
+`make record-cassettes` plays each script on OpenAI against the loaded data and the trained models, and records every LLM request: the Context readings, the planner agent's steps in every attempt, the Critic's feedback and the Explainer's answers. It changes nothing, names the session and exits non-zero if any session:
+
+- falls back (the Context agent reading by rules, the planner degrading, the Explainer using its template);
+- asks a question its script does not answer;
+- records an answer citing a number its tool data does not show.
+
+A full run removes every cassette no session lists, so commit the whole directory. `make record-cassettes ONLY=demo` re-records one session and keeps the others. It prints each session's route and the live cost (a few tenths of a dollar for all three).
 
 ## API
 
@@ -316,6 +338,7 @@ docs/agents/ Agent workflow config (issue tracker, triage labels, domain docs)
 - [ADR 0051: The Critic finds risks deterministically, has the LLM word only the feedback, and loops a planner-agent plan back at most 3 times before the best attempt goes on](docs/adr/0051-critic-loop-with-deterministic-risk-review.md)
 - [ADR 0052: An amendment resumes Approval into a Context re-read and a new planning round, whose plan revision stores a deterministic diff that the Explainer says in words](docs/adr/0052-amendments-with-revision-diffs.md)
 - [ADR 0053: When the LLM is down, the Context agent reads the brief by strict rules into low-confidence assumptions, and asks about anything the rules cannot read](docs/adr/0053-deterministic-context-fallback.md)
+- [ADR 0054: Cassettes record scripted sessions through the full agent graph, listed in a manifest, checked for grounding offline and replayed in CI](docs/adr/0054-full-graph-session-cassettes.md)
 - [ADR 0055: Each optimiser phase stops on a CP-SAT deterministic-time budget, with wall-clock limits only as safety nets, so a plan never depends on the machine](docs/adr/0055-deterministic-time-optimiser-budgets.md)
 
 The domain glossary is [CONTEXT.md](CONTEXT.md).
