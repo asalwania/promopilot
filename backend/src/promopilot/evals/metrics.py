@@ -9,6 +9,7 @@ session's outcome.
 from collections.abc import Sequence
 
 from promopilot.domain import CompanyPolicy, PlanningRequest, PlanRevision, SolveStatus, Violation
+from promopilot.evals.behaviour import check_behaviour_property
 from promopilot.evals.oracle import PlanOutcome
 from promopilot.evals.report import (
     Breach,
@@ -20,8 +21,12 @@ from promopilot.evals.report import (
 from promopilot.evals.scenarios import (
     AsksClarification,
     DeclaresInfeasible,
+    DiffChanges,
     ExcludesRegion,
     ExpectedProperty,
+    FlagsAssumption,
+    KviResponsePresent,
+    RelaxationTouches,
 )
 from promopilot.guardrails import PlanFacts, plan_limits, validate_plan
 
@@ -106,10 +111,23 @@ def oracle_breach_rate(runs: Sequence[RunResult]) -> Metric:
 
 
 def check_property(
-    prop: ExpectedProperty, *, asked: Sequence[str], revision: PlanRevision | None
+    prop: ExpectedProperty,
+    *,
+    asked: Sequence[str],
+    revision: PlanRevision | None,
+    flagged: Sequence[str] = (),
+    notes: Sequence[str] = (),
+    summary: str | None = None,
+    kvi: Sequence[str] = (),
 ) -> PropertyResult:
     """Whether a session's outcome has the property: the question ids it asked, and its final
-    plan revision (None when it ended without one)."""
+    plan revision (None when it ended without one); for #55's properties also the fields its
+    final reading flags, the planner's notes, the plan summary and the KVI response
+    recomputed for the final plan."""
+    if isinstance(prop, RelaxationTouches | FlagsAssumption | DiffChanges | KviResponsePresent):
+        return check_behaviour_property(
+            prop, revision=revision, flagged=flagged, notes=notes, summary=summary, kvi=kvi
+        )
     described = prop.describe()
     if isinstance(prop, AsksClarification):
         passed = prop.asks_clarification in asked

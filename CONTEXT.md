@@ -329,6 +329,22 @@ The share of final plan revisions that keep every hard constraint on their own p
 **Oracle breach rate**:
 The share of the same plans whose true outcome, by the oracle, breaks the budget, the minimum margin or the stock. Reported, with no target (ADR 0012).
 
+**Extraction accuracy**:
+The share of a scenario's labelled planning-request fields that the final planning request reads right, by field matching rules. Target 95% (ADR 0062).
+
+**Clarification behaviour**:
+The share of vague or conflicting scenarios' sessions that ask about, or flag, a field the scenario names. Target 100% (ADR 0062).
+
+**Unneeded ask**:
+A question a session of any other scenario asks that its scenario does not expect. Counted, with no target (ADR 0062).
+_Avoid_: false clarification
+
+**Infeasibility handling**:
+The share of infeasible-constraint scenarios' sessions whose final plan revision is declared infeasible, names a binding constraint and proposes a relaxation. Target 100% (ADR 0062).
+
+**Grounding pass rate**:
+The share of the Explainer's runs, where the LLM answered, whose explanation passed numeric grounding. A run where the LLM was unavailable is not scored. Target 98% (ADR 0062).
+
 **Ground truth**:
 The hidden true parameters used to generate the synthetic data. Only evals may read it.
 

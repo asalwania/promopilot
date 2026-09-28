@@ -13,7 +13,14 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict
 
-from promopilot.domain import Region, SolveStatus, Violation
+from promopilot.domain import (
+    ExplanationSource,
+    FallbackReason,
+    Region,
+    SessionUsage,
+    SolveStatus,
+    Violation,
+)
 
 REPORT_DIR = Path("evals/reports")
 """Where `make eval` writes its reports, relative to backend/ (gitignored)."""
@@ -83,6 +90,50 @@ class PropertyResult(_Frozen):
     detail: str
 
 
+class FieldMatch(_Frozen):
+    """One labelled planning-request field against what the final request reads (#55)."""
+
+    field: str
+    """The label's name, as `RequestLabels` has it."""
+    expected: str
+    got: str | None
+    """None when the session ended with no planning request."""
+    matched: bool
+
+
+class ClarificationCheck(_Frozen):
+    """Whether a vague or conflicting scenario's session asked about, or flagged, a field the
+    scenario names (#55)."""
+
+    named: tuple[str, ...]
+    """The fields its `asks_clarification` and `flags_assumption` properties name."""
+    asked: tuple[str, ...]
+    """The question ids asked about a named field."""
+    flagged: tuple[str, ...]
+    """The named fields the final reading flags."""
+    passed: bool
+
+
+class InfeasibilityCheck(_Frozen):
+    """Whether an infeasible scenario's final revision says so, names what binds and proposes
+    a relaxation (AG-06, #55)."""
+
+    revision: int | None
+    """The final revision's number; None with no final plan."""
+    declared: bool
+    relaxation: bool
+    binding_named: bool
+    passed: bool
+
+
+class ExplainerRun(_Frozen):
+    """One run of the Explainer: the explanation a plan revision waited for approval with."""
+
+    revision: int
+    source: ExplanationSource
+    fallback_reason: FallbackReason | None
+
+
 class RunResult(_Frozen):
     run: int
     """1-based."""
@@ -103,6 +154,22 @@ class RunResult(_Frozen):
     """None when the constraints are not scored."""
     properties: tuple[PropertyResult, ...] = ()
     duration_s: float = 0.0
+    extraction: tuple[FieldMatch, ...] = ()
+    """Each labelled field against the final planning request (#55)."""
+    flagged: tuple[str, ...] = ()
+    """The fields whose assumption the final reading flags."""
+    clarification: ClarificationCheck | None = None
+    """Only for a vague or conflicting scenario."""
+    unneeded_asks: tuple[str, ...] = ()
+    """Questions asked that the scenario does not expect, outside the vague group."""
+    infeasibility: InfeasibilityCheck | None = None
+    """Only for an infeasible-constraints scenario."""
+    explanations: tuple[ExplainerRun, ...] = ()
+    """Every Explainer run, in order: one per plan revision that waited for approval."""
+    session_s: float = 0.0
+    """The session's wall-clock time, from the brief to its end, without fitting models."""
+    usage: SessionUsage = SessionUsage()
+    """The sum of the session's token-usage trace events (ADR 0047)."""
 
     @property
     def passed(self) -> bool:
@@ -127,7 +194,7 @@ class Metric(_Frozen):
     name: str
     label: str
     value: float | None
-    """A share from 0 to 1; None when nothing was scored."""
+    """A share from 0 to 1, or a P50 in `unit`; None when nothing was scored."""
     count: int
     """How many of `of` count towards the value."""
     of: int
@@ -137,6 +204,8 @@ class Metric(_Frozen):
     passed: bool | None = None
     """None for a reported metric, or when nothing was scored."""
     breakdown: dict[str, int] = {}
+    unit: Literal["share", "seconds", "rupees"] = "share"
+    """What `value` and `target` are in: a share from 0 to 1, or a P50 in seconds or rupees."""
 
 
 class EvalReport(_Frozen):
@@ -154,9 +223,14 @@ class EvalReport(_Frozen):
         """The report without what varies from one identical run to the next: when it was
         generated and how long each run took."""
         dumped = self.model_dump(mode="json", exclude={"generated_at"})
+        for metric in dumped["metrics"]:
+            if metric["unit"] == "seconds":
+                metric.pop("value")
+                metric["breakdown"] = {}
         for scenario in dumped["scenarios"]:
             for run in scenario["runs"]:
                 run.pop("duration_s")
+                run.pop("session_s")
         return dumped
 
 
@@ -208,7 +282,7 @@ def render_markdown(report: EvalReport) -> str:
         "|---|---|---|---|",
     ]
     for metric in report.metrics:
-        value = "n/a" if metric.value is None else f"{metric.value:.1%}"
+        value = format_value(metric)
         lines.append(
             f"| {metric.label} | {value} ({metric.count} of {metric.of}) | {_target(metric)} "
             f"| {_result(metric.passed)} |"
@@ -235,11 +309,59 @@ def render_markdown(report: EvalReport) -> str:
                 f"| {sum(p.passed for p in run.properties)}/{len(run.properties)} "
                 f"| {_result(run.passed)} |"
             )
+    lines += [
+        "",
+        "## Agent behaviour",
+        "",
+        "| Scenario | Run | Extraction | Asked | Flagged | Explainer | Session | Cost |",
+        "|---|---|---|---|---|---|---|---|",
+    ]
+    for scenario in report.scenarios:
+        for run in scenario.runs:
+            lines.append(f"| {scenario.name} | {run.run} | {_behaviour(run)} |")
     failures = [(scenario.name, run) for scenario in report.scenarios for run in scenario.runs]
     details = [line for name, run in failures for line in _failures(name, run)]
     lines += ["", "## Failures", ""]
     lines += details or ["None."]
     return "\n".join(lines) + "\n"
+
+
+def format_value(metric: Metric) -> str:
+    """A metric's value in its unit: a share as a percentage, a P50 in seconds or rupees."""
+    if metric.value is None:
+        return "n/a"
+    if metric.unit == "seconds":
+        return f"{metric.value:.1f} s"
+    if metric.unit == "rupees":
+        return f"₹{metric.value:,.2f}"
+    return f"{metric.value:.1%}"
+
+
+def _behaviour(run: RunResult) -> str:
+    extraction = (
+        f"{sum(match.matched for match in run.extraction)}/{len(run.extraction)}"
+        if run.extraction
+        else "—"
+    )
+    explained = ", ".join(
+        "llm"
+        if explanation.fallback_reason is None
+        else f"template ({explanation.fallback_reason.value})"
+        for explanation in run.explanations
+    )
+    cost = f"₹{run.usage.cost_inr:,.2f}, {run.usage.calls} calls"
+    if run.usage.unpriced_models:
+        cost += f" (unpriced: {', '.join(run.usage.unpriced_models)})"
+    return " | ".join(
+        (
+            extraction,
+            ", ".join(run.questions_asked) or "—",
+            ", ".join(run.flagged) or "—",
+            explained or "—",
+            f"{run.session_s:.1f} s",
+            cost,
+        )
+    )
 
 
 def _target(metric: Metric) -> str:
@@ -280,4 +402,27 @@ def _failures(name: str, run: RunResult) -> list[str]:
         for result in run.properties
         if not result.passed
     ]
+    found += [
+        f"{where} read `{match.field}` as {match.got or 'nothing'}, labelled {match.expected}"
+        for match in run.extraction
+        if not match.matched
+    ]
+    clarified = run.clarification
+    if clarified is not None and not clarified.passed:
+        found.append(f"{where} neither asked about nor flagged {', '.join(clarified.named)}")
+    infeasible = run.infeasibility
+    if infeasible is not None and not infeasible.passed:
+        if infeasible.revision is None:
+            found.append(f"{where} no final plan revision to declare infeasible")
+        else:
+            missing = [
+                part
+                for part, ok in (
+                    ("is not declared infeasible", infeasible.declared),
+                    ("proposes no relaxation", infeasible.relaxation),
+                    ("names no binding constraint", infeasible.binding_named),
+                )
+                if not ok
+            ]
+            found.append(f"{where} revision {infeasible.revision} {' and '.join(missing)}")
     return found
