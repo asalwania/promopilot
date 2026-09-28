@@ -1,5 +1,5 @@
 import pytest
-from pydantic import ValidationError
+from pydantic import TypeAdapter, ValidationError
 
 from promopilot.domain import (
     ClearanceTarget,
@@ -8,6 +8,7 @@ from promopilot.domain import (
     ExplanationSource,
     FallbackReason,
     Mechanism,
+    OpenIssue,
     PlanExplanation,
     PlanLine,
     PlanningRequest,
@@ -17,8 +18,12 @@ from promopilot.domain import (
     PromoPlan,
     PromoWindow,
     Region,
+    RiskCode,
+    RiskFinding,
     Scope,
     TargetSegment,
+    Violation,
+    ViolationCode,
 )
 
 
@@ -226,3 +231,27 @@ def test_only_a_template_explanation_records_why_the_llm_was_not_used() -> None:
             source=ExplanationSource.LLM,
             fallback_reason=FallbackReason.LLM_UNAVAILABLE,
         )
+
+
+def test_an_open_issue_stored_before_risk_findings_still_reads_as_a_violation() -> None:
+    # Rows written before #48 have no `kind` (ADR 0051).
+    issues = TypeAdapter(tuple[OpenIssue, ...])
+
+    [violation, risk] = issues.validate_python(
+        [
+            {"code": "BUDGET", "message": "over", "actual": 2.0, "limit": 1.0},
+            {
+                "kind": "risk",
+                "code": "STOCKOUT_RISK",
+                "message": "runs out",
+                "feedback": "promote it less deeply",
+                "actual": 0.3,
+                "limit": 0.2,
+            },
+        ]
+    )
+
+    assert violation == Violation(code=ViolationCode.BUDGET, message="over", actual=2.0, limit=1.0)
+    assert isinstance(risk, RiskFinding)
+    assert risk.code is RiskCode.STOCKOUT_RISK
+    assert issues.dump_python((violation,), mode="json")[0]["kind"] == "violation"

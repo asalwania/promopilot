@@ -46,6 +46,7 @@ from promopilot.domain import (
     SolveStatus,
     ToolCalled,
 )
+from promopilot.guardrails import RiskThresholds
 from promopilot.llm import (
     CassetteMissError,
     FakeProvider,
@@ -217,6 +218,7 @@ async def plan(
     sleep: Sleeps | None = None,
     max_steps: int = MAX_STEPS,
     max_tool_calls: int = MAX_TOOL_CALLS,
+    risk_thresholds: RiskThresholds | None = None,
 ) -> tuple[PlanningState, FakeProvider]:
     llm = FakeProvider([READING, *script, explainer_down()])
     graph_tools = GraphTools(
@@ -232,6 +234,7 @@ async def plan(
             max_steps=max_steps,
             max_tool_calls=max_tool_calls,
         ),
+        risk_thresholds=risk_thresholds or RiskThresholds(),
     )
     graph = build_graph(graph_tools, llm, InMemorySaver(serde=checkpoint_serializer()))
     session_id = uuid4()
@@ -288,6 +291,8 @@ async def test_scripted_tool_calls_on_the_small_world_produce_the_optimised_plan
         registry,
         revisions=StoredRevisions(store, default),
         trace=trace,
+        # One line takes most of this small plan's spend: the Critic's loop is not under test.
+        risk_thresholds=RiskThresholds(line_spend_share=1.0),
     )
 
     called = [
@@ -758,4 +763,4 @@ def test_the_planner_prompt_is_versioned() -> None:
 
     prompt = (files("promopilot.agents") / "prompts" / "planner.md").read_text("utf-8")
 
-    assert prompt.startswith("<!-- prompt: planner v1")
+    assert prompt.startswith("<!-- prompt: planner v2")

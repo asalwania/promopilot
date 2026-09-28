@@ -260,8 +260,16 @@ The deterministic planning path with no LLM: generate every promo option, optimi
 _Avoid_: fallback planner, naive planner
 
 **Open issue**:
-A violation (and, from the critic's risk review, a finding) that a plan revision still has when it goes for approval. It is listed on the revision; it does not block approval, but an infeasible revision cannot be approved.
+A violation or a risk finding that a plan revision still has when it goes for approval. It is listed on the revision; it does not block approval, but an infeasible revision cannot be approved.
 _Avoid_: error, warning
+
+**Risk finding**:
+A risk the critic's risk review flags in a plan that may break no hard constraint: over-concentration (one plan line, category or region takes too much of the promo spend), heavy cannibalisation (a line's substitutes lose too much of its incremental profit) or stock-out risk (a line runs out in too many simulated runs). It carries feedback for the planner. Found deterministically; the LLM only words the feedback (ADR 0051).
+_Avoid_: warning, risk score
+
+**Planner attempt**:
+One plan the planner produces within a planning round. The critic reviews each attempt and sends its findings back at most 3 times; only the best attempt becomes a plan revision (ADR 0051).
+_Avoid_: iteration (which counts every planner run in a session), draft revision
 
 **Checkpoint**:
 The saved state of a planning session's agent graph after a step. A session paused at an interrupt (approval, clarification) resumes from its checkpoint, even after an API restart.

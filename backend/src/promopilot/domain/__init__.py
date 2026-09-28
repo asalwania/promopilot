@@ -13,6 +13,7 @@ from promopilot.domain.plan import PlanLine, PromoPlan
 from promopilot.domain.policy import CompanyPolicy, PolicyFinding
 from promopilot.domain.request import ClearanceTarget, PlanningRequest, PromoWindow, Scope
 from promopilot.domain.revision import PlanRevision, PlanRevisionLine
+from promopilot.domain.risk import OpenIssue, RiskCode, RiskFinding
 from promopilot.domain.selection import (
     BindingConstraint,
     BindingEvidence,
@@ -82,6 +83,7 @@ __all__ = [
     "NodeStarted",
     "NotSelectedOption",
     "NotSelectedReason",
+    "OpenIssue",
     "Percentiles",
     "PlanDecision",
     "PlanExplanation",
@@ -100,6 +102,8 @@ __all__ = [
     "RegionStockout",
     "Relaxation",
     "RelaxedConstraint",
+    "RiskCode",
+    "RiskFinding",
     "Scope",
     "Segment",
     "SelectionReason",

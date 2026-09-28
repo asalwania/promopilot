@@ -2,12 +2,12 @@
 and is answered with.
 
 The state is checkpointed after every step, so it holds only values: the brief, the planning
-request, the plan revision with its plan facts, the Planner's notes (ADR 0049), the Critic's
-findings, the explanations and the latest decision, with the Context agent's assumptions,
-open questions and answered clarifications (ADR 0048). The diff from the previous revision
-(#50) joins it with the tickets that produce them; the
-simulation is on the plan revision (ADR 0042). The trace is not state: every step is a trace
-event stored as it happens (ADR 0047).
+request, the Planner's attempts of the planning round (ADR 0051), the plan revision chosen
+from them with its plan facts, the Planner's notes (ADR 0049), the Critic's findings, the
+explanations and the latest decision, with the Context agent's assumptions, open questions and
+answered clarifications (ADR 0048). The diff from the previous revision (#50) joins it with the
+ticket that produces it; the simulation is on the plan revision (ADR 0042). The trace is not
+state: every step is a trace event stored as it happens (ADR 0047).
 """
 
 from enum import StrEnum
@@ -20,11 +20,11 @@ from promopilot.domain import (
     Clarification,
     ClarificationQuestion,
     DecisionKind,
+    OpenIssue,
     PlanDecision,
     PlanExplanation,
     PlanningRequest,
     PlanRevision,
-    Violation,
 )
 from promopilot.guardrails import PlanFacts
 
@@ -41,6 +41,20 @@ class DegradedReason(StrEnum):
     """The planner stopped, or reached its step or tool-call limit, with no optimiser plan."""
 
 
+class PlanAttempt(BaseModel):
+    """One planner attempt in a planning round: a draft plan the Critic reviews. Only the best
+    attempt becomes a plan revision (ADR 0051)."""
+
+    model_config = ConfigDict(frozen=True)
+
+    plan: PlanRevision
+    facts: PlanFacts
+    notes: tuple[str, ...] = ()
+    degraded: DegradedReason | None = None
+    findings: tuple[OpenIssue, ...] = ()
+    """The Critic's violations and risk findings; empty until it has reviewed the attempt."""
+
+
 class PlanningState(BaseModel):
     model_config = ConfigDict(frozen=True)
 
@@ -54,10 +68,17 @@ class PlanningState(BaseModel):
     """What the Context agent asks before planning; the Clarify interrupt waits on them."""
     clarifications: tuple[Clarification, ...] = ()
     """Every question answered so far, oldest first."""
+    attempts: tuple[PlanAttempt, ...] = ()
+    """The Planner's attempts in the current planning round, oldest first: the first and up to
+    3 more, each after the Critic sent its findings back (ADR 0051). An amendment (#50) starts
+    a new round."""
     plan: PlanRevision | None = None
+    """The best attempt's plan, saved as the plan revision once the Critic hands it on."""
     plan_facts: PlanFacts | None = None
     """The plan-time numbers the plan was chosen on, which the Critic validates."""
-    critic_findings: tuple[Violation, ...] = ()
+    critic_findings: tuple[OpenIssue, ...] = ()
+    """The latest attempt's findings while the Critic loops, then the chosen plan's open
+    issues."""
     iteration: int = 0
     """How many times the Planner has planned in this session."""
     planner_notes: tuple[str, ...] = ()

@@ -15,13 +15,17 @@ built in process from the stored candidate set (`StoredRevisions`), never from t
   conversation once, ADR 0027), replay has no cassette, or no optimiser plan is reached within
   the step and tool-call limits, the deterministic default sequence plans instead (SF-03).
 
+When the Critic sends its findings back (ADR 0051), the planner plans again from the start,
+with the findings as one more message after the opening: each violation or risk finding with
+its message and the Critic's feedback, as JSON.
+
 After the plan is chosen, the planner checks the scope's KVIs with `get_competitor_gaps` and
 explains how the plan answers any undercut, from that tool's output (F-08 AC2).
 """
 
 import asyncio
 import json
-from collections.abc import Awaitable, Callable, Mapping
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass
 from importlib.resources import files
 from typing import Any, Final, Protocol
@@ -36,7 +40,7 @@ from promopilot.agents.tools import ToolError, ToolOk, ToolResult, ToolSpec
 from promopilot.agents.tools.run_optimizer import RunOptimizerOutput
 from promopilot.agents.trace import TracedToolRegistry, emit
 from promopilot.competitors import CompetitorGaps
-from promopilot.domain import DecisionMade, PlanningRequest
+from promopilot.domain import DecisionMade, OpenIssue, PlanningRequest
 from promopilot.llm import CassetteMissError, LLMError, LLMProvider, Message
 from promopilot.llm import ToolSpec as LLMToolSpec
 
@@ -115,14 +119,19 @@ async def plan_with_tools(
     llm: LLMProvider,
     agent: AgentTools,
     default: DefaultSequence,
+    *,
+    feedback: Sequence[OpenIssue] = (),
 ) -> PlannedRevision:
     """Plan the request with the planner agent, or with the default sequence when the agent
     cannot (SF-03). The result carries the planner's notes and, when degraded, why.
 
+    `feedback` is the Critic's findings on the previous attempt, for the agent to address
+    (ADR 0051); the default sequence cannot act on it.
+
     Raises only what building the plan revision or the default sequence raises
     (`PlanningError`); LLM and tool failures never propagate.
     """
-    planner = _Planner(brief, request, llm, agent)
+    planner = _Planner(brief, request, llm, agent, feedback)
     outcome = await planner.converse()
     if isinstance(outcome, UUID):
         planned = await agent.revisions.revision(outcome)
@@ -165,7 +174,12 @@ def loosening(given: PlanningRequest, proposed: PlanningRequest) -> tuple[str, .
 
 class _Planner:
     def __init__(
-        self, brief: str, request: PlanningRequest, llm: LLMProvider, agent: AgentTools
+        self,
+        brief: str,
+        request: PlanningRequest,
+        llm: LLMProvider,
+        agent: AgentTools,
+        feedback: Sequence[OpenIssue] = (),
     ) -> None:
         self._request = request
         self._llm = llm
@@ -179,6 +193,7 @@ class _Planner:
         self._opening = (
             Message(role="system", content=planner_prompt()),
             Message(role="user", content=_opening_message(brief, request)),
+            *([Message(role="user", content=_feedback_message(feedback))] if feedback else []),
         )
         self._calls: list[str] = []
 
@@ -325,6 +340,15 @@ DECISIONS: Final = {
     "planner_call_refused": "A {tool} call was refused: {reason}",
 }
 """What each planner decision says in the session's trace."""
+
+
+def _feedback_message(feedback: Sequence[OpenIssue]) -> str:
+    findings = [issue.model_dump(mode="json", exclude_none=True) for issue in feedback]
+    return (
+        "The Critic reviewed your previous plan and sent it back with these findings (JSON). "
+        "Plan again from the start and address each one with the levers you have; the brief's "
+        f"constraints stay as given:\n{json.dumps(findings, ensure_ascii=False)}"
+    )
 
 
 async def _decide(event: str, **fields: object) -> None:

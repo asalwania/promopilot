@@ -120,7 +120,9 @@ def build_app() -> FastAPI:
     # Sessions run the agent graph, checkpointed in the app database (ADR 0046). Its planner
     # agent plans through the tool registry and falls back to the default sequence, which
     # plans with the latest demand model and the live relations model (ADR 0038, ADR 0049).
-    # A stored plan revision is re-simulated with the same settings (ADR 0043).
+    # The Critic reviews each plan's risks with the configured thresholds and sends its
+    # findings back to the planner agent at most 3 times (ADR 0051). A stored plan revision is
+    # re-simulated with the same settings (ADR 0043).
     sessions = SessionService(
         store=store,
         tools=GraphTools(
@@ -132,6 +134,7 @@ def build_app() -> FastAPI:
             # Every step is a trace event, and every LLM call is costed (ADR 0047).
             trace=trace,
             pricing=LLMPricing(prices=settings.llm_prices, usd_inr_rate=settings.usd_inr_rate),
+            risk_thresholds=planning.risk_thresholds,
         ),
         llm=build_provider(settings),
         checkpoints=PostgresCheckpoints(settings.database_url),

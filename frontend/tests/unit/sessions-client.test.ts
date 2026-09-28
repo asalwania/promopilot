@@ -9,6 +9,7 @@ import {
 import {
   awaitingApprovalSession,
   infeasibleSession,
+  openIssuesSession,
   SESSION_ID,
 } from "./fixtures/sessions";
 
@@ -121,6 +122,25 @@ describe("getSession", () => {
 
     expect(session).toEqual(infeasibleSession);
     expect(session.plan_revision?.relaxation?.changes[0].relaxed).toBe(214500);
+  });
+
+  it("reads a revision's open issues: violations and the Critic's risk findings", async () => {
+    const { fetchImpl } = recordingFetch(() =>
+      Response.json(openIssuesSession),
+    );
+
+    const session = await getSession(SESSION_ID, fetchImpl);
+
+    expect(session).toEqual(openIssuesSession);
+    expect(
+      session.plan_revision?.open_issues.map((issue) => [
+        issue.kind,
+        issue.code,
+      ]),
+    ).toEqual([
+      ["violation", "BUDGET"],
+      ["risk", "STOCKOUT_RISK"],
+    ]);
   });
 
   it("fails as not found when the API does not know the session", async () => {

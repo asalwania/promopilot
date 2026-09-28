@@ -30,6 +30,7 @@ from promopilot.domain import (
     LineSimulation,
     Mechanism,
     MechanismOutcome,
+    OpenIssue,
     Percentiles,
     PlanExplanation,
     PlanningRequest,
@@ -40,7 +41,6 @@ from promopilot.domain import (
     SelectionReasonCode,
     SimulatedOutcomes,
     SolveStatus,
-    Violation,
 )
 from promopilot.guardrails import (
     LineFacts,
@@ -89,7 +89,7 @@ async def explain_plan(
     request: PlanningRequest,
     policy: CompanyPolicy,
     facts: PlanFacts | None = None,
-    open_issues: tuple[Violation, ...] = (),
+    open_issues: tuple[OpenIssue, ...] = (),
     notes: tuple[str, ...] = (),
 ) -> PlanExplanation:
     """The LLM's grounded explanation of `revision`, or the template's when it cannot give one.
@@ -137,7 +137,7 @@ async def explain_plan(
 
 def template_explanations(
     revision: PlanRevision,
-    open_issues: tuple[Violation, ...] = (),
+    open_issues: tuple[OpenIssue, ...] = (),
     notes: tuple[str, ...] = (),
 ) -> PlanExplanation:
     """The deterministic explanation: only the revision's own numbers, and the planner's notes
@@ -212,7 +212,7 @@ def plan_data(
     request: PlanningRequest,
     policy: CompanyPolicy,
     facts: PlanFacts | None = None,
-    open_issues: tuple[Violation, ...] = (),
+    open_issues: tuple[OpenIssue, ...] = (),
     notes: tuple[str, ...] = (),
 ) -> dict[str, object]:
     """The tool outputs the LLM explains and its numbers are grounded against, every amount
@@ -448,7 +448,7 @@ def _rationale(planned: PlanRevisionLine) -> str:
 
 
 def _summary(
-    revision: PlanRevision, open_issues: tuple[Violation, ...], notes: tuple[str, ...]
+    revision: PlanRevision, open_issues: tuple[OpenIssue, ...], notes: tuple[str, ...]
 ) -> str:
     parts = [f"Plan revision {revision.number}."]
     status = revision.solver_status

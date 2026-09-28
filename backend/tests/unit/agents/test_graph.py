@@ -26,6 +26,7 @@ from promopilot.domain import (
     CompanyPolicy,
     DecisionKind,
     Mechanism,
+    OpenIssue,
     PlanDecision,
     PlanExplanation,
     PlanLine,
@@ -36,7 +37,6 @@ from promopilot.domain import (
     Region,
     SolveStatus,
     TargetSegment,
-    Violation,
     ViolationCode,
 )
 from promopilot.guardrails import LineFacts, PlanFacts, SkuFacts, plan_limits
@@ -117,7 +117,7 @@ class RecordedSessions:
     def __init__(self) -> None:
         self.status: dict[UUID, str] = {}
         self.revisions: dict[UUID, PlanRevision] = {}
-        self.open_issues: dict[tuple[UUID, int], tuple[Violation, ...]] = {}
+        self.open_issues: dict[tuple[UUID, int], tuple[OpenIssue, ...]] = {}
         self.explanations: dict[tuple[UUID, int], PlanExplanation] = {}
         self.decisions: list[PlanDecision] = []
         self.assumptions: dict[UUID, tuple[Assumption, ...]] = {}
@@ -131,7 +131,7 @@ class RecordedSessions:
         self.revisions[session_id] = revision
 
     async def save_open_issues(
-        self, session_id: UUID, revision_number: int, issues: tuple[Violation, ...]
+        self, session_id: UUID, revision_number: int, issues: tuple[OpenIssue, ...]
     ) -> None:
         self.open_issues[session_id, revision_number] = issues
 

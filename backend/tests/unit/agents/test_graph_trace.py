@@ -128,7 +128,8 @@ async def test_each_violation_is_a_finding_and_the_critic_decides_to_list_them(
     findings = [p for p in critic if isinstance(p, FindingRaised)]
     assert [(f.source, f.code) for f in findings] == [("plan_validation", "BUDGET")]
     [decision] = [p for p in critic if isinstance(p, DecisionMade)]
-    assert decision.decision == "open_issues"
+    # The default sequence planned it and would plan it again: no loop-back (ADR 0051).
+    assert decision.decision == "default_sequence"
 
 
 async def test_approving_traces_the_decision_and_the_run_to_done_after_the_pause(
