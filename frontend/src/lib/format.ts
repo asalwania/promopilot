@@ -49,3 +49,39 @@ const priceFormat = new Intl.NumberFormat("en-IN", {
 export function formatPrice(amount: number): string {
   return priceFormat.format(amount);
 }
+
+const tokenFormat = new Intl.NumberFormat("en-IN", {
+  maximumFractionDigits: 0,
+});
+
+// LLM token counts, grouped the Indian way, e.g. 12,34,567.
+export function formatTokens(count: number): string {
+  return tokenFormat.format(count);
+}
+
+const usdFormat = new Intl.NumberFormat("en-US", {
+  style: "currency",
+  currency: "USD",
+  minimumFractionDigits: 4,
+  maximumFractionDigits: 4,
+});
+
+// LLM cost in dollars: a session costs cents, so four decimals, e.g. $0.5081.
+export function formatUsd(amount: number): string {
+  return usdFormat.format(amount);
+}
+
+// How long a graph node ran, e.g. "300 ms", "42.0 s" or "2 min 5 s".
+export function formatDuration(ms: number): string {
+  if (ms < 1000) return `${Math.round(ms)} ms`;
+  if (ms < 60_000) return `${(ms / 1000).toFixed(1)} s`;
+  const seconds = Math.round(ms / 1000);
+  return `${Math.floor(seconds / 60)} min ${seconds % 60} s`;
+}
+
+const clockFormat = new Intl.DateTimeFormat("en-IN", { timeStyle: "medium" });
+
+// The time of day in the browser's time zone, e.g. "3:30:05 pm".
+export function formatClockTime(iso: string): string {
+  return clockFormat.format(new Date(iso));
+}

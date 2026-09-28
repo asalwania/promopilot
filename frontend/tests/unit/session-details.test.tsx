@@ -48,6 +48,14 @@ describe("SessionDetails", () => {
     ).toHaveLength(1 + planLines.length);
   });
 
+  it("shows what the session's LLM calls used and cost", () => {
+    render(<SessionDetails session={awaitingApprovalSession} />);
+
+    const meter = screen.getByRole("region", { name: "LLM usage" });
+    expect(meter).toHaveTextContent("45,210");
+    expect(meter).toHaveTextContent("₹2.02");
+  });
+
   it("shows a failed session with the reason and no spinner", () => {
     render(<SessionDetails session={failedSession} />);
 

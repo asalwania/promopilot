@@ -150,6 +150,14 @@ export const planLines: PlanRevisionLine[] = [
 export const awaitingApprovalSession: SessionResponse = {
   ...planningSession,
   status: "awaiting_approval",
+  usage: {
+    calls: 3,
+    input_tokens: 45_210,
+    output_tokens: 1830,
+    cost_usd: 0.021,
+    cost_inr: 2.02,
+    unpriced_models: [],
+  },
   planning_request: {
     as_of_week: 104,
     scope: {

@@ -3,19 +3,23 @@
 import { useQuery } from "@tanstack/react-query";
 
 import { SessionDetails } from "@/components/session-details";
+import { TraceTimeline } from "@/components/trace-timeline";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getSession, SessionLoadError } from "@/lib/api/sessions";
+import { useTraceStream } from "@/lib/trace-stream";
 
 const POLL_INTERVAL_MS = 1000;
 const MAX_RETRIES = 2;
 
+// The session page's container: it reads the session and its trace stream and
+// hands them to presentational components (ADR 0057).
 export function SessionView({ sessionId }: { sessionId: string }) {
   const query = useQuery({
     queryKey: ["session", sessionId],
     queryFn: () => getSession(sessionId),
     // Poll only while the planner runs and the API answers; every other status
-    // is settled for E3, and a failed read waits for the manager's Retry.
+    // waits for the manager, and a failed read waits for the manager's Retry.
     refetchInterval: ({ state }) =>
       state.status !== "error" && state.data?.status === "planning"
         ? POLL_INTERVAL_MS
@@ -27,8 +31,10 @@ export function SessionView({ sessionId }: { sessionId: string }) {
   if (isNotFound(query.error)) {
     return <Notice title="Session not found" />;
   }
+
+  let main: React.ReactNode;
   if (query.error) {
-    return (
+    main = (
       <Notice title="Couldn't load the session">
         <CardContent className="flex items-center justify-between gap-4">
           <p className="text-muted-foreground text-sm">{query.error.message}</p>
@@ -42,9 +48,28 @@ export function SessionView({ sessionId }: { sessionId: string }) {
         </CardContent>
       </Notice>
     );
+  } else if (query.data) {
+    main = <SessionDetails session={query.data} />;
+  } else {
+    main = <Notice title="Loading session…" />;
   }
-  if (query.data) return <SessionDetails session={query.data} />;
-  return <Notice title="Loading session…" />;
+
+  // Left: the live trace (SPEC §11), sticky so it stays in view; main: the session.
+  return (
+    <div className="grid w-full grid-cols-[minmax(320px,380px)_minmax(0,1fr)] items-start gap-6">
+      <div className="sticky top-4 flex max-h-[calc(100vh-2rem)] flex-col">
+        <LiveTrace sessionId={sessionId} />
+      </div>
+      <div className="flex min-w-0 flex-col gap-4">{main}</div>
+    </div>
+  );
+}
+
+function LiveTrace({ sessionId }: { sessionId: string }) {
+  const { events, connection, retry } = useTraceStream(sessionId);
+  return (
+    <TraceTimeline events={events} connection={connection} onRetry={retry} />
+  );
 }
 
 function isNotFound(error: unknown): boolean {

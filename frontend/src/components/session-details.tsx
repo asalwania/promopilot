@@ -2,6 +2,7 @@ import { LoaderCircle } from "lucide-react";
 
 import { PlanTable } from "@/components/plan-table";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { UsageMeter } from "@/components/usage-meter";
 import type {
   ClarificationQuestion,
   PlanDecision,
@@ -50,6 +51,7 @@ export function SessionDetails({ session }: { session: Session }) {
           )}
         </CardContent>
       </Card>
+      <UsageMeter usage={session.usage} />
       {session.planning_request && (
         <PlanningRequestSummary request={session.planning_request} />
       )}

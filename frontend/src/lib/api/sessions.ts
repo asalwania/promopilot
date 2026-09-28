@@ -412,6 +412,7 @@ export const sessionSchema = z.object({
 
 export type Session = z.infer<typeof sessionSchema>;
 export type SessionStatus = Session["status"];
+export type SessionUsage = Session["usage"];
 export type PlanRevisionLine = z.infer<typeof planRevisionLineSchema>;
 export type PlanningRequest = z.infer<typeof planningRequestSchema>;
 export type PlanDecision = z.infer<typeof planDecisionSchema>;
