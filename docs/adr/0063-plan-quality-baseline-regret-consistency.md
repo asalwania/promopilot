@@ -54,4 +54,19 @@ SPEC §12, #11 and #53 leave open how both comparison plans are built, what regr
 - **Additive changes:** `RunResult.quality`, `ScenarioResult.consistency` and `RevisionSummary.sku_ids`.
 - There is no migration, no API contract change and no new configuration.
 - On the small test world, the best plan's own objective is within 0.1% of the oracle's score of it. That is the check that it plans on the true demand. It also beats the plan the fitted models choose for the same request.
-- **Timing:** RUNTIME
+- **Timing,** on the seed-42 world for the e2e request (Snacks and Beverages, North and West, weeks 108–109, ₹2 lakh):
+  - the rule-based baseline takes about 1.4 s;
+  - the best plan takes about 29 s: true-parameter option generation, then an OPTIMAL solve over 1,923 eligible options;
+  - both are paid once per distinct (seed, request).
+- **The first run** (`make eval`, replay, the three starter scenarios) took 642 s against ADR 0056's "about 10 minutes":
+  - the two Diwali scenarios end on the same request and share one computation;
+  - the demo's final revision is infeasible, so it is not scored.
+
+  The results:
+  - both scored plans (₹1.43 lakh by the oracle) beat the baseline (5 of its 10 sellers fit the budget, and it loses ₹63,025 in truth);
+  - regret is 9.3% against the best plan's ₹1.58 lakh (35 lines);
+  - plan quality is 2 of 2 and median regret 9.3%, both passing;
+  - consistency is not scored at one run.
+- **At 30 scenarios** (#56), the benchmarks add about 30 s for each distinct request, roughly 15 minutes. `RUNS=5` multiplies session time by 5 but not the benchmarks.
+- **#57's smoke eval** gains about 30 s per distinct request.
+- The runner's unit tests on the small world gain a few seconds, at about 3 s per best plan.
