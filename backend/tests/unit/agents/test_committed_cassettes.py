@@ -1,28 +1,70 @@
-"""The committed cassettes answer every committed brief, so CI and the demo need no API key."""
+"""The committed cassettes are the recording of every committed session script, so CI and the
+demo need no API key (ADR 0022, ADR 0054).
 
-import json
+These checks need no trained model: the manifest lists what each session called, and every
+Context reading a session makes replays over the default world. A miss here means a prompt, a
+schema, the calendar or a script changed: `make record-cassettes`. The images job replays the
+whole sessions on the composed stack (`python -m promopilot.cassettes --check`).
+"""
+
 from pathlib import Path
 
 import pytest
 
-from promopilot.agents import read_planning_request
+from promopilot.agents import SessionScript, load_scripts, manifest_problems, read_context
 from promopilot.datagen import GeneratedDataset
+from promopilot.domain import Clarification, CompanyPolicy
 from promopilot.llm import ReplayProvider
 from tests.unit.agents.fakes import InMemoryRetailData
 
 CASSETTE_DIR = Path(__file__).parents[3] / "cassettes"
-BRIEFS = json.loads((CASSETTE_DIR / "briefs.json").read_text(encoding="utf-8"))
+SCRIPTS = load_scripts(CASSETTE_DIR / "sessions.json")
 
 
-@pytest.mark.parametrize("brief", BRIEFS)
-async def test_a_committed_brief_replays_to_a_planning_request_over_the_default_world(
-    brief: str, default_dataset: GeneratedDataset
+def test_the_manifest_lists_every_session_as_scripted_and_every_cassette_it_called() -> None:
+    assert manifest_problems(SCRIPTS, CASSETTE_DIR) == []
+
+
+def test_the_demo_the_e2e_journey_and_a_clarification_are_scripted() -> None:
+    assert {"demo", "e2e", "clarify"} <= {script.name for script in SCRIPTS}
+    assert any(step.answers for script in SCRIPTS for step in script.steps)
+    assert any(step.amend for script in SCRIPTS for step in script.steps)
+
+
+@pytest.mark.parametrize("script", SCRIPTS, ids=[script.name for script in SCRIPTS])
+async def test_every_context_reading_of_a_session_replays_over_the_default_world(
+    script: SessionScript, default_dataset: GeneratedDataset
 ) -> None:
-    # A miss here means a prompt, schema or the default world changed: `make record-cassettes`.
-    # Planning after the reading calls no LLM (ADR 0038).
-    request = await read_planning_request(
-        brief, ReplayProvider(CASSETTE_DIR), InMemoryRetailData(default_dataset)
+    # As the graph reads it: the brief, then again after each answer or amendment (ADR 0048,
+    # ADR 0052). A miss raises, as the reading is strict here (ADR 0053).
+    replay, data, policy = (
+        ReplayProvider(CASSETTE_DIR),
+        InMemoryRetailData(default_dataset),
+        CompanyPolicy(),
     )
+    clarifications: tuple[Clarification, ...] = ()
+    amendments: tuple[str, ...] = ()
+    reading = await read_context(script.brief, replay, data, policy=policy)
+    for step in script.steps:
+        if step.approve:
+            continue
+        if step.answers is not None:
+            assert {q.id for q in reading.questions} == set(step.answers)
+            clarifications += tuple(
+                Clarification(question=q, answer=step.answers[q.id]) for q in reading.questions
+            )
+        else:
+            assert reading.request is not None
+            amendments += (step.amend or "",)
+        reading = await read_context(
+            script.brief,
+            replay,
+            data,
+            policy=policy,
+            clarifications=clarifications,
+            amendments=amendments,
+        )
 
-    assert request.scope.regions
-    assert request.marketing_budget > 0
+    assert reading.questions == ()
+    assert reading.request is not None
+    assert reading.request.marketing_budget > 0

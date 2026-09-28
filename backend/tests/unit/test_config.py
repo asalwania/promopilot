@@ -165,3 +165,52 @@ def test_the_optimisers_work_budgets_reach_the_solver_settings(
         patched.setenv("OPTIMIZER_DETERMINISTIC_LIMIT", "0")
         with pytest.raises(ValidationError):
             Settings()
+
+
+def test_the_planning_settings_a_recording_depends_on_come_from_the_environment(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # What the LLM is shown depends on these, so a recording notes them and the check compares
+    # them with the replaying stack's (ADR 0054).
+    for name in RECORDED:
+        monkeypatch.delenv(name.upper(), raising=False)
+    monkeypatch.setenv("SIMULATION_RUNS", "200")
+    monkeypatch.setenv("CRITIC_STOCKOUT_PROBABILITY", "0.1")
+    engine = create_async_engine("postgresql+asyncpg://unused@127.0.0.1:1/unused")
+
+    planning = build_planning(Settings(), engine)
+
+    assert set(planning.recorded_settings) == set(RECORDED)
+    assert planning.recorded_settings == {
+        "optimizer_time_limit_seconds": 10.0,
+        "optimizer_workers": 1,
+        "optimizer_seed": 0,
+        "optimizer_binding_time_limit_seconds": 8.0,
+        "optimizer_relaxation_time_limit_seconds": 10.0,
+        "simulation_runs": 200,
+        "simulation_seed": 0,
+        "critic_line_spend_share": 0.25,
+        "critic_group_spend_share": 0.8,
+        "critic_cannibalisation_share": 0.5,
+        "critic_stockout_probability": 0.1,
+    }
+    recorded = planning.recorded()
+    assert recorded.settings == planning.recorded_settings
+    assert recorded.risk_thresholds == planning.risk_thresholds
+    assert recorded.policy == planning.policy
+    assert recorded.default is planning.planner
+
+
+RECORDED = (
+    "optimizer_time_limit_seconds",
+    "optimizer_workers",
+    "optimizer_seed",
+    "optimizer_binding_time_limit_seconds",
+    "optimizer_relaxation_time_limit_seconds",
+    "simulation_runs",
+    "simulation_seed",
+    "critic_line_spend_share",
+    "critic_group_spend_share",
+    "critic_cannibalisation_share",
+    "critic_stockout_probability",
+)

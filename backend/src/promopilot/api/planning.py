@@ -7,10 +7,11 @@ the ones a session replays.
 """
 
 from dataclasses import dataclass
+from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncEngine
 
-from promopilot.agents import AgentTools, OptimisingPlanner, StoredRevisions
+from promopilot.agents import AgentTools, OptimisingPlanner, RecordedPlanning, StoredRevisions
 from promopilot.agents.tools import ToolRegistry
 from promopilot.agents.tools.compare_mechanisms import compare_mechanisms_tool
 from promopilot.agents.tools.estimate_demand import estimate_demand_tool
@@ -52,6 +53,9 @@ class Planning:
     """Every SPEC §9.6 tool, which the planner agent is offered (ADR 0049)."""
     risk_thresholds: RiskThresholds
     """When the Critic's risk review flags a plan (`CRITIC_*`, ADR 0051)."""
+    recorded_settings: dict[str, Any]
+    """The settings that shape what the LLM is shown: a recording notes them, and a stack
+    that plans with others cannot replay it (ADR 0054)."""
 
     @property
     def agent(self) -> AgentTools:
@@ -59,6 +63,16 @@ class Planning:
         its `run_optimizer` solved."""
         return AgentTools(
             tools=self.tools, revisions=StoredRevisions(self.candidates, self.planner)
+        )
+
+    def recorded(self) -> RecordedPlanning:
+        """What `make record-cassettes` and its check play the session scripts with."""
+        return RecordedPlanning(
+            agent=self.agent,
+            default=self.planner,
+            policy=self.policy,
+            risk_thresholds=self.risk_thresholds,
+            settings=self.recorded_settings,
         )
 
 
@@ -131,4 +145,22 @@ def build_planning(settings: Settings, engine: AsyncEngine) -> Planning:
             cannibalisation_share=settings.critic_cannibalisation_share,
             stockout_probability=settings.critic_stockout_probability,
         ),
+        recorded_settings=settings.model_dump(include=RECORDED_SETTINGS),
     )
+
+
+RECORDED_SETTINGS = {
+    "optimizer_time_limit_seconds",
+    "optimizer_workers",
+    "optimizer_seed",
+    "optimizer_binding_time_limit_seconds",
+    "optimizer_relaxation_time_limit_seconds",
+    "simulation_runs",
+    "simulation_seed",
+    "critic_line_spend_share",
+    "critic_group_spend_share",
+    "critic_cannibalisation_share",
+    "critic_stockout_probability",
+}
+"""What a plan, and so every Critic and Explainer request, depends on besides the data and the
+models (ADR 0054)."""

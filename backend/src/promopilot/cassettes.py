@@ -1,62 +1,109 @@
-"""`python -m promopilot.cassettes`: re-record the LLM cassettes with a live provider.
+"""`python -m promopilot.cassettes`: record the LLM cassettes live, or check they replay.
 
-`make record-cassettes` reads every brief in `cassettes/briefs.json` through the provider named
-by LLM_PROVIDER, against the data loaded in Postgres (`make data`), then plans it with the
-planner agent on the trained models (`make train`), so its tool-calling turns are recorded too.
-It replaces the cassettes only if every brief becomes a planning request and the planner agent
-plans it (ADR 0019, ADR 0038, ADR 0049).
+`make record-cassettes` plays every session script in `cassettes/sessions.json` through the full
+agent graph on the provider named by LLM_PROVIDER, against the data loaded in Postgres
+(`make data`) and the trained models (`make train`), and records every LLM request. It changes
+the cassettes only if every session plays as scripted with nothing falling back; `--only NAME`
+re-records just the named sessions and keeps the others (ADR 0019, ADR 0022, ADR 0054).
+
+`--check` plays the same scripts on the cassettes alone, whatever LLM_PROVIDER says, and exits
+non-zero naming every miss or fallback, so CI proves the stack replays whole sessions with no
+key (ADR 0054).
 """
 
 import argparse
 import asyncio
-import json
+import io
 import sys
 from collections.abc import Sequence
 from pathlib import Path
 
 from sqlalchemy.ext.asyncio import create_async_engine
 
-from promopilot.agents import PlanningError, RecordedPlanning, RecordingError, record_cassettes
+from promopilot.agents import (
+    CassetteManifest,
+    PlanningError,
+    RecordingError,
+    check_cassettes,
+    load_scripts,
+    record_cassettes,
+)
 from promopilot.api.planning import build_planning
 from promopilot.config import Settings
-from promopilot.llm import build_provider, cassette_paths
+from promopilot.llm import build_provider, track_usage
 
 
 async def run(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="python -m promopilot.cassettes", description=__doc__)
-    parser.add_argument("--briefs", type=Path, default=Path("cassettes/briefs.json"))
+    parser.add_argument("--sessions", type=Path, default=Path("cassettes/sessions.json"))
+    parser.add_argument(
+        "--only", action="append", metavar="NAME", help="re-record only this session (repeatable)"
+    )
+    parser.add_argument(
+        "--check", action="store_true", help="replay every session from the cassettes alone"
+    )
     args = parser.parse_args(argv)
 
     settings = Settings()
-    if settings.llm_provider in ("replay", "fake"):
+    if not args.check and settings.llm_provider in ("replay", "fake"):
         print(
             f"recording needs a live provider, not LLM_PROVIDER={settings.llm_provider}",
             file=sys.stderr,
         )
         return 2
-    briefs = json.loads(args.briefs.read_text(encoding="utf-8"))
+    scripts = load_scripts(args.sessions)
     engine = create_async_engine(settings.database_url)
-    planning = build_planning(settings, engine)
+    stack = build_planning(settings, engine)
+    planning, data = stack.recorded(), stack.data
     try:
-        results = await record_cassettes(
-            briefs,
-            build_provider(settings),
-            planning.data,
-            settings.llm_cassette_dir,
-            planning=RecordedPlanning(planning.agent, planning.planner),
-        )
+        if args.check:
+            problems = await check_cassettes(scripts, data, settings.llm_cassette_dir, planning)
+            for problem in problems:
+                print(problem, file=sys.stderr)
+            if problems:
+                return 1
+            print(f"every session in {args.sessions} replays from {settings.llm_cassette_dir}")
+            return 0
+        with track_usage() as meter:
+            manifest = await record_cassettes(
+                scripts,
+                build_provider(settings),
+                data,
+                settings.llm_cassette_dir,
+                planning,
+                only=args.only,
+            )
     except (RecordingError, PlanningError, LookupError, ValueError) as error:
-        print(f"no cassettes changed: {error}", file=sys.stderr)
+        print(f"{error}", file=sys.stderr)
         return 1
     finally:
         await engine.dispose()
-    for brief, request in zip(briefs, results, strict=True):
-        print(f"{request.model_dump_json()} for {brief!a}")
-    print(f"recorded {len(cassette_paths(settings.llm_cassette_dir))} cassettes")
+    _report(manifest)
+    totals = meter.totals(settings.llm_prices, usd_inr_rate=settings.usd_inr_rate)
+    print(
+        f"{totals.calls} live calls, {totals.input_tokens} input and {totals.output_tokens} "
+        f"output tokens, ${totals.cost_usd:.2f} (INR {totals.cost_inr:.0f})"
+    )
     return 0
 
 
+def _report(manifest: CassetteManifest) -> None:
+    for name, session in manifest.sessions.items():
+        revisions = ", ".join(
+            f"revision {revision.number} ({revision.explanation})" for revision in session.revisions
+        )
+        print(
+            f"{name}: {' -> '.join(session.route)}; {len(session.cassettes)} cassettes; {revisions}"
+        )
+    cassettes = {digest for session in manifest.sessions.values() for digest in session.cassettes}
+    print(f"recorded {len(cassettes)} cassettes and the manifest")
+
+
 def main(argv: Sequence[str] | None = None) -> int:
+    # Briefs and questions carry ₹: never let a Windows console's code page stop the report.
+    for stream in (sys.stdout, sys.stderr):
+        if isinstance(stream, io.TextIOWrapper):
+            stream.reconfigure(errors="replace")
     return asyncio.run(run(argv))
 
 
