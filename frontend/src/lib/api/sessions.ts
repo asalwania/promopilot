@@ -387,8 +387,6 @@ export const planningRequestSchema = z.object({
   max_promoted_skus_per_category_per_region: z.number().nullable().optional(),
 }) satisfies z.ZodType<Schemas["PlanningRequest"]>;
 
-// What a session's LLM calls used and cost: the sums of its token-usage trace
-// events (ADR 0047).
 // A change to the planning request, kept oldest first (ADR 0052).
 export const amendmentSchema = z.object({
   text: z.string(),
@@ -397,6 +395,8 @@ export const amendmentSchema = z.object({
   amended_at: z.string(),
 }) satisfies z.ZodType<Schemas["Amendment"]>;
 
+// What a session's LLM calls used and cost: the sums of its token-usage trace
+// events (ADR 0047).
 const sessionUsageSchema = z.object({
   calls: z.number(),
   input_tokens: z.number(),
@@ -443,6 +443,9 @@ export type PlanDecision = z.infer<typeof planDecisionSchema>;
 export type ClarificationQuestion = z.infer<typeof clarificationQuestionSchema>;
 export type Clarification = z.infer<typeof clarificationSchema>;
 export type Assumption = z.infer<typeof assumptionSchema>;
+export type Amendment = z.infer<typeof amendmentSchema>;
+export type RevisionDiff = z.infer<typeof revisionDiffSchema>;
+export type LineChange = RevisionDiff["changed"][number];
 
 export type CreateSessionResult =
   { ok: true; sessionId: string } | { ok: false; reason: string };
@@ -487,38 +490,103 @@ async function validationMessage(response: Response): Promise<string> {
   return parsed.success ? parsed.data.detail[0].msg : "HTTP 422";
 }
 
-export type ClarifyResult =
+// What a session action (clarify, amend, approve, reject) answered: the session as
+// the API now holds it, or why it failed. A conflict (409) means the session moved on,
+// so the page reloads it (ADR 0061 D9, ADR 0066).
+export type SessionActionResult =
   | { ok: true; session: Session }
   | { ok: false; reason: string; conflict: boolean };
 
+export type ClarifyResult = SessionActionResult;
+
 // Answers every open question by its id (ADR 0048). A 202 carries the session, back
 // in `planning`; a 409 means the questions were already answered (ADR 0061).
-export async function clarifySession(
+export function clarifySession(
   sessionId: string,
   answers: Record<string, string>,
   fetchImpl: typeof fetch = fetch,
-): Promise<ClarifyResult> {
+): Promise<SessionActionResult> {
+  return postSessionAction(sessionId, "clarify", { answers }, fetchImpl, {
+    conflictReason: "These questions were already answered.",
+  });
+}
+
+// An amendment in the manager's words, or accepting the latest revision's smallest
+// relaxation (ADR 0044, ADR 0052 D7).
+export type AmendInput = { text: string } | { acceptRelaxation: true };
+
+// Amends the planning request of a session awaiting approval, or rejected (ADR 0052).
+// A 202 carries the session, back in `planning`, while the new revision is planned.
+export function amendSession(
+  sessionId: string,
+  amendment: AmendInput,
+  fetchImpl: typeof fetch = fetch,
+): Promise<SessionActionResult> {
+  const body =
+    "text" in amendment
+      ? { text: amendment.text }
+      : { accept_relaxation: true };
+  return postSessionAction(sessionId, "amend", body, fetchImpl);
+}
+
+// Approves the shown plan revision, which must be the latest (ADR 0046 D7); the
+// session is then final.
+export function approveSession(
+  sessionId: string,
+  revisionNumber: number,
+  fetchImpl: typeof fetch = fetch,
+): Promise<SessionActionResult> {
+  return postSessionAction(
+    sessionId,
+    "approve",
+    { revision_number: revisionNumber },
+    fetchImpl,
+  );
+}
+
+// Rejects the shown plan revision with a reason; the session stays open for an
+// amendment (ADR 0046 D9).
+export function rejectSession(
+  sessionId: string,
+  revisionNumber: number,
+  reason: string,
+  fetchImpl: typeof fetch = fetch,
+): Promise<SessionActionResult> {
+  return postSessionAction(
+    sessionId,
+    "reject",
+    { revision_number: revisionNumber, reason },
+    fetchImpl,
+  );
+}
+
+// Posts one action to the same-origin proxy. Every action answers with the session;
+// a failure carries the API's `detail`, or a fixed conflict reason when given.
+async function postSessionAction(
+  sessionId: string,
+  action: "clarify" | "amend" | "approve" | "reject",
+  body: unknown,
+  fetchImpl: typeof fetch,
+  { conflictReason }: { conflictReason?: string } = {},
+): Promise<SessionActionResult> {
   try {
     const response = await fetchImpl(
-      `/api/sessions/${encodeURIComponent(sessionId)}/clarify`,
+      `/api/sessions/${encodeURIComponent(sessionId)}/${action}`,
       {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ answers }),
+        body: JSON.stringify(body),
       },
     );
-    if (response.status === 409) {
-      return {
-        ok: false,
-        conflict: true,
-        reason: "These questions were already answered.",
-      };
-    }
     if (!response.ok) {
+      const conflict = response.status === 409;
       return {
         ok: false,
-        conflict: false,
-        reason: await detailMessage(response),
+        conflict,
+        reason:
+          conflict && conflictReason
+            ? conflictReason
+            : await detailMessage(response),
       };
     }
     const parsed = sessionSchema.safeParse(await response.json());

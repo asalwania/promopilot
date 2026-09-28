@@ -7,9 +7,13 @@ import type { Session } from "@/lib/api/sessions";
 
 import { FakeEventSource } from "./fixtures/fake-event-source";
 import {
+  amendedSession,
+  approvedSession,
   awaitingApprovalSession,
   awaitingClarificationSession,
   planningSession,
+  rejectedSession,
+  replanningSession,
   SESSION_ID,
   undercutGaps,
 } from "./fixtures/sessions";
@@ -319,4 +323,164 @@ describe("SessionView", () => {
     await advance(10_000);
     expect(within(north).queryByText("Undercut")).not.toBeInTheDocument();
   });
+
+  it("shows the re-planning at once after an amendment, then the new revision's diff", async () => {
+    const posted = stubActionApi(
+      [awaitingApprovalSession, replanningSession, amendedSession],
+      { amend: () => Response.json(replanningSession, { status: 202 }) },
+    );
+
+    renderSessionView();
+    expect(await screen.findByText("Awaiting approval")).toBeInTheDocument();
+    fireEvent.change(screen.getByRole("textbox", { name: "Amend the brief" }), {
+      target: { value: "Budget cut to ₹1.5 lakh" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Amend and re-plan" }));
+
+    // The 202 carries the session back in planning: the review goes at once.
+    expect(await screen.findByText("Planning…")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("region", { name: /^Review plan revision/ }),
+    ).not.toBeInTheDocument();
+    expect(posted).toEqual([
+      { action: "amend", body: { text: "Budget cut to ₹1.5 lakh" } },
+    ]);
+
+    await advance(1000);
+    await advance(1000);
+    expect(
+      await screen.findByRole("region", {
+        name: "What changed from plan revision 1",
+      }),
+    ).toBeVisible();
+    expect(screen.getByText("Awaiting approval")).toBeInTheDocument();
+  });
+
+  it("approves the shown revision and shows the session as final", async () => {
+    const posted = stubActionApi([awaitingApprovalSession], {
+      approve: () => Response.json(approvedSession),
+    });
+
+    renderSessionView();
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Approve plan revision 1" }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Confirm approval" }));
+
+    expect(await screen.findByText("Final")).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("Approved");
+    expect(
+      screen.queryByRole("region", { name: /^Review plan revision/ }),
+    ).not.toBeInTheDocument();
+    expect(posted).toEqual([
+      { action: "approve", body: { revision_number: 1 } },
+    ]);
+  });
+
+  it("rejects with the reason and keeps the session open for an amendment", async () => {
+    const posted = stubActionApi([awaitingApprovalSession], {
+      reject: () => Response.json(rejectedSession),
+    });
+
+    renderSessionView();
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Reject plan revision 1" }),
+    );
+    fireEvent.change(
+      screen.getByRole("textbox", {
+        name: "Why are you rejecting plan revision 1?",
+      }),
+      { target: { value: "Too deep on Beverages in West." } },
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Send rejection" }));
+
+    expect(await screen.findByText("Rejected")).toBeInTheDocument();
+    expect(screen.getByRole("form", { name: "Amend the brief" })).toBeVisible();
+    expect(posted).toEqual([
+      {
+        action: "reject",
+        body: { revision_number: 1, reason: "Too deep on Beverages in West." },
+      },
+    ]);
+  });
+
+  it("shows the API's reason for a conflict and reloads the session", async () => {
+    stubActionApi([awaitingApprovalSession, approvedSession], {
+      reject: () =>
+        Response.json(
+          {
+            detail:
+              "the session is approved: only a session awaiting approval can be rejected",
+          },
+          { status: 409 },
+        ),
+    });
+
+    renderSessionView();
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Reject plan revision 1" }),
+    );
+    fireEvent.change(
+      screen.getByRole("textbox", {
+        name: "Why are you rejecting plan revision 1?",
+      }),
+      { target: { value: "Too deep." } },
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Send rejection" }));
+
+    // Reloaded, the session is approved elsewhere: final, with nothing to decide.
+    expect(await screen.findByText("Final")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("region", { name: /^Review plan revision/ }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("keeps the review and shows the reason when a conflict leaves the session as it was", async () => {
+    stubActionApi([awaitingApprovalSession], {
+      approve: () =>
+        Response.json(
+          {
+            detail: "plan revision 1 is not the session's latest plan revision",
+          },
+          { status: 409 },
+        ),
+    });
+
+    renderSessionView();
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Approve plan revision 1" }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Confirm approval" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Couldn't approve plan revision 1: plan revision 1 is not the session's latest plan revision",
+    );
+  });
 });
+
+// Reads take the next session in turn (the last repeats); a POST to an action takes
+// that action's answer. Returns what was posted, in order.
+function stubActionApi(
+  reads: Session[],
+  actions: Partial<Record<"amend" | "approve" | "reject", () => Response>>,
+) {
+  const posted: Array<{ action: string; body: unknown }> = [];
+  let read = 0;
+  vi.stubGlobal(
+    "fetch",
+    async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.startsWith("/api/competitors/gaps")) {
+        return Response.json({ detail: "no gaps here" }, { status: 404 });
+      }
+      const action = url.split("/").pop() as keyof typeof actions;
+      if (init?.method === "POST" && actions[action]) {
+        posted.push({ action, body: JSON.parse(String(init.body)) });
+        return actions[action]();
+      }
+      read += 1;
+      return Response.json(reads[Math.min(read, reads.length) - 1]);
+    },
+  );
+  return posted;
+}

@@ -4,6 +4,8 @@ import { describe, expect, it, vi } from "vitest";
 import { SessionDetails } from "@/components/session-details";
 
 import {
+  amendedSession,
+  approvedAfterAmendmentSession,
   approvedSession,
   awaitingApprovalSession,
   awaitingClarificationSession,
@@ -13,6 +15,7 @@ import {
   planLines,
   planningSession,
   rejectedSession,
+  replanningSession,
   undercutGaps,
 } from "./fixtures/sessions";
 
@@ -227,5 +230,182 @@ describe("SessionDetails", () => {
     expect(
       screen.queryByText(/was (approved|rejected)/),
     ).not.toBeInTheDocument();
+  });
+
+  it("offers the manager's decision on the revision awaiting approval", async () => {
+    const approve = vi.fn(async () => ({ ok: true as const }));
+    render(
+      <SessionDetails
+        session={awaitingApprovalSession}
+        actions={{ approve }}
+      />,
+    );
+
+    const review = screen.getByRole("region", {
+      name: "Review plan revision 1",
+    });
+    fireEvent.click(
+      within(review).getByRole("button", { name: "Approve plan revision 1" }),
+    );
+    fireEvent.click(
+      within(review).getByRole("button", { name: "Confirm approval" }),
+    );
+
+    await vi.waitFor(() => expect(approve).toHaveBeenCalledWith(1));
+  });
+
+  it("sends a rejection's reason and an amendment through the page's actions", async () => {
+    const reject = vi.fn(async () => ({ ok: true as const }));
+    const amend = vi.fn(async () => ({ ok: true as const }));
+    render(
+      <SessionDetails
+        session={awaitingApprovalSession}
+        actions={{ reject, amend }}
+      />,
+    );
+
+    fireEvent.change(screen.getByRole("textbox", { name: "Amend the brief" }), {
+      target: { value: "Drop West" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Amend and re-plan" }));
+    await vi.waitFor(() =>
+      expect(amend).toHaveBeenCalledWith({ text: "Drop West" }),
+    );
+    // Once the amendment is sent, the other actions are free again.
+    await vi.waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "Reject plan revision 1" }),
+      ).toBeEnabled(),
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Reject plan revision 1" }),
+    );
+    fireEvent.change(
+      screen.getByRole("textbox", {
+        name: "Why are you rejecting plan revision 1?",
+      }),
+      { target: { value: "Too deep." } },
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Send rejection" }));
+    await vi.waitFor(() => expect(reject).toHaveBeenCalledWith(1, "Too deep."));
+  });
+
+  it("keeps a rejected session open for an amendment only", () => {
+    render(<SessionDetails session={rejectedSession} />);
+
+    const review = screen.getByRole("region", {
+      name: "Review plan revision 1",
+    });
+    expect(
+      within(review).getByRole("form", { name: "Amend the brief" }),
+    ).toBeVisible();
+    expect(
+      within(review).queryByRole("button", { name: /^(Approve|Reject) / }),
+    ).not.toBeInTheDocument();
+    expect(
+      within(screen.getByRole("list", { name: "Audit trail" })).getByRole(
+        "listitem",
+      ),
+    ).toHaveTextContent(
+      "Rejected plan revision 1: Too deep on Beverages in West.",
+    );
+  });
+
+  it("shows an approved session as final and read-only, with its audit trail", () => {
+    render(<SessionDetails session={approvedAfterAmendmentSession} />);
+
+    const status = screen.getByRole("status");
+    expect(status).toHaveTextContent("Approved");
+    expect(status).toHaveTextContent("Final");
+    expect(
+      screen.getByText(
+        "This plan is final: it can no longer be amended, approved or rejected.",
+      ),
+    ).toBeVisible();
+    expect(
+      screen.queryByRole("region", { name: /^Review plan revision/ }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("form", { name: "Amend the brief" }),
+    ).not.toBeInTheDocument();
+    expect(
+      within(screen.getByRole("list", { name: "Audit trail" })).getAllByRole(
+        "listitem",
+      ),
+    ).toHaveLength(3);
+  });
+
+  it("offers no decision while planning, awaiting clarification or failed", () => {
+    for (const session of [
+      planningSession,
+      replanningSession,
+      awaitingClarificationSession,
+      failedSession,
+    ]) {
+      const { unmount } = render(<SessionDetails session={session} />);
+      expect(
+        screen.queryByRole("region", { name: /^Review plan revision/ }),
+      ).not.toBeInTheDocument();
+      unmount();
+    }
+  });
+
+  it("keeps the previous revision visible under a note while re-planning an amendment", () => {
+    render(<SessionDetails session={replanningSession} />);
+
+    expect(screen.getByRole("status")).toHaveTextContent("Planning…");
+    expect(
+      screen.getByText(
+        "Re-planning after your amendment “Budget cut to ₹1.5 lakh”: showing plan revision 1 until the new one is ready.",
+      ),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("table", { name: "Plan lines in North" }),
+    ).toBeVisible();
+  });
+
+  it("shows what changed from the previous revision above the region tabs", () => {
+    render(<SessionDetails session={amendedSession} />);
+
+    const diff = screen.getByRole("region", {
+      name: "What changed from plan revision 1",
+    });
+    expect(diff).toHaveTextContent(
+      "After your amendment “Budget cut to ₹1.5 lakh”",
+    );
+    expect(
+      within(diff).getByRole("table", { name: "Removed plan lines" }),
+    ).toHaveTextContent("SKU0011");
+    expect(
+      diff.compareDocumentPosition(
+        screen.getByRole("tablist", { name: "Plan regions" }),
+      ) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it("shows no diff for a first revision", () => {
+    render(<SessionDetails session={awaitingApprovalSession} />);
+
+    expect(
+      screen.queryByRole("region", { name: /^What changed from/ }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("opens a new revision on its first region, whatever tab the last one showed", () => {
+    const { rerender } = render(
+      <SessionDetails session={awaitingApprovalSession} />,
+    );
+    fireEvent.click(screen.getByRole("tab", { name: "Compare regions" }));
+    expect(
+      screen.getByRole("tab", { name: "Compare regions" }),
+    ).toHaveAttribute("aria-selected", "true");
+
+    rerender(<SessionDetails session={amendedSession} />);
+
+    expect(screen.getByRole("tab", { name: /^North/ })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
   });
 });
