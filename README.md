@@ -15,7 +15,7 @@ make setup   # creates .env from .env.example, installs backend + frontend deps,
 make dev     # Postgres in Docker; API on :8000 and web on :3000 with hot reload
 ```
 
-Open http://localhost:3000. Type a brief and click **Plan it**. The app starts a planning session and opens `/sessions/<id>`. That page polls the session every second while it is `planning`. It then shows the planning request the agent read and the plan table, or the reason the session failed (ADR 0021). The home page also fetches `/api/health` from its own origin and shows the database status.
+Open http://localhost:3000. Type a brief and click **Plan it**. The app starts a planning session and opens `/sessions/<id>`. That page polls the session every second while it is `planning`. It then shows the planning request the agent read and the plan table, or the reason the session failed (ADR 0021). Beside it, a live **agent trace** streams every step from `/api/sessions/<id>/events`: each node run (Context agent, Planner and its attempts, Critic, Explainer, Approval) with its tool calls, decisions, findings, clarification questions and LLM calls. After a network blip it resumes where it left off, with no event shown twice. An **LLM usage** meter shows the session's calls, tokens and cost in rupees and dollars (ADR 0057). The home page also fetches `/api/health` from its own origin and shows the database status.
 
 The **Models** link in the header opens `/models`. It lists every registered model version, one table per kind, with its training time, as-of week and metrics, and marks the live one. **Retrain** calls `POST /api/models/retrain` and shows the elapsed time until the new version is live, then reloads the list; a failure shows the API's reason (ADR 0030).
 
@@ -35,7 +35,7 @@ docker compose exec api python -m promopilot.datagen --out /tmp/data --load   # 
 docker compose exec api python -m promopilot.models   # train and register the demand and relations models, about two minutes
 ```
 
-The Docker stack needs no API key. Compose runs the api with `LLM_PROVIDER=replay` and the cassettes baked into its image, whatever `.env` says (ADR 0022). CI runs exactly these steps, replays every recorded session from the cassettes alone (`python -m promopilot.cassettes --check`, ADR 0054), then Playwright types the `e2e` brief from `backend/cassettes/sessions.json`, clicks **Plan it**, waits for the plan table and checks that the Explainer's recorded answer explains it.
+The Docker stack needs no API key. Compose runs the api with `LLM_PROVIDER=replay` and the cassettes baked into its image, whatever `.env` says (ADR 0022). CI runs exactly these steps, replays every recorded session from the cassettes alone (`python -m promopilot.cassettes --check`, ADR 0054), then Playwright types the `e2e` brief from `backend/cassettes/sessions.json`, clicks **Plan it**, waits for the plan table, checks that the live trace shows the agent's node runs, tool calls and Critic decision and that the usage meter counts the replayed calls, and checks that the Explainer's recorded answer explains the plan.
 
 ## Commands
 
@@ -46,7 +46,7 @@ The Docker stack needs no API key. Compose runs the api with `LLM_PROVIDER=repla
 | `make up` / `make down` | Full stack (postgres, api, web) in Docker |
 | `make test` | Backend + frontend unit/API tests (no Docker, no LLM). Fails if line coverage of the core packages (datagen, models, optimizer, simulator, agents, economics, domain) is below 85% |
 | `make test-integration` | Backend tests against a throwaway Postgres (testcontainers) |
-| `make test-e2e` | Playwright against a running stack with data loaded: health, and brief to plan table |
+| `make test-e2e` | Playwright against a running stack with data loaded: health, and brief to plan table with the live trace |
 | `make lint` / `make format` | ruff, ESLint, Prettier |
 | `make typecheck` | mypy strict, tsc strict |
 | `make api-types` | Export OpenAPI to `docs/openapi.json` and regenerate frontend types |
@@ -340,6 +340,7 @@ docs/agents/ Agent workflow config (issue tracker, triage labels, domain docs)
 - [ADR 0053: When the LLM is down, the Context agent reads the brief by strict rules into low-confidence assumptions, and asks about anything the rules cannot read](docs/adr/0053-deterministic-context-fallback.md)
 - [ADR 0054: Cassettes record scripted sessions through the full agent graph, listed in a manifest, checked for grounding offline and replayed in CI](docs/adr/0054-full-graph-session-cassettes.md)
 - [ADR 0055: Each optimiser phase stops on a CP-SAT deterministic-time budget, with wall-clock limits only as safety nets, so a plan never depends on the machine](docs/adr/0055-deterministic-time-optimiser-budgets.md)
+- [ADR 0057: The session page streams its trace with the browser's EventSource, reopens a stream it gave up on with backoff and drops repeated event ids, and shows each node run with its steps beside the session](docs/adr/0057-live-session-page-trace-timeline.md)
 - [ADR 0059: The Critic loop converges: the planner leaves a flagged SKU out with `exclude_sku_ids`, analyses may narrow the scope, and repeated findings end the loop early](docs/adr/0059-critic-loop-converges.md)
 
 The domain glossary is [CONTEXT.md](CONTEXT.md).

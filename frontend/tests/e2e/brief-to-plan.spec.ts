@@ -35,6 +35,28 @@ test("a typed brief becomes a plan table with no API key", async ({ page }) => {
   await expect(plan).toBeVisible({ timeout: PLANNING_MS });
   await expect(plan.getByRole("row").nth(1)).toBeVisible();
 
+  // The live trace streamed the agent at work through the proxy (ADR 0047, ADR 0057).
+  const trace = page.getByRole("list", { name: "Trace timeline" });
+  await expect(
+    trace.getByRole("heading", { name: /^Context agent/ }),
+  ).toBeVisible();
+  await expect(
+    trace.getByRole("heading", { name: /^Planner/ }).first(),
+  ).toBeVisible();
+  await expect(trace.getByText("Arguments and result").first()).toBeVisible();
+  // Every Critic run ends by routing the plan: back to the planner, or on (ADR 0051).
+  const critic = trace
+    .getByRole("listitem")
+    .filter({ has: page.getByRole("heading", { name: /^Critic/ }) })
+    .first();
+  await expect(critic).toContainText(
+    /loop_back|plan_valid|cap_reached|infeasible|default_sequence/,
+  );
+
+  // The replayed cassettes report their recorded tokens, so planning shows a cost.
+  const usage = page.getByRole("region", { name: "LLM usage" });
+  await expect(usage.getByRole("definition").first()).toHaveText(/^[1-9]/);
+
   // The whole graph replayed: the Explainer's recorded answer explains the plan, not the
   // template it falls back to on a cassette miss (ADR 0050 D7).
   const sessionId = new URL(page.url()).pathname.split("/").pop();
