@@ -29,6 +29,7 @@ from promopilot.evals.scenarios import (
     FlagsAssumption,
     KviResponsePresent,
     MeetsClearance,
+    NoStrongSubstitutesTogether,
     RelaxationTouches,
     RequestLabels,
     Scenario,
@@ -36,11 +37,13 @@ from promopilot.evals.scenarios import (
     load_scenario,
     load_scenarios,
 )
+from promopilot.evals.substitutes import STRONG_SUBSTITUTE_THETA, SubstitutePair
 from promopilot.evals.world import EvalWorld, FittedModels
 
 __all__ = [
     "REPORT_DIR",
     "SCENARIO_DIR",
+    "STRONG_SUBSTITUTE_THETA",
     "AsksClarification",
     "DeclaresInfeasible",
     "DiffChanges",
@@ -54,6 +57,7 @@ __all__ = [
     "LineOutcome",
     "MeetsClearance",
     "Metric",
+    "NoStrongSubstitutesTogether",
     "Oracle",
     "PlanOutcome",
     "RelaxationTouches",
@@ -64,6 +68,7 @@ __all__ = [
     "Scenario",
     "ScenarioGroup",
     "ScenarioResult",
+    "SubstitutePair",
     "load_scenario",
     "load_scenarios",
     "render_markdown",

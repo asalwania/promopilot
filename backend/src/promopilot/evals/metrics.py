@@ -26,8 +26,10 @@ from promopilot.evals.scenarios import (
     ExpectedProperty,
     FlagsAssumption,
     KviResponsePresent,
+    NoStrongSubstitutesTogether,
     RelaxationTouches,
 )
+from promopilot.evals.substitutes import SubstitutePair, check_no_strong_substitutes
 from promopilot.guardrails import PlanFacts, plan_limits, validate_plan
 
 ONE_PAISA = 0.01
@@ -119,11 +121,14 @@ def check_property(
     notes: Sequence[str] = (),
     summary: str | None = None,
     kvi: Sequence[str] = (),
+    substitutes: Sequence[SubstitutePair] = (),
 ) -> PropertyResult:
     """Whether a session's outcome has the property: the question ids it asked, and its final
     plan revision (None when it ended without one); for #55's properties also the fields its
     final reading flags, the planner's notes, the plan summary and the KVI response
-    recomputed for the final plan."""
+    recomputed for the final plan; for #56's, the strong true substitute pairs in scope."""
+    if isinstance(prop, NoStrongSubstitutesTogether):
+        return check_no_strong_substitutes(prop, revision, substitutes)
     if isinstance(prop, RelaxationTouches | FlagsAssumption | DiffChanges | KviResponsePresent):
         return check_behaviour_property(
             prop, revision=revision, flagged=flagged, notes=notes, summary=summary, kvi=kvi

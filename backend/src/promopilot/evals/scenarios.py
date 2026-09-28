@@ -118,6 +118,16 @@ class KviResponsePresent(_Frozen):
         return "kvi_response_present: true"
 
 
+class NoStrongSubstitutesTogether(_Frozen):
+    """The final plan revision promotes no two strong true substitutes in scope together: in the
+    same region, with a common promo week and a common target segment (#56, ADR 0065)."""
+
+    no_strong_substitutes_together: Literal[True]
+
+    def describe(self) -> str:
+        return "no_strong_substitutes_together: true"
+
+
 type ExpectedProperty = (
     AsksClarification
     | DeclaresInfeasible
@@ -127,6 +137,7 @@ type ExpectedProperty = (
     | FlagsAssumption
     | DiffChanges
     | KviResponsePresent
+    | NoStrongSubstitutesTogether
 )
 
 
@@ -174,6 +185,13 @@ class Scenario(_Frozen):
             elif isinstance(prop, FlagsAssumption):
                 named.append(prop.flags_assumption)
         return tuple(named)
+
+    @model_validator(mode="after")
+    def _window_after_as_of_week(self) -> Self:
+        window = self.labels.promo_window
+        if window is not None and window.start_week <= self.as_of_week:
+            raise ValueError("the labelled promo window must start after the as-of week (ADR 0008)")
+        return self
 
     @model_validator(mode="after")
     def _a_vague_scenario_names_what_to_clarify(self) -> Self:

@@ -381,3 +381,24 @@ async def test_the_report_has_the_model_recovery_metrics_once(world: EvalWorld) 
     assert (recovery.target, recovery.value is not None) == (0.2, True)
     for name in ("substitute_precision", "complement_recall", "baseline_wape_region_sku"):
         assert metric(report, name).of >= 0
+
+
+async def test_strong_substitutes_are_checked_against_the_pairs_in_the_final_requests_scope(
+    world: EvalWorld,
+) -> None:
+    cannibal = Scenario.model_validate(
+        {
+            **PLAIN.model_dump(),
+            "name": "cannibal",
+            "group": "heavy_cannibalisation",
+            "expect": [{"no_strong_substitutes_together": True}],
+        }
+    )
+
+    report = await evaluate(world, [cannibal])
+
+    [result] = only_run(report, "cannibal").properties
+    assert result.property == "no_strong_substitutes_together: true"
+    # The small world's Snacks hold one strong pair (SKU0003, SKU0004): it was handed over.
+    assert "no strong substitute pair in scope" not in result.detail
+    assert "SKU0003 and SKU0004" in result.detail or "none of the 1 strong" in result.detail

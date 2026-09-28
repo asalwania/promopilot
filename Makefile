@@ -118,9 +118,11 @@ check-cassettes: db ## Replay every scripted session from the cassettes alone, n
 train: db ## Fit the demand then relations models on the loaded data (make data first) and register both
 	$(BACKEND) uv run python -m promopilot.models
 
-.PHONY: eval
+.PHONY: eval record-eval-cassettes
 eval: ## Run the eval scenarios on their own seeded world into backend/evals/reports/ (ONLY=name, RUNS=n, SEED=n; no Docker)
 	$(BACKEND) uv run python -m promopilot.evals $(foreach name,$(ONLY),--only $(name)) $(if $(RUNS),--runs $(RUNS)) $(if $(SEED),--seed $(SEED))
+record-eval-cassettes: ## Play the eval scenarios live and record what no cassette holds into backend/evals/cassettes/ (OPENAI_API_KEY, OPENAI_MODEL; ONLY=name; costs money; no Docker)
+	$(BACKEND) LLM_PROVIDER=openai uv run python -m promopilot.evals --record $(foreach name,$(ONLY),--only $(name))
 
 .PHONY: demo
 demo: ## (E11) One-command demo, no API key
