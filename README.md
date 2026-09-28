@@ -55,6 +55,7 @@ The Docker stack needs no API key. Compose runs the api with `LLM_PROVIDER=repla
 | `make check-cassettes` | Replay every scripted session through the full agent graph from the cassettes alone, with no key |
 | `make train` | Fit the demand model, then the relations model, on the loaded data (`make data` first) and register both (see [Demand model](#demand-model) and [Relations](#relations)) |
 | `make eval` | Play the eval scenarios on their own seeded world and write the report to `backend/evals/reports/`; `ONLY="a b"`, `RUNS=n`, `SEED=n` (see [Evals](#evals)). Needs no Docker, `make data` or `make train` |
+| `make record-eval-cassettes` | Play the eval scenarios with a live OpenAI key and record what no cassette holds into `backend/evals/cassettes/`; `ONLY="a b"` records some. Costs money (see [Evals](#evals)) |
 | `make demo` | Arrives in epic E11 |
 
 ## Synthetic data
@@ -309,11 +310,32 @@ expect:                        # properties of the outcome, never an exact plan
   - flags_assumption: min_margin           # the final reading flags this field
   - diff_changes: scope.regions            # the final revision's diff changes this field
   - kvi_response_present: true             # the undercut-KVI response is in notes and summary
+  - no_strong_substitutes_together: true   # no two strong true substitutes promoted together
 ```
 
 A `vague_or_conflicting` scenario must name at least one field with `asks_clarification` or `flags_assumption` (ADR 0062).
 
-The eval builds its own world: the seed-42 dataset `make data` writes, with its hidden ground truth, and demand and relations models fitted in memory as of each scenario's week (35–60 s per week), so no sales after that week reach them. It needs no Docker, `make data` or `make train`. The LLM is whatever `LLM_PROVIDER` names; with the default `replay`, requests with no cassette fall back as the stack does: the Context agent reads by rules, the planner runs the default sequence and the Explainer uses its template, and each run lists what fell back. The three starter scenarios are the recorded sessions' briefs (`e2e`, `clarify`, `demo`), and on the seed-42 world they replay the committed cassettes whole, taking the recorded routes with nothing falling back; a new scenario falls back until its cassettes are recorded (#57). A full run of the three takes about 11 minutes, fitting the models and building the baseline and best plans included (about 30 s for each distinct final request). A question the scenario does not answer ends its run with no plan, and a failed session is reported without stopping the others.
+A labelled promo window must start after the as-of week. `no_strong_substitutes_together` fails when the final plan promotes two strong substitutes in scope together, or when the scope has none to test. Two SKUs are strong substitutes when the ground truth makes them a substitute pair and the larger of their true cross-price effects θ is at least 0.5. They are promoted together when they share a region, a promo week and a target segment, and a BUNDLE's partner counts (ADR 0065).
+
+The suite has SPEC §12.1's 32 scenarios, one flat file each (ADR 0065):
+
+| Group | Count | As-of weeks |
+|---|---|---|
+| Standard festive plans | 6 | 50, 62, 104 |
+| Tight budget | 4 | 50, 62, 82, 104 |
+| Overstock clearance | 4 | 50, 62, 82, 104 |
+| Competitor price war | 4 | 50, 62, 82, 104 |
+| Regional holidays | 3 | 50 (Durga Puja), 62 (Pongal, Lohri) |
+| Heavy cannibalisation | 3 | 62, 82, 104 |
+| Vague or conflicting briefs | 3 | 62, 82, 104 |
+| Infeasible constraints | 2 | 50, 104 |
+| Mid-plan amendments | 3 | 62, 82, 104 |
+
+Week 50 reaches Durga Puja and Diwali 2025, week 62 Christmas 2025 and Pongal/Lohri 2026, week 82 an off-season window, and week 104 Durga Puja, Diwali and Christmas 2026. Every brief outside the vague group states its weeks, regions, categories, rupees and percentages. A test checks that the Context agent's rules read each of those briefs to its labels with the LLM down. Another checks each scenario on the seed-42 world: its SKUs have stock to clear, a price war's KVIs are undercut, and a cannibalisation scope holds strong substitute pairs.
+
+The eval builds its own world: the seed-42 dataset `make data` writes, with its hidden ground truth, and demand and relations models fitted in memory as of each scenario's week (35–60 s per week), so no sales after that week reach them. It needs no Docker, `make data` or `make train`. The LLM is whatever `LLM_PROVIDER` names; with the default `replay`, requests with no cassette fall back as the stack does: the Context agent reads by rules, the planner runs the default sequence and the Explainer uses its template, and each run lists what fell back. The three starter scenarios are the recorded sessions' briefs (`e2e`, `clarify`, `demo`), and on the seed-42 world they replay the committed cassettes whole, taking the recorded routes with nothing falling back. Replay reads the eval's own cassettes in `backend/evals/cassettes/` first, then the app's `backend/cassettes/`. A scenario with no cassettes falls back until it is recorded. A full run of the 32 takes about 80–130 minutes (150–250 s a session, plus four fits of 35–60 s, plus about 30 s for each distinct final request to build the baseline and best plans), and `RUNS=5` takes five times that. A question the scenario does not answer ends its run with no plan, and a failed session is reported without stopping the others.
+
+`make record-eval-cassettes` records the suite with a live key (`OPENAI_API_KEY`, `OPENAI_MODEL=gpt-4.1-mini` in `.env`; no Docker). It asks the live model only what neither cassette folder holds, writes the answers into `backend/evals/cassettes/`, and prints the live cost. It is additive: to record afresh, empty the folder first. `make record-cassettes` cannot record eval scenarios, since it plays on the week-104 registered models and prunes what its manifest does not list. Recording all 32 is about 37 planning rounds, roughly $2–7.5 (₹190–720) at gpt-4.1-mini, and 1.5–3 hours.
 
 The report goes to `backend/evals/reports/` (gitignored) as `<UTC timestamp>.json` and `.md`, plus `latest.json` and `latest.md`. It shows each metric against its SPEC §12.2 target, one row per run and every failure:
 
@@ -411,6 +433,7 @@ docs/agents/ Agent workflow config (issue tracker, triage labels, domain docs)
 - [ADR 0062: Agent-behaviour metrics score each session's final request, questions, flags, infeasibility and Explainer runs, and its time and cost from its trace](docs/adr/0062-agent-behaviour-metrics.md)
 - [ADR 0063: Plans are measured against a rule-based baseline and our own optimiser on true parameters, both built by the harness from each run's final request, and runs of a scenario against each other](docs/adr/0063-plan-quality-baseline-regret-consistency.md)
 - [ADR 0064: Model-recovery metrics read the eval world's own fit at its default week and report elasticity error, pair detection and the holdout WAPE](docs/adr/0064-model-recovery-metrics.md)
+- [ADR 0065: The scenario suite has SPEC §12.1's 32 scenarios at four as-of weeks, briefs the rules can read, a seed-42 coherence test, and its own cassettes that a record mode adds to](docs/adr/0065-scenario-suite-across-the-nine-groups.md)
 - [ADR 0066: The session page reviews the latest plan revision in one card that approves after a confirm, rejects with a reason and amends; the revision's diff shows in the plan, and an audit trail lists every amendment and decision](docs/adr/0066-amend-diff-approve-and-reject.md)
 
 The domain glossary is [CONTEXT.md](CONTEXT.md).
