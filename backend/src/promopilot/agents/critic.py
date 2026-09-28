@@ -10,13 +10,16 @@ feedback stays. The LLM is not called when there are no risk findings.
 
 `handoff` decides the route: the attempt's findings go back to the planner agent, at most
 `MAX_ATTEMPTS - 1` times, unless the plan is clean, the request is infeasible (only an amended
-brief fixes it, AG-06), or the default sequence planned it (it would plan the same revision
-again). `best_attempt` then picks the plan that goes on to the Explainer.
+brief fixes it, AG-06), the default sequence planned it (it would plan the same revision
+again), or its findings repeat the previous attempt's exactly (the next attempt would open
+with the same findings, ADR 0059). `best_attempt` then picks the plan that goes on to the
+Explainer.
 
 Every finding is a `finding` trace event, and the route a `decision` (ADR 0047).
 """
 
 import json
+from collections import Counter
 from enum import StrEnum
 from importlib.resources import files
 from typing import Final
@@ -67,6 +70,7 @@ class Handoff(StrEnum):
     PLAN_VALID = "plan_valid"
     INFEASIBLE = "infeasible"
     DEFAULT_SEQUENCE = "default_sequence"
+    FINDINGS_REPEATED = "findings_repeated"
     CAP_REACHED = "cap_reached"
 
 
@@ -104,9 +108,32 @@ def handoff(attempts: tuple[PlanAttempt, ...], *, agent_plans: bool) -> Handoff 
         return Handoff.INFEASIBLE
     if not agent_plans or latest.degraded is not None:
         return Handoff.DEFAULT_SEQUENCE
+    if len(attempts) > 1 and _same_findings(latest, attempts[-2]):
+        return Handoff.FINDINGS_REPEATED
     if len(attempts) >= MAX_ATTEMPTS:
         return Handoff.CAP_REACHED
     return None
+
+
+def _same_findings(attempt: PlanAttempt, previous: PlanAttempt) -> bool:
+    """Whether the two attempts have the same findings, in any order (ADR 0059). A finding is
+    what it says: its kind, code, SKU, region, category and message, whose numbers are
+    formatted. The Critic's LLM wording of its feedback and its raw numbers are left out."""
+    return _found_issues(attempt) == _found_issues(previous)
+
+
+def _found_issues(attempt: PlanAttempt) -> Counter[tuple[str | None, ...]]:
+    return Counter(
+        (
+            issue.kind,
+            issue.code.value,
+            issue.sku_id,
+            issue.region.value if issue.region else None,
+            getattr(issue, "category", None),
+            issue.message,
+        )
+        for issue in attempt.findings
+    )
 
 
 def best_attempt(attempts: tuple[PlanAttempt, ...]) -> PlanAttempt:
@@ -170,6 +197,12 @@ def _route_reason(handoff: Handoff | None, attempts: tuple[PlanAttempt, ...]) ->
             return (
                 "The default sequence planned this revision and would plan it again, so its "
                 "findings go to approval as open issues."
+            )
+        case Handoff.FINDINGS_REPEATED:
+            return (
+                f"Attempt {len(attempts)} has the same findings as attempt {len(attempts[:-1])}, "
+                "so another attempt would plan the same: the best plan goes to approval with "
+                "its findings as open issues."
             )
         case Handoff.CAP_REACHED:
             return (

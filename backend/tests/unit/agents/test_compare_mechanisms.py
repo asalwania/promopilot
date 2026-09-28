@@ -191,3 +191,24 @@ async def test_a_missing_model_is_model_unavailable(
 
     assert isinstance(result, ToolError)
     assert result.code == "model_unavailable"
+
+
+async def test_a_scope_narrowed_to_the_sku_and_region_gives_the_same_comparison(
+    tools: ToolRegistry,
+    small_models: tuple[DemandModel, Relations],
+    small_history: DemandHistory,
+) -> None:
+    # The planner may narrow this analysis' scope to the SKU it compares (ADR 0059): the
+    # comparison is the same, as cannibalisation and halo reach the whole catalogue.
+    sku_id = with_complement(small_models, small_history.products)
+    category = sorted(small_history.products["category"].unique())[0]
+    narrowed = {"regions": ["North"], "categories": [category], "sku_ids": [sku_id]}
+
+    full = await tools.call("compare_mechanisms", arguments(small_history, sku_id))
+    narrow = await tools.call(
+        "compare_mechanisms", arguments(small_history, sku_id, request={"scope": narrowed})
+    )
+
+    assert isinstance(full, ToolOk), full
+    assert isinstance(narrow, ToolOk), narrow
+    assert narrow.output == full.output

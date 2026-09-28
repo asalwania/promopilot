@@ -11,7 +11,14 @@ from pathlib import Path
 
 import pytest
 
-from promopilot.agents import SessionScript, load_scripts, manifest_problems, read_context
+from promopilot.agents import (
+    MAX_ATTEMPTS,
+    SessionScript,
+    load_scripts,
+    manifest_problems,
+    read_context,
+    read_manifest,
+)
 from promopilot.datagen import GeneratedDataset
 from promopilot.domain import Clarification, CompanyPolicy
 from promopilot.llm import ReplayProvider
@@ -23,6 +30,17 @@ SCRIPTS = load_scripts(CASSETTE_DIR / "sessions.json")
 
 def test_the_manifest_lists_every_session_as_scripted_and_every_cassette_it_called() -> None:
     assert manifest_problems(SCRIPTS, CASSETTE_DIR) == []
+
+
+def test_every_recorded_planning_round_converges_or_stops_early() -> None:
+    # A round whose findings repeat hands its best plan on (ADR 0059): none runs the planner
+    # to the Critic's cap on attempts that plan the same.
+    manifest = read_manifest(CASSETTE_DIR)
+    assert manifest is not None
+    for name, session in manifest.sessions.items():
+        rounds = " ".join(session.route).split("explainer")
+        attempts = [planning.split().count("planner") for planning in rounds]
+        assert max(attempts) < MAX_ATTEMPTS, f"{name}: {attempts} planner attempts per round"
 
 
 def test_the_demo_the_e2e_journey_and_a_clarification_are_scripted() -> None:

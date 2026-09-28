@@ -18,6 +18,7 @@ from promopilot.agents import (
     GraphTools,
     PlannedRevision,
     Planner,
+    StoredRevisions,
     build_graph,
     checkpoint_serializer,
     graph_state,
@@ -25,7 +26,15 @@ from promopilot.agents import (
     start_planning,
 )
 from promopilot.agents.state import PlanningState
+from promopilot.agents.tools import ToolOk, ToolRegistry
+from promopilot.agents.tools.as_of import fixed_as_of_week
+from promopilot.agents.tools.generate_candidates import (
+    GenerateCandidatesOutput,
+    generate_candidates_tool,
+)
+from promopilot.agents.tools.get_competitor_gaps import get_competitor_gaps_tool
 from promopilot.agents.tools.inventory_status import pooled_stock
+from promopilot.agents.tools.run_optimizer import run_optimizer_tool
 from promopilot.agents.trace import MemoryTrace
 from promopilot.datagen import GeneratedDataset
 from promopilot.domain import (
@@ -50,8 +59,11 @@ from promopilot.domain import (
 from promopilot.guardrails import RiskThresholds, check_numeric_grounding
 from promopilot.llm import FakeProvider, LLMError
 from promopilot.models.demand import DemandModel
+from promopilot.models.registry import ModelKind
 from promopilot.models.relations import Relations
+from promopilot.optimizer import CandidateStore, SolverSettings
 from tests.unit.agents.fakes import InMemoryRetailData, explainer_down
+from tests.unit.agents.test_generate_candidates import Fixed, entry
 from tests.unit.agents.test_graph import BRIEF, BUDGET, POLICY, READING, ScriptedPlanner, planned
 from tests.unit.agents.test_plan_session import FREE, planner_of
 from tests.unit.agents.test_planner_agent import (
@@ -59,6 +71,7 @@ from tests.unit.agents.test_planner_agent import (
     Revisions,
     ScriptedTools,
     Sleeps,
+    call,
     finish,
     generate,
     optimised,
@@ -327,7 +340,7 @@ async def test_the_best_attempt_has_fewest_violations_then_findings_then_highest
 ) -> None:
     attempts = [
         over_budget(1_000.0, p90_units=5_000.0),  # 2 violations
-        over_budget(1_000.0, objective=5_000.0),  # 1 violation
+        over_budget(2_000.0, objective=5_000.0),  # 1 violation
         over_budget(1_000.0, objective=7_000.0),  # 1 violation, the highest objective
         over_budget(1_000.0, objective=6_000.0, stockout_probability=0.5),  # 1 + a risk
     ]
@@ -396,23 +409,98 @@ async def test_feedback_the_llm_cannot_word_falls_back_to_the_template(
     assert run.route == loops(1)
     [finding] = run.state.attempts[0].findings
     assert isinstance(finding, RiskFinding)
-    assert finding.feedback.startswith("Promote SKU0001 in North less deeply")
+    assert finding.feedback.startswith("Leave SKU0001 out with generate_candidates'")
     assert check_numeric_grounding(finding.feedback, finding.message).grounded
 
 
 async def test_risk_findings_left_at_the_cap_are_open_issues_on_the_revision(
     data: InMemoryRetailData, request_read: PlanningRequest
 ) -> None:
-    attempts = [plan(stockout_probability=0.45)] * 4
+    # Each attempt runs out less often, but never below the threshold.
+    attempts = [plan(stockout_probability=p) for p in (0.45, 0.40, 0.35, 0.30)]
     llm_down: BaseModel | Exception = LLMError("the Critic's LLM is down")
     script = [turn for _ in range(4) for turn in (*attempt_turns(request_read), llm_down)]
+    trace = MemoryTrace()
 
-    run = await run_graph(data, script, attempts=attempts)
+    run = await run_graph(data, script, attempts=attempts, trace=trace)
 
     assert run.route == loops(3)
     [(_, [issue])] = run.saved.open_issues
     assert isinstance(issue, RiskFinding)
     assert issue.code is RiskCode.STOCKOUT_RISK
+    assert "30%" in issue.message
+    assert critic_decisions(trace)[-1] == "cap_reached"
+
+
+def critic_decisions(trace: MemoryTrace) -> list[str]:
+    return [
+        event.payload.decision
+        for event in trace.events
+        if event.node == "critic" and isinstance(event.payload, DecisionMade)
+    ]
+
+
+# Findings that repeat end the loop early (ADR 0059).
+
+
+async def test_findings_repeated_exactly_end_the_loop_early_with_open_issues_listed(
+    data: InMemoryRetailData, request_read: PlanningRequest
+) -> None:
+    # The next attempt would open with the same findings, so it would plan the same again.
+    attempts = [plan(stockout_probability=0.45)] * 4
+    llm_down: BaseModel | Exception = LLMError("the Critic's LLM is down")
+    script = [turn for _ in range(2) for turn in (*attempt_turns(request_read), llm_down)]
+    trace = MemoryTrace()
+
+    run = await run_graph(data, script, attempts=attempts, trace=trace)
+
+    assert run.route == loops(1)
+    assert len(run.state.attempts) == 2
+    [(_, [issue])] = run.saved.open_issues
+    assert isinstance(issue, RiskFinding)
+    assert issue.code is RiskCode.STOCKOUT_RISK
+    assert run.state.critic_findings == (issue,)
+    assert critic_decisions(trace) == ["loop_back", "findings_repeated"]
+    [handed_on] = [
+        event.payload.summary
+        for event in trace.events
+        if isinstance(event.payload, DecisionMade) and event.payload.decision == "findings_repeated"
+    ]
+    assert "same findings as attempt 1" in handed_on
+    assert "Attempt 2 of 2 is the best plan" in handed_on
+
+
+async def test_findings_repeated_in_other_words_still_end_the_loop_early(
+    data: InMemoryRetailData, request_read: PlanningRequest
+) -> None:
+    # Only the Critic's LLM wording differs: the planner has the same findings to address.
+    attempts = [plan(stockout_probability=0.45)] * 4
+    worded = CriticFeedback(
+        feedback=[FindingFeedback(finding=1, feedback="Promote SKU0001 for one week only.")]
+    )
+    llm_down: BaseModel | Exception = LLMError("the Critic's LLM is down")
+    script = [*attempt_turns(request_read), worded, *attempt_turns(request_read), llm_down]
+
+    run = await run_graph(data, script, attempts=attempts)
+
+    assert run.route == loops(1)
+    first, second = (attempt.findings for attempt in run.state.attempts)
+    assert first != second
+
+
+async def test_findings_that_change_keep_the_loop_going(
+    data: InMemoryRetailData, request_read: PlanningRequest
+) -> None:
+    # Same finding, other numbers: the planner moved, so it has another try.
+    attempts = [plan(stockout_probability=0.45), plan(stockout_probability=0.40), plan()]
+    llm_down: BaseModel | Exception = LLMError("the Critic's LLM is down")
+    script = [turn for _ in range(2) for turn in (*attempt_turns(request_read), llm_down)]
+    script += attempt_turns(request_read)
+
+    run = await run_graph(data, script, attempts=attempts)
+
+    assert run.route == loops(2)
+    assert run.state.critic_findings == ()
 
 
 async def test_findings_and_the_critics_decisions_are_trace_events(
@@ -600,4 +688,80 @@ async def test_the_risk_thresholds_come_from_the_graph_tools(
 def test_the_critic_prompt_is_versioned() -> None:
     from promopilot.agents.critic import critic_prompt
 
-    assert critic_prompt().startswith("<!-- prompt: critic v1")
+    assert critic_prompt().startswith("<!-- prompt: critic v2")
+
+
+# The planner acts on a finding with the tools (ADR 0059).
+
+
+async def test_a_finding_goes_away_when_the_next_attempt_leaves_its_sku_out(
+    data: InMemoryRetailData,
+    small_models: tuple[DemandModel, Relations],
+    request_read: PlanningRequest,
+) -> None:
+    # On the small world, SKU0004's substitutes lose 24% of its incremental profit: heavy
+    # at a 20% limit. The tools compute every number; the LLM only chooses the calls.
+    store = CandidateStore()
+    demand = Fixed((entry(ModelKind.DEMAND, 1), small_models[0]))
+    relations = Fixed((entry(ModelKind.RELATIONS, 1), small_models[1]))
+    week = fixed_as_of_week(HISTORY_WEEKS)
+    registry = ToolRegistry(
+        [
+            get_competitor_gaps_tool(data, week, policy=FREE),
+            generate_candidates_tool(demand, relations, data, week, policy=FREE, store=store),
+            run_optimizer_tool(store, policy=FREE, settings=SolverSettings(), seed=0),
+        ]
+    )
+
+    async def preview(**changes: Any) -> UUID:
+        arguments = {"request": request_read.model_dump(mode="json"), **changes}
+        result = await registry.call("generate_candidates", arguments)
+        assert isinstance(result, ToolOk), result
+        assert isinstance(result.output, GenerateCandidatesOutput)
+        return result.output.candidate_set_id
+
+    first, second = await preview(), await preview(exclude_sku_ids=["SKU0004"])
+    llm_down: BaseModel | Exception = LLMError("the Critic's LLM is down")
+    llm = FakeProvider(
+        [
+            READING,
+            generate(request_read),
+            call("run_optimizer", candidate_set_id=str(first)),
+            finish(),
+            llm_down,
+            generate(request_read, exclude_sku_ids=["SKU0004"]),
+            call("run_optimizer", candidate_set_id=str(second)),
+            finish(),
+            explainer_down(),
+        ]
+    )
+    graph_tools = GraphTools(
+        brief_data=data,
+        planner=planner_of(small_models, data),
+        sessions=Saved(),
+        policy=FREE,
+        agent=AgentTools(
+            tools=registry,
+            revisions=StoredRevisions(store, planner_of(small_models, data)),
+            sleep=Sleeps(),
+        ),
+        risk_thresholds=RiskThresholds(line_spend_share=1.0, cannibalisation_share=0.2),
+        trace=MemoryTrace(),
+    )
+    graph = build_graph(graph_tools, llm, InMemorySaver(serde=checkpoint_serializer()))
+    session_id = uuid4()
+
+    route = await start_planning(graph, str(session_id), session_id, BRIEF)
+
+    assert route == loops(1)
+    snapshot = await graph_state(graph, str(session_id))
+    assert snapshot is not None
+    flagged, fixed = snapshot.values.attempts
+    [finding] = flagged.findings
+    assert isinstance(finding, RiskFinding)
+    assert (finding.code, finding.sku_id) == (RiskCode.HEAVY_CANNIBALISATION, "SKU0004")
+    assert "exclude_sku_ids" in finding.feedback
+    assert fixed.findings == ()
+    assert "SKU0004" in {line.line.sku_id for line in flagged.plan.lines}
+    assert "SKU0004" not in {line.line.sku_id for line in fixed.plan.lines}
+    assert snapshot.values.plan == fixed.plan

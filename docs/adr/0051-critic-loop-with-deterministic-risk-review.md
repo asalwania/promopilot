@@ -59,6 +59,7 @@ We chose these with the owner (D1–D10 on #48; every recommended option).
   - `cap_reached`: this is the fourth attempt.
 
   Otherwise it loops back. That is at most 3 loop-backs, so at most 4 planner attempts per planning round (`MAX_ATTEMPTS`).
+  - **Amended by ADR 0059:** a fifth reason, `findings_repeated`, hands the plan on when an attempt's findings repeat the previous attempt's exactly. The recorded e2e and clarify sessions ran 4 identical attempts to the cap.
   - **This fixes SPEC §9.6's edge "violations and iteration < 3"**, which is now "findings and attempts < 4". `iteration` still counts every planner run in the session, and an amendment (#50) starts a new round with no attempts.
   - We rejected looping on violations only, which almost never fires: an optimised plan has none (ADR 0046 D11). We also rejected a second, "high" severity threshold.
 - **D5. Feedback is one more message in a fresh planner conversation.**
@@ -78,6 +79,7 @@ We chose these with the owner (D1–D10 on #48; every recommended option).
 - **D9. Each attempt has the planner's own limits**: 8 LLM steps and 16 tool calls (ADR 0049 D5).
   - Worst case, a round is 4 times ADR 0049's estimate: about ₹16 on `gpt-4.1-mini`, or about ₹88 if the `claude-sonnet-5` fallback answers every step.
   - **Cost note:** that fallback worst case exceeds SPEC §6's ₹20 per session. E9 measures the cost and E11 tunes it.
+  - ADR 0059 leaves the worst case as it is, but a round whose findings repeat now stops after 2 attempts, not 4.
   - We rejected a shared budget of 16 steps and 32 tool calls, which would degrade later attempts.
 - **D10. AG-06 keeps ADR 0044.**
   - `solve` already attaches the smallest relaxation and the binding constraints to an infeasible result, on both paths. The planner prompt still tells the agent to call `relax_constraints` on `INFEASIBLE`, as a what-if.
