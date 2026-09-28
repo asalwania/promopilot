@@ -115,4 +115,5 @@ It writes the cassettes and `manifest.json` to `backend/cassettes/`, and prints 
   - ADR 0022: the `briefs.json` list and its replace-all recording;
   - ADR 0048: "every brief in `briefs.json` must read without a question";
   - ADR 0049 D9: the version-number part of the candidate set id.
+- **ADR 0059** changes the planner (v3) and Critic (v2) prompts, `generate_candidates`' schema and the risk review's template feedback, so every session is re-recorded. The committed-cassette test also checks that no recorded planning round runs the planner to the Critic's cap.
 - A prompt, schema, calendar, model or planning-setting change needs a new recording. Once a recording exists, the committed-cassette test catches Context-level staleness in the backend job. `--check` catches the rest in the images job.

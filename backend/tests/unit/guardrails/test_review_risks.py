@@ -4,6 +4,7 @@ its own tool outputs, deterministically, with actionable feedback (AG-04, ADR 00
 from typing import Any
 
 from promopilot.domain import (
+    ClearanceTarget,
     Mechanism,
     MechanismOption,
     MechanismOutcome,
@@ -347,4 +348,44 @@ def test_every_number_in_the_feedback_is_one_its_message_shows() -> None:
 
     assert len(findings) >= 3
     for finding in findings:
+        assert check_numeric_grounding(finding.feedback, finding.message).grounded
+
+
+def test_feedback_names_the_lever_the_planner_has_for_each_finding() -> None:
+    # The planner has no per-SKU mechanism or depth: it leaves a SKU out (ADR 0059).
+    lines = balanced()
+    lines[0] = Line("S0", Region.WEST, promo_cost=4_000.0, stockout_probability=0.37)
+    lines[1] = Line("S1", Region.NORTH, incremental_profit=1_234.0, cannibalised_profit=987.0)
+
+    findings = review(*lines)
+
+    assert {finding.code for finding in findings} == set(RiskCode)
+    for finding in findings:
+        if finding.sku_id is not None:
+            lever = f"{finding.sku_id} out with generate_candidates' exclude_sku_ids"
+            assert lever in finding.feedback
+        assert "compare_mechanisms" not in finding.feedback
+        assert "generate_candidates' sku_ids" not in finding.feedback
+
+
+def test_a_clearance_target_is_not_sent_out_of_the_plan() -> None:
+    # exclude_sku_ids refuses a clearance target of the brief: the SKU stays (ADR 0059).
+    lines = balanced()
+    lines[0] = Line("S0", Region.WEST, promo_cost=4_000.0, stockout_probability=0.37)
+    lines[1] = Line("S1", Region.NORTH, incremental_profit=1_234.0, cannibalised_profit=987.0)
+    cleared = request().model_copy(
+        update={
+            "clearance_targets": (
+                ClearanceTarget(sku_id="S0", sell_through=0.5),
+                ClearanceTarget(sku_id="S1", sell_through=0.5),
+            )
+        }
+    )
+
+    findings = review(*lines, scope=cleared)
+
+    assert {finding.sku_id for finding in findings} == {"S0", "S1"}
+    for finding in findings:
+        assert "exclude_sku_ids" not in finding.feedback
+        assert f"{finding.sku_id} is a clearance target of the brief" in finding.feedback
         assert check_numeric_grounding(finding.feedback, finding.message).grounded

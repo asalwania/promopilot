@@ -13,8 +13,11 @@ A plan that breaks no hard constraint can still be risky. `review_risks` flags:
   the simulation's runs.
 
 Each finding carries a message with the numbers that show it, and template feedback naming the
-planner's levers. Every number the feedback cites is one its message shows, so the LLM that
-rewords it (`promopilot.agents`) is grounded against the findings alone.
+planner's levers. The planner has no mechanism or depth of its own for one SKU: a SKU-level
+finding's lever is to leave the SKU out with `generate_candidates`' `exclude_sku_ids`, unless
+it is a clearance target of the brief, which stays in the plan (ADR 0059). Every number the
+feedback cites is one its message shows, so the LLM that rewords it (`promopilot.agents`) is
+grounded against the findings alone.
 """
 
 from collections import defaultdict
@@ -61,11 +64,17 @@ def review_risks(
 ) -> tuple[RiskFinding, ...]:
     """The plan's risks: over-concentration (lines, then categories, then regions), heavy
     cannibalisation, then stock-out risk, each in plan order; () if none."""
+    cleared = frozenset(target.sku_id for target in request.clearance_targets)
     return (
         *_concentration(facts, request, thresholds),
-        *_cannibalisation(revision.lines, thresholds.cannibalisation_share),
-        *_stockouts(revision, thresholds.stockout_probability),
+        *_cannibalisation(revision.lines, thresholds.cannibalisation_share, cleared),
+        *_stockouts(revision, thresholds.stockout_probability, cleared),
     )
+
+
+def _stays(sku_id: str) -> str:
+    """Why a clearance target is not left out: `exclude_sku_ids` refuses it (ADR 0059)."""
+    return f"{sku_id} is a clearance target of the brief, so it stays in the plan"
 
 
 def _concentration(
@@ -75,6 +84,7 @@ def _concentration(
     if total <= 0:
         return []
     findings = []
+    cleared = {target.sku_id for target in request.clearance_targets}
     limit = thresholds.line_spend_share
     # With fewer than 1 / limit lines, one of them must take more than the limit.
     if len(facts.lines) * limit >= 1 - _EPSILON:
@@ -93,9 +103,11 @@ def _concentration(
                         "one plan line"
                     ),
                     feedback=(
-                        f"Spread the promo spend: give {sku_id} in {region} a shallower or "
-                        f"cheaper promotion, or leave {sku_id} out of generate_candidates' "
-                        f"sku_ids, so no plan line takes over {format_percent(limit)} of it."
+                        f"{_stays(sku_id)}, and this finding stays open."
+                        if sku_id in cleared
+                        else f"Spread the promo spend: leave {sku_id} out with "
+                        f"generate_candidates' exclude_sku_ids, so no plan line takes over "
+                        f"{format_percent(limit)} of it."
                     ),
                     sku_id=sku_id,
                     region=region,
@@ -116,9 +128,9 @@ def _concentration(
                 ),
                 feedback=(
                     f"Balance the plan across categories: set a lower "
-                    f"max_promoted_skus_per_category_per_region, or narrow generate_candidates' "
-                    f"sku_ids in {category}, so {category} takes at most "
-                    f"{format_percent(limit)} of the spend."
+                    f"max_promoted_skus_per_category_per_region, or leave some {category} SKUs "
+                    f"out with generate_candidates' exclude_sku_ids, so {category} takes at "
+                    f"most {format_percent(limit)} of the spend."
                 ),
                 category=category,
                 actual=spent / total,
@@ -158,7 +170,9 @@ def _spend[K: str | Region](amounts: Iterable[tuple[K, float]]) -> dict[K, float
     return dict(spent)
 
 
-def _cannibalisation(lines: Iterable[PlanRevisionLine], limit: float) -> list[RiskFinding]:
+def _cannibalisation(
+    lines: Iterable[PlanRevisionLine], limit: float, cleared: frozenset[str]
+) -> list[RiskFinding]:
     findings = []
     for planned in lines:
         option = _chosen(planned)
@@ -178,9 +192,10 @@ def _cannibalisation(lines: Iterable[PlanRevisionLine], limit: float) -> list[Ri
                     f"above the {format_percent(limit)} limit"
                 ),
                 feedback=(
-                    f"{sku_id} in {region} mostly takes sales from its own substitutes: try "
-                    f"another mechanism or a shallower depth for it (compare_mechanisms), or "
-                    f"leave {sku_id} out of generate_candidates' sku_ids."
+                    f"{_stays(sku_id)}, and this finding stays open."
+                    if sku_id in cleared
+                    else f"{sku_id} in {region} mostly takes sales from its own substitutes: "
+                    f"leave {sku_id} out with generate_candidates' exclude_sku_ids."
                 ),
                 sku_id=sku_id,
                 region=region,
@@ -199,7 +214,7 @@ def _chosen(planned: PlanRevisionLine) -> MechanismOption | None:
     return None
 
 
-def _stockouts(revision: PlanRevision, limit: float) -> list[RiskFinding]:
+def _stockouts(revision: PlanRevision, limit: float, cleared: frozenset[str]) -> list[RiskFinding]:
     if revision.simulation is None:
         return []
     return [
@@ -211,9 +226,12 @@ def _stockouts(revision: PlanRevision, limit: float) -> list[RiskFinding]:
                 f"above the {format_percent(limit)} limit"
             ),
             feedback=(
-                f"Promote {line.sku_id} in {line.region} less deeply, for fewer weeks or for a "
-                f"narrower target segment, or leave {line.sku_id} out of generate_candidates' "
-                "sku_ids, so its demand stays within its stock."
+                f"{_stays(line.sku_id)}: narrow generate_candidates' target_segments, so "
+                f"{line.sku_id} in {line.region} does not run out of stock."
+                if line.sku_id in cleared
+                else f"Leave {line.sku_id} out with generate_candidates' exclude_sku_ids, or "
+                f"narrow generate_candidates' target_segments, so {line.sku_id} in "
+                f"{line.region} does not run out of stock."
             ),
             sku_id=line.sku_id,
             region=line.region,

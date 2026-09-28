@@ -276,7 +276,7 @@ A risk the critic's risk review flags in a plan that may break no hard constrain
 _Avoid_: warning, risk score
 
 **Planner attempt**:
-One plan the planner produces within a planning round. The critic reviews each attempt and sends its findings back at most 3 times; only the best attempt becomes a plan revision (ADR 0051).
+One plan the planner produces within a planning round. The critic reviews each attempt and sends its findings back at most 3 times, and stops early when an attempt's findings repeat the previous attempt's exactly; only the best attempt becomes a plan revision (ADR 0051, ADR 0059).
 _Avoid_: iteration (which counts every planner run in a session), draft revision
 
 **Checkpoint**:

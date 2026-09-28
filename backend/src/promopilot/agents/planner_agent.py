@@ -10,7 +10,9 @@ built in process from the stored candidate set (`StoredRevisions`), never from t
   `ToolError` (a call the tool cannot answer) reaches it at once, for the LLM to correct.
 - The LLM may add or tighten the optimiser options of the planning request (regional budget
   caps, the KVI price tolerance, the promoted-SKU cap), never the brief's constraints: a call
-  that loosens them is refused as `invalid_input` before it reaches the tool.
+  that loosens them is refused as `invalid_input` before it reaches the tool. An analysis
+  (`compare_mechanisms`) may narrow the scope, as its result cannot change the plan; to plan
+  fewer SKUs, the LLM leaves them out with `generate_candidates`' `exclude_sku_ids` (ADR 0059).
 - If the LLM fails after its retries and fallback provider (a mid-round failure restarts the
   conversation once, ADR 0027), replay has no cassette, or no optimiser plan is reached within
   the step and tool-call limits, the deterministic default sequence plans instead (SF-03).

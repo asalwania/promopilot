@@ -831,4 +831,4 @@ def test_the_planner_prompt_is_versioned() -> None:
 
     prompt = (files("promopilot.agents") / "prompts" / "planner.md").read_text("utf-8")
 
-    assert prompt.startswith("<!-- prompt: planner v2")
+    assert prompt.startswith("<!-- prompt: planner v3")
