@@ -24,6 +24,9 @@ export const planningSession: SessionResponse = {
     cost_inr: 0,
     unpriced_models: [],
   },
+  assumptions: [],
+  questions: [],
+  clarifications: [],
 };
 
 export const planLines: PlanRevisionLine[] = [
@@ -316,6 +319,39 @@ export const infeasibleSession: SessionResponse = {
       fallback_reason: "llm_unavailable",
     },
   },
+};
+
+// The Context agent asks instead of guessing (ADR 0048).
+export const awaitingClarificationSession: SessionResponse = {
+  ...planningSession,
+  status: "awaiting_clarification",
+  assumptions: [
+    {
+      field: "scope.regions",
+      value: "North, West",
+      source: "brief",
+      confidence: 1,
+      flagged: false,
+      note: null,
+    },
+  ],
+  questions: [
+    {
+      id: "marketing_budget",
+      field: "marketing_budget",
+      question:
+        "What marketing budget should the plan's promo cost stay within, in rupees?",
+      reason: "missing",
+      suggestions: [],
+    },
+    {
+      id: "scope.categories",
+      field: "scope.categories",
+      question: 'Which product categories does "snak stuff" mean?',
+      reason: "low_confidence",
+      suggestions: ["Snacks"],
+    },
+  ],
 };
 
 export const approvedSession: SessionResponse = {

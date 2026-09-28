@@ -582,7 +582,7 @@ A rejection keeps the session open: the graph waits at Approval again until an a
 | POST | `/api/sessions` | Start a planning session from a brief `{brief}` → `{session_id}` |
 | GET | `/api/sessions/{id}` | Full state: request, assumptions, plan, simulation, findings, status |
 | GET | `/api/sessions/{id}/events` | SSE stream of trace events |
-| POST | `/api/sessions/{id}/clarify` | Answer clarification questions |
+| POST | `/api/sessions/{id}/clarify` | Answer clarification questions `{answers: {question_id: text}}` (ADR 0048) |
 | POST | `/api/sessions/{id}/amend` | Amend the request `{text}` → re-plan with diff |
 | POST | `/api/sessions/{id}/approve` | Approve plan revision `{revision_number}` (ADR 0046) |
 | POST | `/api/sessions/{id}/reject` | Reject plan revision `{revision_number, reason}` (ADR 0046) |

@@ -9,6 +9,9 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from promopilot.agents.tools.estimate_demand import ModelVersion
 from promopilot.agents.tools.get_relations import Complement, Substitute
 from promopilot.domain import (
+    Assumption,
+    Clarification,
+    ClarificationQuestion,
     CompetitorReaction,
     PlanDecision,
     PlanningRequest,
@@ -106,6 +109,16 @@ class SessionResponse(BaseModel):
         description="What the session's LLM calls used and cost: the sums of its token-usage "
         "trace events (ADR 0047)."
     )
+    assumptions: list[Assumption] = Field(
+        description="How the Context agent read the brief, each with its source and confidence "
+        "(ADR 0048)."
+    )
+    questions: list[ClarificationQuestion] = Field(
+        description="The clarification questions waiting for an answer (awaiting_clarification)."
+    )
+    clarifications: list[Clarification] = Field(
+        description="Every question answered so far, oldest first."
+    )
 
     @classmethod
     def of(cls, session: PlanningSession) -> "SessionResponse":
@@ -118,6 +131,9 @@ class SessionResponse(BaseModel):
             error=session.error,
             decisions=list(session.decisions),
             usage=session.usage,
+            assumptions=list(session.assumptions),
+            questions=list(session.questions),
+            clarifications=list(session.clarifications),
         )
 
 
@@ -154,6 +170,32 @@ class RejectRequest(BaseModel):
         if not reason.strip():
             raise ValueError("a rejection needs a reason")
         return reason
+
+
+ANSWER_MAX_CHARS = 2000
+
+
+class ClarifyRequest(BaseModel):
+    """Answers to the session's open clarification questions (ADR 0048)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    answers: dict[str, str] = Field(
+        min_length=1,
+        description="An answer in plain English for every open question, keyed by its id.",
+    )
+
+    @field_validator("answers")
+    @classmethod
+    def _answered(cls, answers: dict[str, str]) -> dict[str, str]:
+        for question_id, answer in answers.items():
+            if not answer.strip():
+                raise ValueError(f"the answer to {question_id} is empty")
+            if len(answer) > ANSWER_MAX_CHARS:
+                raise ValueError(
+                    f"the answer to {question_id} is longer than {ANSWER_MAX_CHARS} characters"
+                )
+        return answers
 
 
 class SimulatePlanRequest(BaseModel):

@@ -20,6 +20,7 @@ from promopilot.agents import (
 from promopilot.config import ModelPrice
 from promopilot.datagen import GeneratedDataset
 from promopilot.domain import (
+    ClarificationAsked,
     DecisionKind,
     DecisionMade,
     FindingRaised,
@@ -27,7 +28,7 @@ from promopilot.domain import (
     TokensUsed,
     TraceEvent,
 )
-from promopilot.llm import FakeProvider, LLMProvider, Usage
+from promopilot.llm import FakeProvider, LLMError, LLMProvider, Usage
 from tests.unit.agents.billed import BilledProvider
 from tests.unit.agents.fakes import InMemoryRetailData, explainer_down
 from tests.unit.agents.test_graph import (
@@ -198,14 +199,35 @@ async def test_rejecting_traces_the_reason_and_pauses_at_approval_again(
 async def test_a_failing_node_is_traced_as_failed(
     data: InMemoryRetailData, trace: MemoryTrace
 ) -> None:
+    graph = graph_for(data, trace, FakeProvider([LLMError("provider down")]))
+    session_id = uuid4()
+
+    with pytest.raises(LLMError, match="provider down"):
+        await start_planning(graph, str(session_id), session_id, BRIEF)
+
+    assert steps(trace.of(session_id)) == [("context", "node_started"), ("context", "failed")]
+
+
+async def test_a_question_is_a_clarification_event_and_clarify_pauses(
+    data: InMemoryRetailData, trace: MemoryTrace
+) -> None:
     unbudgeted = READING.model_copy(update={"marketing_budget": None})
     graph = graph_for(data, trace, FakeProvider([unbudgeted]))
     session_id = uuid4()
 
-    with pytest.raises(Exception, match="marketing budget"):
-        await start_planning(graph, str(session_id), session_id, BRIEF)
+    await start_planning(graph, str(session_id), session_id, BRIEF)
 
-    assert steps(trace.of(session_id)) == [("context", "node_started"), ("context", "failed")]
+    events = trace.of(session_id)
+    assert steps(events) == [
+        ("context", "node_started"),
+        ("context", "clarification"),
+        ("context", "completed"),
+        ("clarify", "node_started"),
+        ("clarify", "interrupted"),
+    ]
+    [asked] = [e.payload for e in events if isinstance(e.payload, ClarificationAsked)]
+    assert len(asked.questions) == 1
+    assert "budget" in asked.questions[0]
 
 
 async def test_the_context_agents_llm_call_is_a_priced_token_usage_event(

@@ -196,6 +196,28 @@ export const planDecisionSchema = z.object({
   decided_at: z.string(),
 }) satisfies z.ZodType<Schemas["PlanDecision"]>;
 
+export const assumptionSchema = z.object({
+  field: z.string(),
+  value: z.string(),
+  source: z.enum(["brief", "data", "default"]),
+  confidence: z.number(),
+  flagged: z.boolean(),
+  note: z.string().nullable().optional(),
+}) satisfies z.ZodType<Schemas["Assumption"]>;
+
+export const clarificationQuestionSchema = z.object({
+  id: z.string(),
+  field: z.string(),
+  question: z.string(),
+  reason: z.enum(["missing", "low_confidence", "ambiguous"]),
+  suggestions: z.array(z.string()),
+}) satisfies z.ZodType<Schemas["ClarificationQuestion"]>;
+
+export const clarificationSchema = z.object({
+  question: clarificationQuestionSchema,
+  answer: z.string(),
+}) satisfies z.ZodType<Schemas["Clarification"]>;
+
 export const planRevisionLineSchema = z.object({
   line: planLineSchema,
   expected_units: z.number(),
@@ -317,6 +339,9 @@ export const sessionSchema = z.object({
   error: z.string().nullable(),
   decisions: z.array(planDecisionSchema),
   usage: sessionUsageSchema,
+  assumptions: z.array(assumptionSchema),
+  questions: z.array(clarificationQuestionSchema),
+  clarifications: z.array(clarificationSchema),
 }) satisfies z.ZodType<Schemas["SessionResponse"]>;
 
 export type Session = z.infer<typeof sessionSchema>;
@@ -324,6 +349,7 @@ export type SessionStatus = Session["status"];
 export type PlanRevisionLine = z.infer<typeof planRevisionLineSchema>;
 export type PlanningRequest = z.infer<typeof planningRequestSchema>;
 export type PlanDecision = z.infer<typeof planDecisionSchema>;
+export type ClarificationQuestion = z.infer<typeof clarificationQuestionSchema>;
 
 export type CreateSessionResult =
   { ok: true; sessionId: string } | { ok: false; reason: string };

@@ -9,18 +9,20 @@ import pytest
 from langgraph.checkpoint.memory import InMemorySaver
 
 from promopilot.agents import (
-    BriefError,
     BriefReading,
     GraphTools,
     PlannedRevision,
     build_graph,
     checkpoint_serializer,
     graph_state,
+    resume_with_answers,
     resume_with_decision,
     start_planning,
 )
 from promopilot.datagen import GeneratedDataset
 from promopilot.domain import (
+    Assumption,
+    AssumptionSource,
     CompanyPolicy,
     DecisionKind,
     Mechanism,
@@ -30,14 +32,15 @@ from promopilot.domain import (
     PlanningRequest,
     PlanRevision,
     PlanRevisionLine,
+    QuestionReason,
     Region,
     SolveStatus,
     TargetSegment,
     Violation,
     ViolationCode,
 )
-from promopilot.guardrails import LineFacts, PlanFacts, SkuFacts
-from promopilot.llm import FakeProvider
+from promopilot.guardrails import LineFacts, PlanFacts, SkuFacts, plan_limits
+from promopilot.llm import FakeProvider, LLMError
 from tests.unit.agents.fakes import InMemoryRetailData, explainer_down
 
 HISTORY_WEEKS = 52  # small_config
@@ -117,6 +120,10 @@ class RecordedSessions:
         self.open_issues: dict[tuple[UUID, int], tuple[Violation, ...]] = {}
         self.explanations: dict[tuple[UUID, int], PlanExplanation] = {}
         self.decisions: list[PlanDecision] = []
+        self.assumptions: dict[UUID, tuple[Assumption, ...]] = {}
+
+    async def save_assumptions(self, session_id: UUID, assumptions: tuple[Assumption, ...]) -> None:
+        self.assumptions[session_id] = assumptions
 
     async def save_revision(
         self, session_id: UUID, request: PlanningRequest, revision: PlanRevision
@@ -301,17 +308,141 @@ async def test_a_new_graph_on_the_same_checkpointer_resumes_where_the_old_one_pa
     assert state.values.plan == planned().revision
 
 
-async def test_a_brief_the_context_agent_cannot_read_fails_the_run(
+async def test_a_context_agent_whose_llm_fails_fails_the_run(
     data: InMemoryRetailData, sessions: RecordedSessions, checkpointer: InMemorySaver
 ) -> None:
-    unbudgeted = READING.model_copy(update={"marketing_budget": None})
-    graph = build_graph(tools(data, sessions), FakeProvider([unbudgeted]), checkpointer)
+    graph = build_graph(
+        tools(data, sessions), FakeProvider([LLMError("provider down")]), checkpointer
+    )
     session_id = uuid4()
 
-    with pytest.raises(BriefError, match="marketing budget"):
+    with pytest.raises(LLMError, match="provider down"):
         await start_planning(graph, str(session_id), session_id, BRIEF)
 
     assert sessions.revisions == {}
+
+
+# --- the Context agent and the Clarify interrupt (#46, ADR 0048) ------------------------------
+
+
+async def test_a_missing_budget_routes_to_clarify_and_the_answer_resumes_to_the_planner(
+    data: InMemoryRetailData, sessions: RecordedSessions, checkpointer: InMemorySaver
+) -> None:
+    unbudgeted = READING.model_copy(update={"marketing_budget": None})
+    llm = FakeProvider([unbudgeted, READING, explainer_down()])
+    planner = ScriptedPlanner(planned())
+    graph = build_graph(
+        GraphTools(brief_data=data, planner=planner, sessions=sessions, policy=POLICY),
+        llm,
+        checkpointer,
+    )
+    session_id = uuid4()
+
+    route = await start_planning(graph, str(session_id), session_id, BRIEF)
+
+    assert route == ["context", "clarify"]
+    paused = await graph_state(graph, str(session_id))
+    assert paused is not None
+    assert paused.awaits_clarification
+    assert not paused.awaits_decision
+    [question] = paused.values.questions
+    assert (question.field, question.reason) == ("marketing_budget", QuestionReason.MISSING)
+    assert paused.values.request is None
+    assert planner.requests == []
+    # What it could read is recorded for the session while it waits.
+    assert "scope.regions" in {a.field for a in sessions.assumptions[session_id]}
+
+    route = await resume_with_answers(graph, str(session_id), {question.id: "₹20k"})
+
+    assert route == ["clarify", "context", "planner", "critic", "explainer", "approval"]
+    state = await graph_state(graph, str(session_id))
+    assert state is not None
+    assert state.paused_at == ("approval",)
+    assert state.values.questions == ()
+    [answered] = state.values.clarifications
+    assert (answered.question, answered.answer) == (question, "₹20k")
+    assert planner.requests[0].marketing_budget == BUDGET
+    # The re-read saw the answer, as quoted data.
+    assert '"₹20k"' in llm.calls[1].messages[1].content
+    budget = {a.field: a for a in sessions.assumptions[session_id]}["marketing_budget"]
+    assert budget.source is AssumptionSource.BRIEF
+
+
+async def test_low_confidence_on_the_scope_routes_to_clarify(
+    data: InMemoryRetailData, sessions: RecordedSessions, checkpointer: InMemorySaver
+) -> None:
+    # "snak stuff" matches Snacks at 0.593: below the 0.7 threshold.
+    vague = READING.model_copy(update={"categories_phrase": "snak stuff"})
+    graph = build_graph(tools(data, sessions), FakeProvider([vague]), checkpointer)
+    session_id = uuid4()
+
+    route = await start_planning(graph, str(session_id), session_id, BRIEF)
+
+    assert route == ["context", "clarify"]
+    state = await graph_state(graph, str(session_id))
+    assert state is not None
+    [question] = state.values.questions
+    assert (question.field, question.reason) == (
+        "scope.categories",
+        QuestionReason.LOW_CONFIDENCE,
+    )
+
+
+async def test_an_answer_that_leaves_a_question_open_asks_again(
+    data: InMemoryRetailData, sessions: RecordedSessions, checkpointer: InMemorySaver
+) -> None:
+    unbudgeted = READING.model_copy(update={"marketing_budget": None})
+    graph = build_graph(tools(data, sessions), FakeProvider([unbudgeted, unbudgeted]), checkpointer)
+    session_id = uuid4()
+    await start_planning(graph, str(session_id), session_id, BRIEF)
+
+    route = await resume_with_answers(graph, str(session_id), {"marketing_budget": "not sure"})
+
+    assert route == ["clarify", "context", "clarify"]
+    state = await graph_state(graph, str(session_id))
+    assert state is not None
+    assert state.awaits_clarification
+    assert len(state.values.clarifications) == 1
+    assert [q.field for q in state.values.questions] == ["marketing_budget"]
+
+
+async def test_a_margin_below_the_floor_is_planned_at_the_floor_and_flagged(
+    data: InMemoryRetailData, sessions: RecordedSessions, checkpointer: InMemorySaver
+) -> None:
+    loose = READING.model_copy(update={"min_margin": 0.05})
+    planner = ScriptedPlanner(planned())
+    graph = build_graph(
+        GraphTools(brief_data=data, planner=planner, sessions=sessions, policy=POLICY),
+        FakeProvider([loose, explainer_down()]),
+        checkpointer,
+    )
+    session_id = uuid4()
+
+    await start_planning(graph, str(session_id), session_id, BRIEF)
+
+    [request] = planner.requests
+    assert plan_limits(request, POLICY).min_margin == POLICY.margin_floor
+    margin = {a.field: a for a in sessions.assumptions[session_id]}["min_margin"]
+    assert margin.flagged
+    assert margin.value.startswith("15.0%")
+
+
+async def test_a_revenue_focused_brief_gets_the_profit_objective_assumption(
+    data: InMemoryRetailData, sessions: RecordedSessions, checkpointer: InMemorySaver
+) -> None:
+    revenue = READING.model_copy(update={"objective_asked": "revenue"})
+    graph = build_graph(
+        tools(data, sessions), FakeProvider([revenue, explainer_down()]), checkpointer
+    )
+    session_id = uuid4()
+
+    await start_planning(graph, str(session_id), session_id, BRIEF)
+
+    state = await graph_state(graph, str(session_id))
+    assert state is not None
+    objective = {a.field: a for a in state.values.assumptions}["objective"]
+    assert objective.flagged
+    assert "profit" in objective.value
 
 
 async def test_an_unknown_thread_has_no_state(checkpointer: InMemorySaver) -> None:
@@ -337,4 +468,13 @@ class NoData:
         raise AssertionError("never read")
 
     async def default_as_of_week(self) -> int:
+        raise AssertionError("never read")
+
+    async def stores(self) -> pd.DataFrame:
+        raise AssertionError("never read")
+
+    async def inventory(self, as_of_week: int) -> pd.DataFrame:
+        raise AssertionError("never read")
+
+    async def latest_competitor_prices(self, as_of_week: int) -> pd.DataFrame:
         raise AssertionError("never read")

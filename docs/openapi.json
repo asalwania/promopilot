@@ -18,6 +18,62 @@
         "title": "ApproveRequest",
         "type": "object"
       },
+      "Assumption": {
+        "description": "One planning-request field (or a fact the plan relies on) as the agent read or inferred\nit: its value in words, where it came from and how sure the agent is (ADR 0048).",
+        "properties": {
+          "confidence": {
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Confidence",
+            "type": "number"
+          },
+          "field": {
+            "title": "Field",
+            "type": "string"
+          },
+          "flagged": {
+            "default": false,
+            "title": "Flagged",
+            "type": "boolean"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "source": {
+            "$ref": "#/components/schemas/AssumptionSource"
+          },
+          "value": {
+            "title": "Value",
+            "type": "string"
+          }
+        },
+        "required": [
+          "field",
+          "value",
+          "source",
+          "confidence"
+        ],
+        "title": "Assumption",
+        "type": "object"
+      },
+      "AssumptionSource": {
+        "description": "Where an assumed value came from.",
+        "enum": [
+          "brief",
+          "data",
+          "default"
+        ],
+        "title": "AssumptionSource",
+        "type": "string"
+      },
       "BindingConstraint": {
         "description": "A constraint that limits the plan: dropping it gives a strictly better objective, or,\nwhen time ran out, one that may.",
         "properties": {
@@ -99,6 +155,24 @@
         "title": "BindingEvidence",
         "type": "string"
       },
+      "Clarification": {
+        "description": "A question the agent asked and the manager's answer, in their own words.",
+        "properties": {
+          "answer": {
+            "title": "Answer",
+            "type": "string"
+          },
+          "question": {
+            "$ref": "#/components/schemas/ClarificationQuestion"
+          }
+        },
+        "required": [
+          "question",
+          "answer"
+        ],
+        "title": "Clarification",
+        "type": "object"
+      },
       "ClarificationAsked": {
         "description": "The Context agent paused to ask the manager these questions.",
         "properties": {
@@ -120,6 +194,62 @@
           "questions"
         ],
         "title": "ClarificationAsked",
+        "type": "object"
+      },
+      "ClarificationQuestion": {
+        "description": "A specific question the agent asks instead of guessing (AG-02).",
+        "properties": {
+          "field": {
+            "title": "Field",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "question": {
+            "title": "Question",
+            "type": "string"
+          },
+          "reason": {
+            "$ref": "#/components/schemas/QuestionReason"
+          },
+          "suggestions": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Suggestions",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "field",
+          "question",
+          "reason"
+        ],
+        "title": "ClarificationQuestion",
+        "type": "object"
+      },
+      "ClarifyRequest": {
+        "additionalProperties": false,
+        "description": "Answers to the session's open clarification questions (ADR 0048).",
+        "properties": {
+          "answers": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "An answer in plain English for every open question, keyed by its id.",
+            "minProperties": 1,
+            "title": "Answers",
+            "type": "object"
+          }
+        },
+        "required": [
+          "answers"
+        ],
+        "title": "ClarifyRequest",
         "type": "object"
       },
       "ClearanceShortfall": {
@@ -1665,6 +1795,15 @@
         "title": "PruneReason",
         "type": "string"
       },
+      "QuestionReason": {
+        "enum": [
+          "missing",
+          "low_confidence",
+          "ambiguous"
+        ],
+        "title": "QuestionReason",
+        "type": "string"
+      },
       "Region": {
         "enum": [
           "North",
@@ -1977,9 +2116,25 @@
       "SessionResponse": {
         "description": "One planning session's read model: status, brief, planning request, latest revision.",
         "properties": {
+          "assumptions": {
+            "description": "How the Context agent read the brief, each with its source and confidence (ADR 0048).",
+            "items": {
+              "$ref": "#/components/schemas/Assumption"
+            },
+            "title": "Assumptions",
+            "type": "array"
+          },
           "brief": {
             "title": "Brief",
             "type": "string"
+          },
+          "clarifications": {
+            "description": "Every question answered so far, oldest first.",
+            "items": {
+              "$ref": "#/components/schemas/Clarification"
+            },
+            "title": "Clarifications",
+            "type": "array"
           },
           "decisions": {
             "description": "Every approval and rejection, oldest first: the session's audit trail.",
@@ -2020,6 +2175,14 @@
               }
             ]
           },
+          "questions": {
+            "description": "The clarification questions waiting for an answer (awaiting_clarification).",
+            "items": {
+              "$ref": "#/components/schemas/ClarificationQuestion"
+            },
+            "title": "Questions",
+            "type": "array"
+          },
           "session_id": {
             "format": "uuid",
             "title": "Session Id",
@@ -2041,13 +2204,16 @@
           "plan_revision",
           "error",
           "decisions",
-          "usage"
+          "usage",
+          "assumptions",
+          "questions",
+          "clarifications"
         ],
         "title": "SessionResponse",
         "type": "object"
       },
       "SessionStatus": {
-        "description": "Every status a planning session can have (ADR 0046).\n\nplanning -> awaiting_approval -> approved (final) or rejected (open for amendments); any\nfailure while planning -> failed. awaiting_clarification arrives with the Context agent\n(#46).",
+        "description": "Every status a planning session can have (ADR 0046).\n\nplanning -> awaiting_approval -> approved (final) or rejected (open for amendments); any\nfailure while planning -> failed; planning -> awaiting_clarification -> planning when the\nquestions are answered (ADR 0048).",
         "enum": [
           "planning",
           "awaiting_clarification",
@@ -3204,6 +3370,69 @@
           }
         },
         "summary": "Approve Session",
+        "tags": [
+          "sessions"
+        ]
+      }
+    },
+    "/api/sessions/{session_id}/clarify": {
+      "post": {
+        "description": "Answer the open clarification questions; planning resumes in the background.",
+        "operationId": "clarify_session_api_sessions__session_id__clarify_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClarifyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "description": "Unknown session"
+          },
+          "409": {
+            "description": "The session is not awaiting clarification"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "503": {
+            "description": "Planning is unavailable"
+          }
+        },
+        "summary": "Clarify Session",
         "tags": [
           "sessions"
         ]

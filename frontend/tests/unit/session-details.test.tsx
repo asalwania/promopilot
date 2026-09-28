@@ -6,6 +6,7 @@ import { SessionDetails } from "@/components/session-details";
 import {
   approvedSession,
   awaitingApprovalSession,
+  awaitingClarificationSession,
   failedSession,
   infeasibleSession,
   planLines,
@@ -118,6 +119,34 @@ describe("SessionDetails", () => {
         "Plan revision 1 was rejected: Too deep on Beverages in West.",
       ),
     ).toBeInTheDocument();
+  });
+
+  it("lists the questions a session awaiting clarification asks", () => {
+    render(<SessionDetails session={awaitingClarificationSession} />);
+
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Awaiting clarification",
+    );
+    const questions = screen.getByRole("list", {
+      name: "Clarification questions",
+    });
+    expect(
+      within(questions)
+        .getAllByRole("listitem")
+        .map((item) => item.textContent),
+    ).toEqual([
+      "What marketing budget should the plan's promo cost stay within, in rupees?",
+      'Which product categories does "snak stuff" mean? (Snacks?)',
+    ]);
+    expect(screen.queryByRole("progressbar")).not.toBeInTheDocument();
+  });
+
+  it("lists no questions when none are open", () => {
+    render(<SessionDetails session={awaitingApprovalSession} />);
+
+    expect(
+      screen.queryByRole("list", { name: "Clarification questions" }),
+    ).not.toBeInTheDocument();
   });
 
   it("shows no decision before one is made", () => {

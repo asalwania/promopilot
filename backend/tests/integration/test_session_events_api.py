@@ -18,7 +18,7 @@ from testcontainers.community.postgres import PostgresContainer
 
 from promopilot.data import load_dataset
 from promopilot.datagen import GeneratedDataset, write
-from promopilot.llm import FakeProvider, Usage
+from promopilot.llm import FakeProvider, LLMError, Usage
 from promopilot.models.demand import DemandModel
 from promopilot.models.relations import Relations
 from tests.integration.test_sessions_api import (
@@ -136,8 +136,8 @@ async def test_the_stream_resumes_after_last_event_id_without_gaps_or_duplicates
 async def test_a_failed_session_streams_its_trace_then_ends(
     postgres_url: str, small_models: tuple[DemandModel, Relations]
 ) -> None:
-    unbudgeted = READING.model_copy(update={"marketing_budget": None})
-    async with api_process(postgres_url, FakeProvider([unbudgeted]), small_models) as client:
+    down = FakeProvider([LLMError("provider down")])
+    async with api_process(postgres_url, down, small_models) as client:
         session_id = (await client.post("/api/sessions", json={"brief": BRIEF})).json()[
             "session_id"
         ]
@@ -150,7 +150,7 @@ async def test_a_failed_session_streams_its_trace_then_ends(
         ("context", "node_finished"),
     ]
     assert trace[-1]["payload"]["outcome"] == "failed"
-    assert "marketing budget" in trace[-1]["payload"]["error"]
+    assert "provider down" in trace[-1]["payload"]["error"]
     assert json.loads(events[-1]["data"])["status"] == "failed"
 
 

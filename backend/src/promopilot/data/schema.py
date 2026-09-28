@@ -150,6 +150,10 @@ planning_sessions = Table(
     Column("updated_at", DateTime(timezone=True), nullable=False, server_default=func.now()),
     # E8 (ADR 0046): the agent graph's checkpoint thread; null for sessions planned before it.
     Column("thread_id", Text),
+    # E8 #46 (ADR 0048): the Context agent's latest reading, its open questions and every answer.
+    Column("assumptions", JSONB),
+    Column("questions", JSONB),
+    Column("clarifications", JSONB),
     Index("ix_planning_sessions_status", "status"),
 )
 
