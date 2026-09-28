@@ -5,9 +5,14 @@ from promopilot.domain import (
     ClearanceTarget,
     CompanyPolicy,
     CompetitorReaction,
+    ExplanationSource,
+    FallbackReason,
     Mechanism,
+    PlanExplanation,
     PlanLine,
     PlanningRequest,
+    PlanRevision,
+    PlanRevisionLine,
     PlanSimulation,
     PromoPlan,
     PromoWindow,
@@ -186,3 +191,38 @@ def test_a_stored_simulation_from_before_the_scenario_reads_back_without_one() -
     stored = {"n_runs": 100, "seed": 0, "total": outcomes | {"sell_through": None}}
 
     assert PlanSimulation.model_validate(stored).competitor_reaction is None
+
+
+def test_a_plan_revision_explanation_has_one_rationale_per_plan_line() -> None:
+    planned = PlanRevisionLine(
+        line=line(), expected_units=10.0, promo_cost=100.0, expected_incremental_profit=50.0
+    )
+    explanation = PlanExplanation(
+        summary="One line.", rationales=("Why.",), source=ExplanationSource.LLM
+    )
+
+    revision = PlanRevision(number=1, lines=(planned,), explanation=explanation)
+
+    assert revision.explanation == explanation
+    with pytest.raises(ValidationError, match="one rationale per plan line"):
+        PlanRevision(
+            number=1,
+            lines=(planned,),
+            explanation=explanation.model_copy(update={"rationales": ()}),
+        )
+
+
+def test_only_a_template_explanation_records_why_the_llm_was_not_used() -> None:
+    fallback = PlanExplanation(
+        summary="Template.",
+        source=ExplanationSource.TEMPLATE,
+        fallback_reason=FallbackReason.UNGROUNDED,
+    )
+
+    assert fallback.fallback_reason is FallbackReason.UNGROUNDED
+    with pytest.raises(ValidationError, match="only a template explanation"):
+        PlanExplanation(
+            summary="LLM.",
+            source=ExplanationSource.LLM,
+            fallback_reason=FallbackReason.LLM_UNAVAILABLE,
+        )

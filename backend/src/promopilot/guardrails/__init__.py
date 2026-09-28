@@ -2,10 +2,13 @@
 
 `validate_plan` checks every hard constraint on a plan's own plan-time numbers (ADR 0012).
 `plan_limits` applies the brief's tighten-only changes to company policy (ADR 0007, ADR 0040).
-`check_numeric_grounding` checks that every number in a text comes from tool outputs.
+`check_numeric_grounding` checks that every number in a text comes from tool outputs, and
+`format_rupees`, `format_percent` and `format_units` show numbers so that it always accepts
+them (ADR 0050).
 """
 
 from promopilot.domain import Violation, ViolationCode
+from promopilot.guardrails.formatting import format_percent, format_rupees, format_units
 from promopilot.guardrails.grounding import GroundingReport, check_numeric_grounding
 from promopilot.guardrails.limits import PlanLimits, plan_limits
 from promopilot.guardrails.validation import (
@@ -26,6 +29,9 @@ __all__ = [
     "Violation",
     "ViolationCode",
     "check_numeric_grounding",
+    "format_percent",
+    "format_rupees",
+    "format_units",
     "plan_limits",
     "validate_plan",
 ]

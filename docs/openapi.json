@@ -382,6 +382,24 @@
         "title": "DecisionKind",
         "type": "string"
       },
+      "ExplanationSource": {
+        "enum": [
+          "llm",
+          "template"
+        ],
+        "title": "ExplanationSource",
+        "type": "string"
+      },
+      "FallbackReason": {
+        "description": "Why the template explained a plan revision instead of the LLM.",
+        "enum": [
+          "ungrounded",
+          "invalid_answer",
+          "llm_unavailable"
+        ],
+        "title": "FallbackReason",
+        "type": "string"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -954,6 +972,42 @@
         "title": "PlanDecision",
         "type": "object"
       },
+      "PlanExplanation": {
+        "description": "What the Explainer wrote for one plan revision.",
+        "properties": {
+          "fallback_reason": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FallbackReason"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "rationales": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Rationales",
+            "type": "array"
+          },
+          "source": {
+            "$ref": "#/components/schemas/ExplanationSource"
+          },
+          "summary": {
+            "title": "Summary",
+            "type": "string"
+          }
+        },
+        "required": [
+          "summary",
+          "source"
+        ],
+        "title": "PlanExplanation",
+        "type": "object"
+      },
       "PlanLine": {
         "description": "A promo option selected into a promo plan: one (SKU, region) decision (ADR 0004).",
         "properties": {
@@ -1029,6 +1083,16 @@
             },
             "title": "Clearance Shortfalls",
             "type": "array"
+          },
+          "explanation": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PlanExplanation"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "lines": {
             "default": [],

@@ -463,6 +463,17 @@ export interface components {
          * @enum {string}
          */
         DecisionKind: "approved" | "rejected";
+        /**
+         * ExplanationSource
+         * @enum {string}
+         */
+        ExplanationSource: "llm" | "template";
+        /**
+         * FallbackReason
+         * @description Why the template explained a plan revision instead of the LLM.
+         * @enum {string}
+         */
+        FallbackReason: "ungrounded" | "invalid_answer" | "llm_unavailable";
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
@@ -710,6 +721,21 @@ export interface components {
             revision_number: number;
         };
         /**
+         * PlanExplanation
+         * @description What the Explainer wrote for one plan revision.
+         */
+        PlanExplanation: {
+            fallback_reason?: components["schemas"]["FallbackReason"] | null;
+            /**
+             * Rationales
+             * @default []
+             */
+            rationales: string[];
+            source: components["schemas"]["ExplanationSource"];
+            /** Summary */
+            summary: string;
+        };
+        /**
          * PlanLine
          * @description A promo option selected into a promo plan: one (SKU, region) decision (ADR 0004).
          */
@@ -743,6 +769,7 @@ export interface components {
              * @default []
              */
             clearance_shortfalls: components["schemas"]["ClearanceShortfall"][];
+            explanation?: components["schemas"]["PlanExplanation"] | null;
             /**
              * Lines
              * @default []

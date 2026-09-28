@@ -1,4 +1,5 @@
-"""The template Explainer (ADR 0046): explanations from the plan revision's own numbers."""
+"""The template Explainer (ADR 0046, ADR 0050): explanations from the plan revision's own
+numbers, money in lakh or crore."""
 
 from hypothesis import given, settings
 from hypothesis import strategies as st
@@ -9,6 +10,7 @@ from promopilot.domain import (
     BindingEvidence,
     ConstraintKind,
     ConstraintSource,
+    ExplanationSource,
     Mechanism,
     PlanLine,
     PlanRevision,
@@ -97,7 +99,9 @@ def test_each_plan_line_gets_a_rationale_and_the_summary_names_what_binds() -> N
 
     explanations = template_explanations(planned, (issue,))
 
-    first, second = explanations.lines
+    assert explanations.source is ExplanationSource.TEMPLATE
+    assert explanations.fallback_reason is None
+    first, second = explanations.rationales
     assert first.startswith("SKU0012 in West: bundle with SKU0031 at 15% for 1 week from W60")
     assert "412 units" in first
     assert "₹18,250" in first
@@ -106,10 +110,27 @@ def test_each_plan_line_gets_a_rationale_and_the_summary_names_what_binds() -> N
     assert "-₹5,625" in second
     summary = explanations.summary
     assert "Infeasible" in summary
-    assert "₹1,72,384" in summary
-    assert "clearance target" in summary
+    assert "₹1.72 lakh" in summary
+    assert "the clearance target for SKU0029 in North at 90%" in summary
+    assert "the clearance target for SKU0029 from 90% to 70.3%" in summary
     assert "Company policy binds" in summary
     assert "CLEARANCE_TARGET" in summary
+
+
+def test_planner_notes_follow_the_constraints_verbatim_and_open_issues_come_last() -> None:
+    planned = revision(412.4, 18_250.0, 61_874.6, 172_384.2)
+    note = "Competitor is 5.1% cheaper on SKU0002 in North (₹94.90 vs ₹100.00); matching on 2 SKUs."
+    issue = Violation(code=ViolationCode.BUDGET, message="over")
+
+    summary = template_explanations(planned, (issue,), (note,)).summary
+
+    assert summary.index("Company policy binds") < summary.index(note) < summary.index("BUDGET")
+
+
+def test_money_from_a_crore_up_is_shown_in_crore() -> None:
+    planned = revision(412.4, 18_250.0, 61_874.6, 1_25_40_000.0)
+
+    assert "₹1.25 crore" in template_explanations(planned).summary
 
 
 def test_an_empty_plan_says_nothing_paid_for_itself() -> None:
@@ -117,7 +138,7 @@ def test_an_empty_plan_says_nothing_paid_for_itself() -> None:
 
     explanations = template_explanations(empty)
 
-    assert explanations.lines == ()
+    assert explanations.rationales == ()
     assert "No promo option pays for itself" in explanations.summary
 
 
@@ -135,6 +156,6 @@ def test_template_explanations_always_pass_numeric_grounding(
 
     explanations = template_explanations(planned)
 
-    for text in (explanations.summary, *explanations.lines):
+    for text in (explanations.summary, *explanations.rationales):
         report = check_numeric_grounding(text, [planned])
         assert report.ungrounded == (), text

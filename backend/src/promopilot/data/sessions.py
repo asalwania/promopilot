@@ -1,5 +1,5 @@
-"""Persistence for planning sessions, their plan revisions and every decision on them (E3,
-E8: ADR 0046)."""
+"""Persistence for planning sessions, their plan revisions, their explanations and every
+decision on them (E3, E8: ADR 0046, ADR 0050)."""
 
 from uuid import UUID, uuid4
 
@@ -15,6 +15,7 @@ from promopilot.domain import (
     MechanismOutcome,
     NotSelectedOption,
     PlanDecision,
+    PlanExplanation,
     PlanLine,
     PlanningRequest,
     PlanningSession,
@@ -150,6 +151,9 @@ class SessionStore:
                     if revision.relaxation is None
                     else revision.relaxation.model_dump(mode="json"),
                     open_issues=_ISSUES.dump_python(revision.open_issues, mode="json"),
+                    explanation=None
+                    if revision.explanation is None
+                    else revision.explanation.model_dump(mode="json"),
                 )
             )
             if revision.lines:
@@ -178,6 +182,20 @@ class SessionStore:
                     plan_revisions.c.number == revision_number,
                 )
                 .values(open_issues=_ISSUES.dump_python(issues, mode="json"))
+            )
+
+    async def save_explanation(
+        self, session_id: UUID, revision_number: int, explanation: PlanExplanation
+    ) -> None:
+        """Store the Explainer's summary and rationales on a plan revision (ADR 0050)."""
+        async with self._engine.begin() as connection:
+            await connection.execute(
+                update(plan_revisions)
+                .where(
+                    plan_revisions.c.session_id == session_id,
+                    plan_revisions.c.number == revision_number,
+                )
+                .values(explanation=explanation.model_dump(mode="json"))
             )
 
     async def await_approval(self, session_id: UUID) -> None:
@@ -320,6 +338,9 @@ def _revision(row: object, lines: tuple[PlanRevisionLine, ...]) -> PlanRevision:
         if values["relaxation"] is None
         else Relaxation.model_validate(values["relaxation"]),
         open_issues=_ISSUES.validate_python(values["open_issues"] or ()),
+        explanation=None
+        if values["explanation"] is None
+        else PlanExplanation.model_validate(values["explanation"]),
     )
 
 
