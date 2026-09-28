@@ -84,3 +84,16 @@ def test_the_holdout_wape_is_reported_at_the_model_store_and_region_grains(
     # Summing segments and stores averages noise out.
     assert wape["baseline_wape_region_sku"] < wape["baseline_wape_store_sku"]
     assert wape["baseline_wape_store_sku"] < wape["baseline_wape"]
+
+
+def test_wape_is_the_absolute_error_summed_over_the_units_summed() -> None:
+    # |12 - 10| + |15 - 20| + |1 - 0| = 8 over 10 + 20 + 0 = 30 units.
+    assert demand.wape(units=[10.0, 20.0, 0.0], predicted=[12.0, 15.0, 1.0]) == pytest.approx(
+        8 / 30
+    )
+    assert demand.wape(units=[4.0, 6.0], predicted=[4.0, 6.0]) == 0.0
+
+
+def test_wape_is_undefined_without_units() -> None:
+    with pytest.raises(ValueError, match="no units"):
+        demand.wape(units=[0.0, 0.0], predicted=[1.0, 2.0])

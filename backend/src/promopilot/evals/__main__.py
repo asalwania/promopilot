@@ -23,7 +23,13 @@ from pydantic import ValidationError
 from promopilot.agents import LLMPricing, PlanningSettings
 from promopilot.config import Settings
 from promopilot.datagen import load_config
-from promopilot.evals.report import REPORT_DIR, EvalReport, format_value, write_report
+from promopilot.evals.report import (
+    REPORT_DIR,
+    EvalReport,
+    format_amount,
+    format_value,
+    write_report,
+)
 from promopilot.evals.runner import run as run_scenarios
 from promopilot.evals.scenarios import SCENARIO_DIR, load_scenarios
 from promopilot.evals.world import EvalWorld
@@ -87,9 +93,19 @@ async def run(argv: Sequence[str] | None = None) -> int:
 def _summary(report: EvalReport) -> None:
     for metric in report.metrics:
         value = format_value(metric)
-        target = "" if metric.target is None else f" (target {metric.target:.0%})"
+        counted = f", {metric.count} of {metric.of}" if metric.of else ""
+        target = (
+            ""
+            if metric.target is None
+            else f" (target {format_amount(metric, metric.target, share_digits=0)})"
+        )
+        aim = (
+            ""
+            if metric.aim is None
+            else f" (aim {format_amount(metric, metric.aim, share_digits=0)})"
+        )
         verdict = "" if metric.passed is None else (" pass" if metric.passed else " FAIL")
-        print(f"{metric.label}: {value}, {metric.count} of {metric.of}{target}{verdict}")
+        print(f"{metric.label}: {value}{counted}{target}{aim}{verdict}")
     passed = sum(scenario.passed for scenario in report.scenarios)
     print(f"scenarios passed: {passed} of {len(report.scenarios)}")
 

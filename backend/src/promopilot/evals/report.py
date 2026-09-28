@@ -198,6 +198,7 @@ class Metric(_Frozen):
     count: int
     """How many of `of` count towards the value."""
     of: int
+    """0 when the value is not a share of counted items (a model's own holdout WAPE)."""
     target: float | None = None
     """SPEC §12.2's target; None for a reported metric."""
     direction: Literal["at_least", "at_most"] | None = None
@@ -206,6 +207,8 @@ class Metric(_Frozen):
     breakdown: dict[str, int] = {}
     unit: Literal["share", "seconds", "rupees"] = "share"
     """What `value` and `target` are in: a share from 0 to 1, or a P50 in seconds or rupees."""
+    aim: float | None = None
+    """What a reported metric aims for, in `direction` and `unit`, never judged (SPEC §12.2)."""
 
 
 class EvalReport(_Frozen):
@@ -283,9 +286,9 @@ def render_markdown(report: EvalReport) -> str:
     ]
     for metric in report.metrics:
         value = format_value(metric)
+        counted = f" ({metric.count} of {metric.of})" if metric.of else ""
         lines.append(
-            f"| {metric.label} | {value} ({metric.count} of {metric.of}) | {_target(metric)} "
-            f"| {_result(metric.passed)} |"
+            f"| {metric.label} | {value}{counted} | {_target(metric)} | {_result(metric.passed)} |"
         )
     breakdowns = [m for m in report.metrics if m.breakdown]
     if breakdowns:
@@ -328,13 +331,16 @@ def render_markdown(report: EvalReport) -> str:
 
 def format_value(metric: Metric) -> str:
     """A metric's value in its unit: a share as a percentage, a P50 in seconds or rupees."""
-    if metric.value is None:
-        return "n/a"
+    return "n/a" if metric.value is None else format_amount(metric, metric.value)
+
+
+def format_amount(metric: Metric, amount: float, *, share_digits: int = 1) -> str:
+    """An amount in the metric's unit, such as its value, target or aim."""
     if metric.unit == "seconds":
-        return f"{metric.value:.1f} s"
+        return f"{amount:.1f} s"
     if metric.unit == "rupees":
-        return f"₹{metric.value:,.2f}"
-    return f"{metric.value:.1%}"
+        return f"₹{amount:,.2f}"
+    return f"{amount:.{share_digits}%}"
 
 
 def _behaviour(run: RunResult) -> str:
@@ -365,10 +371,12 @@ def _behaviour(run: RunResult) -> str:
 
 
 def _target(metric: Metric) -> str:
-    if metric.target is None:
-        return "report"
     sign = "≥" if metric.direction == "at_least" else "≤"
-    return f"{sign} {metric.target:.0%}"
+    if metric.target is None:
+        if metric.aim is None:
+            return "report"
+        return f"report (aim {sign} {format_amount(metric, metric.aim, share_digits=0)})"
+    return f"{sign} {format_amount(metric, metric.target, share_digits=0)}"
 
 
 def _result(passed: bool | None) -> str:

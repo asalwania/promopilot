@@ -86,6 +86,15 @@ REPORT = EvalReport(
             of=1,
             breakdown={"promo_cost_over_budget": 1},
         ),
+        Metric(
+            name="baseline_wape_region_sku",
+            label="Baseline WAPE, region x SKU",
+            value=0.14,
+            count=0,
+            of=0,
+            direction="at_most",
+            aim=0.25,
+        ),
     ),
     scenarios=(
         ScenarioResult(
@@ -118,6 +127,7 @@ def test_the_markdown_shows_each_metric_against_its_target_and_every_failure(
     assert "| Constraint satisfaction | 0.0% (0 of 1) | ≥ 100% | **fail** |" in markdown
     assert "| Oracle breach rate | 100.0% (1 of 1) | report | — |" in markdown
     assert "- Oracle breach rate: promo_cost_over_budget 1" in markdown
+    assert "| Baseline WAPE, region x SKU | 14.0% | report (aim ≤ 25%) | — |" in markdown
     assert (
         "| amend-drop-west | mid_plan_amendments | 1 | planned | rev 2: 3 lines, OPTIMAL "
         "| failed | promo_cost_over_budget, demand_over_stock | 0/1 | **fail** |"

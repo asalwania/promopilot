@@ -16,6 +16,7 @@ from uuid import NAMESPACE_URL, uuid5
 
 from promopilot.data import InMemoryRetailData
 from promopilot.datagen import GeneratedDataset, GeneratorConfig, generate, load_config
+from promopilot.datagen.truth import GroundTruth
 from promopilot.evals.oracle import Oracle
 from promopilot.models import demand, relations
 from promopilot.models.demand import DemandHistory, DemandModel
@@ -76,16 +77,33 @@ class EvalWorld:
     def seed(self) -> int:
         return self._dataset.seed
 
+    @property
+    def default_as_of_week(self) -> int:
+        """The first week after the generated history: the week `make train` fits as of."""
+        return self._dataset.ground_truth.history_weeks
+
+    @property
+    def ground_truth(self) -> GroundTruth:
+        """The true parameters the world was generated with; model recovery reads them."""
+        return self._dataset.ground_truth
+
     def data(self, as_of_week: int) -> InMemoryRetailData:
         """The data tables, read with the clock at `as_of_week`."""
         return InMemoryRetailData(self._dataset, as_of_week=as_of_week)
 
-    async def models(self, as_of_week: int) -> ModelSources:
-        """The models fitted on the history before `as_of_week`, fitting them the first time."""
+    async def fitted(self, as_of_week: int) -> FittedModels:
+        """The models fitted on the history before `as_of_week`, fitting them the first time.
+
+        A fit that fails raises."""
         fitted = self._fitted.get(as_of_week)
         if fitted is None:
             fitted = await asyncio.to_thread(self._fit, as_of_week)
             self._fitted[as_of_week] = fitted
+        return fitted
+
+    async def models(self, as_of_week: int) -> ModelSources:
+        """The models `fitted` returns, served as the planning stack reads them."""
+        fitted = await self.fitted(as_of_week)
         return ModelSources(
             demand=_Fixed(self._entry(ModelKind.DEMAND, as_of_week), fitted.demand),
             relations=_Fixed(self._entry(ModelKind.RELATIONS, as_of_week), fitted.relations),

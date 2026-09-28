@@ -345,6 +345,10 @@ The share of infeasible-constraint scenarios' sessions whose final plan revision
 **Grounding pass rate**:
 The share of the Explainer's runs, where the LLM answered, whose explanation passed numeric grounding. A run where the LLM was unavailable is not scored. Target 98% (ADR 0062).
 
+**Model recovery**:
+How close the fitted models, as of the eval world's default week, come to the ground truth. It covers the median absolute % error of the own-price elasticities, and the precision and recall of the substitutes and complements. The same rows report the baseline's holdout WAPE, which needs no ground truth (ADR 0064).
+_Avoid_: model accuracy
+
 **Ground truth**:
 The hidden true parameters used to generate the synthetic data. Only evals may read it.
 

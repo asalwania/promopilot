@@ -31,3 +31,17 @@ async def test_the_worlds_data_reads_at_the_scenarios_week(
 
     assert await world.data(30).default_as_of_week() == 30
     assert world.seed == small_dataset.seed
+
+
+async def test_the_default_week_is_the_first_after_the_history_and_its_fit_is_kept(
+    small_dataset: GeneratedDataset,
+) -> None:
+    world = EvalWorld(small_dataset, fit_seed=3)
+
+    fitted = await world.fitted(world.default_as_of_week)
+
+    assert world.default_as_of_week == small_dataset.ground_truth.history_weeks
+    assert fitted.demand.as_of_week == world.default_as_of_week
+    assert (await world.fitted(world.default_as_of_week)) is fitted
+    sources = await world.models(world.default_as_of_week)
+    assert (await sources.demand.get())[1] is fitted.demand

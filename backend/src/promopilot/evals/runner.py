@@ -68,6 +68,7 @@ from promopilot.evals.metrics import (
     oracle_breach_rate,
     oracle_breaches,
 )
+from promopilot.evals.recovery import recovery_metrics
 from promopilot.evals.report import (
     ConstraintCheck,
     EvalReport,
@@ -131,6 +132,8 @@ async def run(
             )
         )
     every_run = [played for result in results for played in result.runs]
+    # Once per report, on the models as of the world's default week (ADR 0064).
+    recovery = await recovery_metrics(world)
     return EvalReport(
         generated_at=datetime.now(UTC),
         provider=provider_name or type(provider).__name__,
@@ -141,6 +144,7 @@ async def run(
             constraint_satisfaction(every_run),
             oracle_breach_rate(every_run),
             *behaviour_metrics(every_run),
+            *recovery,
         ),
         scenarios=tuple(results),
     )
