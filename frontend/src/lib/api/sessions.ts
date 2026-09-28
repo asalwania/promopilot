@@ -417,6 +417,8 @@ export type PlanRevisionLine = z.infer<typeof planRevisionLineSchema>;
 export type PlanningRequest = z.infer<typeof planningRequestSchema>;
 export type PlanDecision = z.infer<typeof planDecisionSchema>;
 export type ClarificationQuestion = z.infer<typeof clarificationQuestionSchema>;
+export type Clarification = z.infer<typeof clarificationSchema>;
+export type Assumption = z.infer<typeof assumptionSchema>;
 
 export type CreateSessionResult =
   { ok: true; sessionId: string } | { ok: false; reason: string };
@@ -459,6 +461,74 @@ const validationErrorSchema = z.object({
 async function validationMessage(response: Response): Promise<string> {
   const parsed = validationErrorSchema.safeParse(await response.json());
   return parsed.success ? parsed.data.detail[0].msg : "HTTP 422";
+}
+
+export type ClarifyResult =
+  | { ok: true; session: Session }
+  | { ok: false; reason: string; conflict: boolean };
+
+// Answers every open question by its id (ADR 0048). A 202 carries the session, back
+// in `planning`; a 409 means the questions were already answered (ADR 0061).
+export async function clarifySession(
+  sessionId: string,
+  answers: Record<string, string>,
+  fetchImpl: typeof fetch = fetch,
+): Promise<ClarifyResult> {
+  try {
+    const response = await fetchImpl(
+      `/api/sessions/${encodeURIComponent(sessionId)}/clarify`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ answers }),
+      },
+    );
+    if (response.status === 409) {
+      return {
+        ok: false,
+        conflict: true,
+        reason: "These questions were already answered.",
+      };
+    }
+    if (!response.ok) {
+      return {
+        ok: false,
+        conflict: false,
+        reason: await detailMessage(response),
+      };
+    }
+    const parsed = sessionSchema.safeParse(await response.json());
+    if (!parsed.success) {
+      return {
+        ok: false,
+        conflict: false,
+        reason: "unexpected session response",
+      };
+    }
+    return { ok: true, session: parsed.data };
+  } catch (error) {
+    return { ok: false, conflict: false, reason: errorMessage(error) };
+  }
+}
+
+const detailSchema = z.object({
+  detail: z.union([
+    z.string().min(1),
+    z.array(z.object({ msg: z.string() })).min(1),
+  ]),
+});
+
+// FastAPI's `detail`: a message from the handler, or the first validation error.
+async function detailMessage(response: Response): Promise<string> {
+  const fallback = `HTTP ${response.status}`;
+  try {
+    const parsed = detailSchema.safeParse(await response.json());
+    if (!parsed.success) return fallback;
+    const { detail } = parsed.data;
+    return typeof detail === "string" ? detail : detail[0].msg;
+  } catch {
+    return fallback;
+  }
 }
 
 export class SessionLoadError extends Error {

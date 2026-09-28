@@ -1,12 +1,19 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { SessionDetails } from "@/components/session-details";
+import {
+  SessionDetails,
+  type SessionActions,
+} from "@/components/session-details";
 import { TraceTimeline } from "@/components/trace-timeline";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { getSession, SessionLoadError } from "@/lib/api/sessions";
+import {
+  clarifySession,
+  getSession,
+  SessionLoadError,
+} from "@/lib/api/sessions";
 import { useTraceStream } from "@/lib/trace-stream";
 
 const POLL_INTERVAL_MS = 1000;
@@ -15,8 +22,10 @@ const MAX_RETRIES = 2;
 // The session page's container: it reads the session and its trace stream and
 // hands them to presentational components (ADR 0057).
 export function SessionView({ sessionId }: { sessionId: string }) {
+  const queryClient = useQueryClient();
+  const queryKey = ["session", sessionId];
   const query = useQuery({
-    queryKey: ["session", sessionId],
+    queryKey,
     queryFn: () => getSession(sessionId),
     // Poll only while the planner runs and the API answers; every other status
     // waits for the manager, and a failed read waits for the manager's Retry.
@@ -27,6 +36,20 @@ export function SessionView({ sessionId }: { sessionId: string }) {
     retry: (failureCount, error) =>
       !isNotFound(error) && failureCount < MAX_RETRIES,
   });
+
+  // Each action's response is the session itself: showing it at once restarts the
+  // poll while planning resumes. A conflict means the session moved on, so reload it.
+  const actions: SessionActions = {
+    clarify: async (answers) => {
+      const result = await clarifySession(sessionId, answers);
+      if (result.ok) {
+        queryClient.setQueryData(queryKey, result.session);
+      } else if (result.conflict) {
+        void query.refetch();
+      }
+      return result;
+    },
+  };
 
   if (isNotFound(query.error)) {
     return <Notice title="Session not found" />;
@@ -49,7 +72,7 @@ export function SessionView({ sessionId }: { sessionId: string }) {
       </Notice>
     );
   } else if (query.data) {
-    main = <SessionDetails session={query.data} />;
+    main = <SessionDetails session={query.data} actions={actions} />;
   } else {
     main = <Notice title="Loading session…" />;
   }

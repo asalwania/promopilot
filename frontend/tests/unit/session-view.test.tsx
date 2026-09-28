@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { act, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { SessionView } from "@/components/session-view";
@@ -8,6 +8,7 @@ import type { Session } from "@/lib/api/sessions";
 import { FakeEventSource } from "./fixtures/fake-event-source";
 import {
   awaitingApprovalSession,
+  awaitingClarificationSession,
   planningSession,
   SESSION_ID,
 } from "./fixtures/sessions";
@@ -50,6 +51,42 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+// Reads take the next session in turn (the last repeats); a POST to /clarify takes `clarify`.
+function stubClarifyApi(reads: Session[], clarify: () => Response) {
+  const posted: unknown[] = [];
+  let read = 0;
+  vi.stubGlobal(
+    "fetch",
+    async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input).endsWith("/clarify")) {
+        posted.push(JSON.parse(String(init?.body)));
+        return clarify();
+      }
+      read += 1;
+      return Response.json(reads[Math.min(read, reads.length) - 1]);
+    },
+  );
+  return posted;
+}
+
+function answerQuestions() {
+  fireEvent.change(
+    screen.getByRole("textbox", {
+      name: "What marketing budget should the plan's promo cost stay within, in rupees?",
+    }),
+    { target: { value: "₹2 lakh" } },
+  );
+  fireEvent.change(
+    screen.getByRole("textbox", {
+      name: 'Which product categories does "snak stuff" mean?',
+    }),
+    { target: { value: "Snacks" } },
+  );
+  fireEvent.click(
+    screen.getByRole("button", { name: "Answer and resume planning" }),
+  );
+}
+
 describe("SessionView", () => {
   it("polls while planning, shows the plan once ready, then stops polling", async () => {
     const requested = stubSessionApi([
@@ -69,6 +106,58 @@ describe("SessionView", () => {
 
     await advance(5000);
     expect(requested).toEqual(Array(3).fill(`/api/sessions/${SESSION_ID}`));
+  });
+
+  it("sends the answers, then polls the resumed planning through to the plan", async () => {
+    const posted = stubClarifyApi(
+      [awaitingClarificationSession, planningSession, awaitingApprovalSession],
+      () => Response.json(planningSession, { status: 202 }),
+    );
+
+    renderSessionView();
+    expect(
+      await screen.findByText("Awaiting clarification"),
+    ).toBeInTheDocument();
+    answerQuestions();
+
+    // The 202 carries the session back in planning: the form goes at once.
+    expect(await screen.findByText("Planning…")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("form", { name: "Clarification questions" }),
+    ).not.toBeInTheDocument();
+    expect(posted).toEqual([
+      {
+        answers: { marketing_budget: "₹2 lakh", "scope.categories": "Snacks" },
+      },
+    ]);
+
+    await advance(1000);
+    await advance(1000);
+    expect(await screen.findByText("Awaiting approval")).toBeInTheDocument();
+    expect(screen.getByRole("table", { name: "Plan lines" })).toBeVisible();
+  });
+
+  it("says the questions were already answered and reloads the session", async () => {
+    stubClarifyApi([awaitingClarificationSession, planningSession], () =>
+      Response.json(
+        {
+          detail:
+            "the session is planning: only a session awaiting clarification can be answered",
+        },
+        { status: 409 },
+      ),
+    );
+
+    renderSessionView();
+    expect(
+      await screen.findByText("Awaiting clarification"),
+    ).toBeInTheDocument();
+    answerQuestions();
+
+    expect(await screen.findByText("Planning…")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("form", { name: "Clarification questions" }),
+    ).not.toBeInTheDocument();
   });
 
   it("streams the agent trace next to the session and its LLM usage", async () => {
