@@ -82,6 +82,51 @@ class RevisionSummary(_Frozen):
     """Expected, on the plan's own numbers."""
     marketing_budget: float
     """The final planning request's budget."""
+    sku_ids: tuple[str, ...] = ()
+    """Every SKU the plan promotes, a BUNDLE partner included, sorted: what consistency
+    compares (ADR 0063)."""
+
+
+class RuleBasedSummary(_Frozen):
+    """The rule-based baseline (SPEC §12.2, ADR 0063): 20% off the top 10 sellers in scope,
+    to All customers, over the whole promo window, dropped from the bottom until its expected
+    promo cost fits the budget."""
+
+    sku_ids: tuple[str, ...]
+    """The sellers it promotes, the best first."""
+    dropped_sku_ids: tuple[str, ...]
+    """Top sellers dropped to fit the budget, the first dropped first."""
+    lines: int
+    expected_promo_cost: float
+    """On the plan-time numbers of the scenario's fitted demand model."""
+    objective: float
+    """The oracle's objective: incremental profit plus clearance value (ADR 0005)."""
+
+
+class BestPlanSummary(_Frozen):
+    """The best plan (ADR 0063): our optimiser run on true-parameter predictions."""
+
+    solver_status: SolveStatus
+    lines: int
+    sku_ids: tuple[str, ...]
+    objective: float | None
+    """The oracle's objective; None when the request is infeasible in truth."""
+
+
+class PlanQuality(_Frozen):
+    """A scored final plan against the rule-based baseline and the best plan (ADR 0063)."""
+
+    objective: float
+    """Our plan's oracle objective: incremental profit plus clearance value."""
+    rule_based: RuleBasedSummary
+    best: BestPlanSummary
+    versus_rule_based: Literal["beats", "ties", "loses"]
+    """Beats or loses by more than a paisa; ties otherwise."""
+    regret: float | None
+    """(best - ours) / best, signed; None when the best plan is infeasible. When the best
+    plan earns nothing (a paisa or less), 0 if ours matches it and 1 if ours earns less."""
+    regret_rupees: float | None
+    """best - ours."""
 
 
 class PropertyResult(_Frozen):
@@ -153,6 +198,9 @@ class RunResult(_Frozen):
     oracle: OracleScore | None = None
     """None when the constraints are not scored."""
     properties: tuple[PropertyResult, ...] = ()
+    quality: PlanQuality | None = None
+    """Against the rule-based baseline and the best plan; None when the oracle did not
+    score the plan."""
     duration_s: float = 0.0
     extraction: tuple[FieldMatch, ...] = ()
     """Each labelled field against the final planning request (#55)."""
@@ -188,13 +236,17 @@ class ScenarioResult(_Frozen):
     runs: tuple[RunResult, ...]
     passed: bool
     """Every run ran, kept its hard constraints and had every expected property."""
+    consistency: float | None = None
+    """The mean Jaccard overlap of the SKUs every two runs' final revisions promote; None
+    with fewer than two such runs (ADR 0063)."""
 
 
 class Metric(_Frozen):
     name: str
     label: str
     value: float | None
-    """A share from 0 to 1, or a P50 in `unit`; None when nothing was scored."""
+    """A share from 0 to 1, or a P50 in `unit`; None when nothing was scored. Regret is
+    signed and may exceed 1 (ADR 0063)."""
     count: int
     """How many of `of` count towards the value."""
     of: int
@@ -322,6 +374,7 @@ def render_markdown(report: EvalReport) -> str:
     for scenario in report.scenarios:
         for run in scenario.runs:
             lines.append(f"| {scenario.name} | {run.run} | {_behaviour(run)} |")
+    lines += _plan_quality(report)
     failures = [(scenario.name, run) for scenario in report.scenarios for run in scenario.runs]
     details = [line for name, run in failures for line in _failures(name, run)]
     lines += ["", "## Failures", ""]
@@ -368,6 +421,50 @@ def _behaviour(run: RunResult) -> str:
             cost,
         )
     )
+
+
+def _plan_quality(report: EvalReport) -> list[str]:
+    """Each scored plan against the rule-based baseline and the best plan, on the oracle's
+    objective, and each scenario's consistency (ADR 0063)."""
+    lines = [
+        "",
+        "## Plan quality",
+        "",
+        "Oracle objective (incremental profit plus clearance value) of each scored plan, the "
+        "rule-based baseline and the best plan for its final request.",
+        "",
+        "| Scenario | Run | Ours | Rule-based | Best | Regret | Against the baseline |",
+        "|---|---|---|---|---|---|---|",
+    ]
+    for scenario in report.scenarios:
+        for run in scenario.runs:
+            quality = run.quality
+            if quality is None:
+                continue
+            rule, best = quality.rule_based, quality.best
+            sellers = len(rule.sku_ids) + len(rule.dropped_sku_ids)
+            top = "infeasible" if best.objective is None else _rupees(best.objective)
+            regret = "—" if quality.regret is None else f"{quality.regret:.1%}"
+            lines.append(
+                f"| {scenario.name} | {run.run} | {_rupees(quality.objective)} "
+                f"| {_rupees(rule.objective)} ({len(rule.sku_ids)} of {sellers} sellers kept) "
+                f"| {top} ({best.solver_status.value}, {best.lines} lines) | {regret} "
+                f"| {quality.versus_rule_based} |"
+            )
+    consistent = [(s.name, s.consistency) for s in report.scenarios if s.consistency is not None]
+    lines.append("")
+    if consistent:
+        lines += [f"- {name}: consistency {value:.1%}" for name, value in consistent]
+    else:
+        lines.append(
+            "Consistency needs at least two runs per scenario (`make eval RUNS=5`). Under the "
+            "replay provider a scenario's runs are identical: only a live LLM varies them."
+        )
+    return lines
+
+
+def _rupees(amount: float) -> str:
+    return f"₹{amount:,.0f}"
 
 
 def _target(metric: Metric) -> str:

@@ -328,9 +328,14 @@ The report goes to `backend/evals/reports/` (gitignored) as `<UTC timestamp>.jso
   - **Elasticity recovery** (target ≤ 20%): the median absolute % error of the estimated own-price elasticity against the true one, over every SKU × segment, with how many are within 20%.
   - **Substitute and complement precision / recall** (targets ≥ 0.8 / ≥ 0.7): the pairs the relations model keeps, as unordered pairs across the catalogue, against every true pair.
   - **Baseline WAPE** (reported, aim ≤ 25%): the demand model's own 12-week holdout WAPE at the store × SKU × segment, store × SKU and region × SKU grains (ADR 0023).
+- **Plan quality** (target 90%): the share of scenarios whose every scored plan earns more, by the oracle's objective (incremental profit plus clearance value), than the **rule-based baseline**. That baseline is 20% off the top 10 sellers in scope (units over the 12 weeks before the as-of week), to All customers, in every region of the scope, over the promo window (at most its first 4 weeks), with sellers dropped from the bottom until its expected promo cost fits the budget and any regional cap (ADR 0063).
+- **Regret** (target: median 10% or less): (best − ours) / best, where the **best plan** is our own option generation and optimiser run on true-parameter predictions from the ground truth, with the session's work budgets and the scenario's seed, scored by the oracle. It is signed; when the best plan earns nothing, matching it is 0 and earning less is 100%.
+- **Consistency** (target 0.9): the mean Jaccard overlap of the SKUs every two runs of a scenario promote. It needs `RUNS` of at least 2 (`make eval RUNS=5`), so the default run shows it as n/a. With the replay provider a scenario's runs are identical: only a live LLM varies them.
 - **Expected properties**: each scenario's `expect` list, pass or fail per run.
 
 A second table, **Agent behaviour**, shows per run the fields read right, the questions asked, the flagged assumptions, each Explainer run's source, the session time and its cost.
+
+The harness builds the baseline and the best plan from each run's final planning request, never from the scenario file, once per scenario seed and request. The report's plan-quality table shows each scored plan against both.
 
 ## Repository layout
 
@@ -404,6 +409,7 @@ docs/agents/ Agent workflow config (issue tracker, triage labels, domain docs)
 - [ADR 0060: The plan shows in a tab per region plus a side-by-side tab; plan lines keep their uplift, segment uplift and cross effects, and a frontend map names each number's tool](docs/adr/0060-region-plan-tabs-and-sourced-numbers.md)
 - [ADR 0061: The session page lists every assumption and highlights readings below 0.9 confidence, flagged values and rule readings, and asks open questions as a form whose answers resume planning at once](docs/adr/0061-assumptions-panel-and-clarification-form.md)
 - [ADR 0062: Agent-behaviour metrics score each session's final request, questions, flags, infeasibility and Explainer runs, and its time and cost from its trace](docs/adr/0062-agent-behaviour-metrics.md)
+- [ADR 0063: Plans are measured against a rule-based baseline and our own optimiser on true parameters, both built by the harness from each run's final request, and runs of a scenario against each other](docs/adr/0063-plan-quality-baseline-regret-consistency.md)
 - [ADR 0064: Model-recovery metrics read the eval world's own fit at its default week and report elasticity error, pair detection and the holdout WAPE](docs/adr/0064-model-recovery-metrics.md)
 - [ADR 0066: The session page reviews the latest plan revision in one card that approves after a confirm, rejects with a reason and amends; the revision's diff shows in the plan, and an audit trail lists every amendment and decision](docs/adr/0066-amend-diff-approve-and-reject.md)
 

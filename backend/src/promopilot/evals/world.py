@@ -87,6 +87,11 @@ class EvalWorld:
         """The true parameters the world was generated with; model recovery reads them."""
         return self._dataset.ground_truth
 
+    @property
+    def dataset(self) -> GeneratedDataset:
+        """The generated tables and their ground truth (ADR 0063's baseline and best plan)."""
+        return self._dataset
+
     def data(self, as_of_week: int) -> InMemoryRetailData:
         """The data tables, read with the clock at `as_of_week`."""
         return InMemoryRetailData(self._dataset, as_of_week=as_of_week)

@@ -66,7 +66,15 @@ def sku(sku_id: str, *, beta: float = -2.0, pull_forward: float = 0.0) -> SkuTru
 def tiny_oracle(
     *, pull_forward: float = 0.0, on_hand_a: int = 5_000, cover_a: float = 30.0
 ) -> Oracle:
-    truth = GroundTruth(
+    return Oracle(
+        tiny_truth(pull_forward=pull_forward),
+        tiny_products(),
+        tiny_inventory(on_hand_a=on_hand_a, cover_a=cover_a),
+    )
+
+
+def tiny_truth(*, pull_forward: float = 0.0) -> GroundTruth:
+    return GroundTruth(
         start_date=date(2024, 9, 30),
         history_weeks=AS_OF,
         horizon_weeks=WEEKS - AS_OF,
@@ -94,14 +102,21 @@ def tiny_oracle(
         substitute_pairs=[("A", "B")],
         complement_pairs=[("A", "C")],
     )
-    products = pd.DataFrame(
+
+
+def tiny_products() -> pd.DataFrame:
+    return pd.DataFrame(
         {
             "sku_id": list(PRICES),
+            "category": ["Snacks", "Snacks", "Beverages"],
             "base_price": [p for p, _ in PRICES.values()],
             "unit_cost": [c for _, c in PRICES.values()],
         }
     )
-    inventory = pd.DataFrame(
+
+
+def tiny_inventory(*, on_hand_a: int = 5_000, cover_a: float = 30.0) -> pd.DataFrame:
+    return pd.DataFrame(
         {
             "snapshot_week": AS_OF - 1,
             "store_id": "N01",
@@ -111,7 +126,6 @@ def tiny_oracle(
             "days_of_cover": [cover_a, 30.0, 30.0],
         }
     )
-    return Oracle(truth, products, inventory)
 
 
 def a_line(**changes: object) -> PlanLine:

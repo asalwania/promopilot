@@ -153,6 +153,35 @@ async def test_every_final_plan_is_checked_and_scored_with_answers_and_amendment
     assert [p.passed for p in amend.properties] == [True, True]
 
 
+async def test_every_scored_plan_is_compared_with_the_rule_based_baseline_and_the_best_plan(
+    world: EvalWorld,
+) -> None:
+    report = await evaluate(world, [PLAIN, AMEND])
+
+    quality, regret = metric(report, "plan_quality"), metric(report, "regret")
+    assert (quality.of, quality.target, quality.direction) == (2, 0.9, "at_least")
+    assert (regret.of, regret.target, regret.direction) == (2, 0.10, "at_most")
+    assert quality.passed is not None
+    assert regret.passed is not None
+    consistency = metric(report, "consistency")
+    assert (consistency.value, consistency.passed) == (None, None), "one run per scenario"
+
+    plain = only_run(report, "plain")
+    assert plain.oracle is not None
+    assert plain.quality is not None
+    assert plain.revision is not None
+    assert plain.quality.objective == pytest.approx(
+        plain.oracle.incremental_profit + plain.oracle.clearance_value
+    )
+    assert plain.quality.best.objective is not None
+    assert plain.quality.regret is not None
+    assert plain.revision.sku_ids
+    # Both plans are built on the final request: after "Drop South", North only.
+    amend = only_run(report, "amend")
+    assert amend.quality is not None
+    assert amend.quality.rule_based.lines == len(amend.quality.rule_based.sku_ids)
+
+
 async def test_a_failing_expected_property_fails_its_run_and_scenario(world: EvalWorld) -> None:
     wrong = Scenario.model_validate(
         {**PLAIN.model_dump(), "name": "wrong", "expect": [{"excludes_region": "North"}]}
@@ -181,8 +210,12 @@ async def test_the_run_is_deterministic_for_a_seed(world: EvalWorld) -> None:
         second.comparable()["scenarios"][0]["runs"][0]
         == first.comparable()["scenarios"][0]["runs"][0]
     )
-    satisfied = metric(first, "constraint_satisfaction").value
-    assert metric(second, "constraint_satisfaction").value == satisfied
+    for name in ("constraint_satisfaction", "plan_quality", "regret"):
+        assert metric(second, name).value == metric(first, name).value
+    # Two identical runs promote the same SKUs.
+    assert first.scenarios[0].consistency == 1.0
+    assert metric(first, "consistency").value == 1.0
+    assert metric(second, "consistency").value is None
 
 
 async def test_the_scripted_llm_reads_the_brief_and_what_it_cannot_answer_falls_back(
@@ -232,6 +265,7 @@ async def test_an_unanswered_question_ends_the_run_with_no_plan_to_score(world: 
         (False, "no final plan revision"),
     ]
     assert metric(report, "constraint_satisfaction").value is None
+    assert metric(report, "plan_quality").value is None
 
 
 class Broken:

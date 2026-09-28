@@ -146,3 +146,30 @@ def test_expected_units_rejects_weeks_outside_the_generated_timeline(
         demand.expected_units(
             Region.NORTH, small_dataset.config.total_weeks - 1, prices, mechanisms
         )
+
+
+def test_expected_units_for_a_subset_of_skus_match_the_full_computation(
+    small_dataset: GeneratedDataset,
+) -> None:
+    # The other SKUs stay at their reference price and unpromoted, so they move nothing.
+    truth = small_dataset.ground_truth
+    demand = TrueDemand(truth)
+    index = {sku.sku_id: i for i, sku in enumerate(truth.skus)}
+    sub_a, sub_b = truth.substitute_pairs[0]
+    columns = [index[sub_b], index[sub_a]]
+    prices, mechanisms = scenario(demand, weeks=6)
+    prices[:2, 1, index[sub_a]] *= 0.8
+    prices[:2, :, index[sub_b]] *= 0.7
+    mechanisms[:2, 1, index[sub_a]] = MECHANISMS.index(Mechanism.PCT_OFF)
+    full = demand.expected_units(Region.NORTH, 50, prices, mechanisms)
+
+    subset = demand.expected_units(
+        Region.NORTH,
+        50,
+        prices[:, :, columns],
+        mechanisms[:, :, columns],
+        sku_ids=[sub_b, sub_a],
+    )
+
+    assert subset.shape == (*full.shape[:3], 2)
+    np.testing.assert_allclose(subset, full[..., columns])
