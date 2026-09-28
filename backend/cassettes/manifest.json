@@ -178,6 +178,39 @@
           "explanation": "llm"
         }
       ]
+    },
+    "regional": {
+      "script": {
+        "name": "regional",
+        "brief": "Plan a Christmas promotion for Snacks and Beverages across all regions. Marketing budget ₹5 lakh, with no more than ₹1 lakh in South. Stay within 3% of competitor prices on KVIs. Target young urban shoppers.",
+        "steps": []
+      },
+      "route": [
+        "context",
+        "planner",
+        "critic",
+        "planner",
+        "critic",
+        "explainer",
+        "approval"
+      ],
+      "cassettes": [
+        "ee53cd6b11b3b7dfca78382b7c5a7b85c779e6b39aa375c9b34b84c67331411e",
+        "43a9f6f7375db5d0a7b92fac80987d0364354e4fdc5662362e4424cc57cba276",
+        "49b1c75eafe81afaf8f3b32ac88955ca5bac6022a5f33f3caf7451b1a63c4a5d",
+        "3557ed2ec6e179f9a52ea8399e792f9d1e6ba7513776e9891bdf857c2aed2dc8",
+        "61d8af0fe861265349c90c26aec601f009c7c14c0be6534f6599da26745bedd5",
+        "47230cce54d1969f43bdedcf236b85ffbc6163b66f79614517f0d0c3c09f8766",
+        "e8cdea7b71c47d0761f4b992a604365ab4aef95d7f0ac4d444ae934e640a0d57",
+        "3d426d65d0b60205ba77aaa9ec6986fef20eaab7f569980b3adfbb2597912001",
+        "299d6a7e7c713be8f459e0826b507e88211d59b0c802cf9d7dd339607394e7c0"
+      ],
+      "revisions": [
+        {
+          "number": 1,
+          "explanation": "llm"
+        }
+      ]
     }
   }
 }
