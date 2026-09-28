@@ -255,7 +255,7 @@ The human decision that makes one specific plan revision final; it ends the plan
 A human decision, with a reason, that a plan revision is not acceptable. The session stays open for amendments.
 
 **Decision**:
-An approval or a rejection of one named plan revision, with when it was made (and, for a rejection, why). Every decision of a planning session is kept in order as its audit trail.
+An approval or a rejection of one named plan revision, with when it was made (and, for a rejection, why). Every decision of a planning session is kept in order as its audit trail; the session page shows its amendments in the same trail, in time order (ADR 0066).
 _Avoid_: vote, sign-off
 
 **Planner note**:
