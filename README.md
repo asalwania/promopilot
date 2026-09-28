@@ -324,6 +324,10 @@ The report goes to `backend/evals/reports/` (gitignored) as `<UTC timestamp>.jso
 - **Infeasibility handling** (target 100%): the share of `infeasible_constraints` runs whose final revision is `INFEASIBLE`, proposes a relaxation and names a binding constraint. A solver timeout is not a declaration.
 - **Grounding** (target ≥ 98%): the share of Explainer runs the LLM answered (one per revision that waited for approval, amendments included) whose explanation passed numeric grounding. A template for an ungrounded or invalid answer fails; one because the LLM was unavailable, a cassette miss included, is counted but not scored.
 - **P50 session time and cost** (reported): the median wall-clock time of the sessions that did not fail, without fitting the models, and their median LLM cost in rupees, the sum of each session's token-usage events priced with `LLM_PRICES`. Replay reports the recorded usage again, so a cassette miss costs nothing. SPEC §6 aims for under 60 s with a live LLM and under ₹20 a session.
+- **Model recovery** (ADR 0064), once per report on the models fitted as of the world's default week (104, the models `make train` registers; fitted if no scenario uses that week):
+  - **Elasticity recovery** (target ≤ 20%): the median absolute % error of the estimated own-price elasticity against the true one, over every SKU × segment, with how many are within 20%.
+  - **Substitute and complement precision / recall** (targets ≥ 0.8 / ≥ 0.7): the pairs the relations model keeps, as unordered pairs across the catalogue, against every true pair.
+  - **Baseline WAPE** (reported, aim ≤ 25%): the demand model's own 12-week holdout WAPE at the store × SKU × segment, store × SKU and region × SKU grains (ADR 0023).
 - **Expected properties**: each scenario's `expect` list, pass or fail per run.
 
 A second table, **Agent behaviour**, shows per run the fields read right, the questions asked, the flagged assumptions, each Explainer run's source, the session time and its cost.
@@ -400,6 +404,7 @@ docs/agents/ Agent workflow config (issue tracker, triage labels, domain docs)
 - [ADR 0060: The plan shows in a tab per region plus a side-by-side tab; plan lines keep their uplift, segment uplift and cross effects, and a frontend map names each number's tool](docs/adr/0060-region-plan-tabs-and-sourced-numbers.md)
 - [ADR 0061: The session page lists every assumption and highlights readings below 0.9 confidence, flagged values and rule readings, and asks open questions as a form whose answers resume planning at once](docs/adr/0061-assumptions-panel-and-clarification-form.md)
 - [ADR 0062: Agent-behaviour metrics score each session's final request, questions, flags, infeasibility and Explainer runs, and its time and cost from its trace](docs/adr/0062-agent-behaviour-metrics.md)
+- [ADR 0064: Model-recovery metrics read the eval world's own fit at its default week and report elasticity error, pair detection and the holdout WAPE](docs/adr/0064-model-recovery-metrics.md)
 
 The domain glossary is [CONTEXT.md](CONTEXT.md).
 

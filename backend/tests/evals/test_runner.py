@@ -338,3 +338,12 @@ async def test_a_sessions_cost_is_the_sum_of_its_priced_token_usage(world: EvalW
     cost = metric(report, "session_cost_p50")
     assert cost.value == pytest.approx(usage.cost_inr)
     assert cost.breakdown["calls"] == usage.calls
+
+
+async def test_the_report_has_the_model_recovery_metrics_once(world: EvalWorld) -> None:
+    report = await evaluate(world, [PLAIN])
+
+    recovery = metric(report, "elasticity_recovery")
+    assert (recovery.target, recovery.value is not None) == (0.2, True)
+    for name in ("substitute_precision", "complement_recall", "baseline_wape_region_sku"):
+        assert metric(report, name).of >= 0

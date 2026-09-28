@@ -291,7 +291,7 @@ def fit(history: DemandHistory, as_of_week: int, seed: int) -> DemandModel:
         metrics={
             # Plan lines are region-level (ADR 0004); segment-level counts are mostly noise.
             **{
-                f"baseline_wape{suffix}": _wape(
+                f"baseline_wape{suffix}": _grain_wape(
                     holdout.groupby(grain)[["units", "predicted"]].sum()
                 )
                 for suffix, grain in WAPE_GRAINS.items()
@@ -306,8 +306,20 @@ def fit(history: DemandHistory, as_of_week: int, seed: int) -> DemandModel:
     )
 
 
-def _wape(frame: pd.DataFrame) -> float:
-    return float(np.abs(frame["predicted"] - frame["units"]).sum() / frame["units"].sum())
+def wape(units: Sequence[float] | pd.Series, predicted: Sequence[float] | pd.Series) -> float:
+    """Weighted absolute percentage error: the absolute errors summed over the units summed.
+
+    Raises ValueError when there are no units to weigh the errors by.
+    """
+    actual = np.asarray(units, dtype=float)
+    total = actual.sum()
+    if total <= 0:
+        raise ValueError("WAPE is undefined with no units")
+    return float(np.abs(np.asarray(predicted, dtype=float) - actual).sum() / total)
+
+
+def _grain_wape(frame: pd.DataFrame) -> float:
+    return wape(frame["units"], frame["predicted"])
 
 
 @dataclass(frozen=True)
