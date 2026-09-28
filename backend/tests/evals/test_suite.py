@@ -16,7 +16,6 @@ from promopilot.evals import (
     SCENARIO_DIR,
     DeclaresInfeasible,
     DiffChanges,
-    EvalWorld,
     ExcludesRegion,
     KviResponsePresent,
     MeetsClearance,
@@ -27,6 +26,7 @@ from promopilot.evals import (
     load_scenarios,
 )
 from promopilot.evals.behaviour import match_fields
+from promopilot.evals.substitutes import strong_in_scope, strong_substitutes
 from tests.unit.agents.fakes import DownProvider
 
 G = ScenarioGroup
@@ -129,11 +129,6 @@ def test_each_group_expects_the_properties_it_tests() -> None:
 # ---------------------------------------------------------------- coherent on the seed-42 world
 
 
-@pytest.fixture(scope="module")
-def world(default_dataset: GeneratedDataset) -> EvalWorld:
-    return EvalWorld(default_dataset)
-
-
 def test_every_labelled_window_ends_within_the_generated_horizon(
     default_dataset: GeneratedDataset,
 ) -> None:
@@ -185,10 +180,13 @@ async def test_every_price_war_scope_has_an_undercut_kvi_at_its_week(
 
 
 def test_every_heavy_cannibalisation_scope_holds_strong_substitute_pairs(
-    world: EvalWorld,
+    default_dataset: GeneratedDataset,
 ) -> None:
+    truth = default_dataset.ground_truth
+    strong = strong_substitutes(truth.substitute_pairs, truth.cross_effects)
     for scenario in of(G.HEAVY_CANNIBALISATION):
-        assert len(world.strong_substitutes(scope(scenario))) >= 2, scenario.name
+        found = strong_in_scope(strong, default_dataset.products, scope(scenario))
+        assert len(found) >= 2, scenario.name
 
 
 # ---------------------------------------------------------------- readable with no LLM
