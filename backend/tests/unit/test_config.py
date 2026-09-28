@@ -182,11 +182,14 @@ def test_the_planning_settings_a_recording_depends_on_come_from_the_environment(
 
     assert set(planning.recorded_settings) == set(RECORDED)
     assert planning.recorded_settings == {
-        "optimizer_time_limit_seconds": 10.0,
+        "optimizer_deterministic_limit": 10.0,
+        "optimizer_binding_deterministic_limit": 6.0,
+        "optimizer_relaxation_deterministic_limit": 10.0,
+        "optimizer_time_limit_seconds": 60.0,
         "optimizer_workers": 1,
         "optimizer_seed": 0,
-        "optimizer_binding_time_limit_seconds": 8.0,
-        "optimizer_relaxation_time_limit_seconds": 10.0,
+        "optimizer_binding_time_limit_seconds": 30.0,
+        "optimizer_relaxation_time_limit_seconds": 60.0,
         "simulation_runs": 200,
         "simulation_seed": 0,
         "critic_line_spend_share": 0.25,
@@ -202,6 +205,10 @@ def test_the_planning_settings_a_recording_depends_on_come_from_the_environment(
 
 
 RECORDED = (
+    # The work budgets decide the plan (ADR 0055); the wall-clock nets only when one is hit.
+    "optimizer_deterministic_limit",
+    "optimizer_binding_deterministic_limit",
+    "optimizer_relaxation_deterministic_limit",
     "optimizer_time_limit_seconds",
     "optimizer_workers",
     "optimizer_seed",

@@ -54,7 +54,7 @@ We chose these with the owner (D1–D11 on #51; every recommended option).
   - With version numbers, a planner round recorded on demand v5 / relations v2 named a candidate set that CI, a fresh clone and `make demo` (all v1 / v1) never stored. So every replayed `run_optimizer` failed, and the planner degraded.
   - A retrain in the middle of a session may hand `run_optimizer` the newer model's set. That is rare and harmless.
   - No committed cassette changes: no planner cassette was committed.
-- **D7. Recording runs on the host** with `make record-cassettes`, as before. CI's `--check` catches any drift between the Windows host and the Linux containers. If drift shows, recording moves into the api container, in an isolated compose project with its own volumes. Never record against the shared database: training in the container would register models whose artifacts the host cannot load.
+- **D7. Recording runs on the host** with `make record-cassettes`, as before. Since ADR 0055, every optimiser phase stops on a deterministic-time budget, so a plan does not depend on how fast or busy the machine is; before it, a slower or loaded machine planned the demo differently (#133). CI's `--check` catches any remaining drift between the Windows host and the Linux containers. If drift shows, recording moves into the api container, in an isolated compose project with its own volumes. Never record against the shared database: training in the container would register models whose artifacts the host cannot load.
 - **D8. A recording fails, and changes nothing, when any session:**
   - has the Context agent read by rules;
   - asks a question the script does not answer, or not the ones it answers;
@@ -73,7 +73,9 @@ We chose these with the owner (D1–D11 on #51; every recommended option).
 
   We rejected skipping sessions with no manifest entry, which hides gaps. We rejected splitting the code and the cassettes into two PRs.
 - **D11. The manifest records the planning settings** that shape what the LLM is shown:
-  - `OPTIMIZER_TIME_LIMIT_SECONDS`, `OPTIMIZER_WORKERS`, `OPTIMIZER_SEED`, `OPTIMIZER_BINDING_TIME_LIMIT_SECONDS` and `OPTIMIZER_RELAXATION_TIME_LIMIT_SECONDS`;
+  - the optimiser's work budgets, which decide the plan (ADR 0055): `OPTIMIZER_DETERMINISTIC_LIMIT`, `OPTIMIZER_BINDING_DETERMINISTIC_LIMIT` and `OPTIMIZER_RELAXATION_DETERMINISTIC_LIMIT`;
+  - their wall-clock safety nets, which matter only on a machine that reaches one: `OPTIMIZER_TIME_LIMIT_SECONDS`, `OPTIMIZER_BINDING_TIME_LIMIT_SECONDS` and `OPTIMIZER_RELAXATION_TIME_LIMIT_SECONDS`;
+  - `OPTIMIZER_WORKERS` and `OPTIMIZER_SEED`;
   - `SIMULATION_RUNS` and `SIMULATION_SEED`;
   - the four `CRITIC_*` thresholds.
 

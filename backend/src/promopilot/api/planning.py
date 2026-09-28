@@ -150,6 +150,9 @@ def build_planning(settings: Settings, engine: AsyncEngine) -> Planning:
 
 
 RECORDED_SETTINGS = {
+    "optimizer_deterministic_limit",
+    "optimizer_binding_deterministic_limit",
+    "optimizer_relaxation_deterministic_limit",
     "optimizer_time_limit_seconds",
     "optimizer_workers",
     "optimizer_seed",
@@ -163,4 +166,5 @@ RECORDED_SETTINGS = {
     "critic_stockout_probability",
 }
 """What a plan, and so every Critic and Explainer request, depends on besides the data and the
-models (ADR 0054)."""
+models (ADR 0054): the optimiser's work budgets decide it (ADR 0055), and its wall-clock nets
+only when one is hit."""
