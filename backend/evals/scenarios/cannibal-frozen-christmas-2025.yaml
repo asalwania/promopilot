@@ -1,0 +1,16 @@
+# Heavy cannibalisation: Frozen, with its many strong substitutes among frozen vegetables.
+name: cannibal-frozen-christmas-2025
+group: heavy_cannibalisation
+brief: >-
+  Plan a Christmas promotion for Frozen in West and East for weeks 63-64, with a marketing
+  budget of ₹1.5 lakh.
+as_of_week: 62
+seed: 0
+labels:
+  regions: [West, East]
+  categories: [Frozen]
+  promo_window: {start_week: 63, end_week: 64}
+  marketing_budget: 150000
+expect:
+  - declares_infeasible: false
+  - no_strong_substitutes_together: true

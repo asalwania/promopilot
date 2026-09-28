@@ -1,0 +1,18 @@
+# Overstock clearance: Tropica Juices 200ml is overstocked everywhere; clear 40% at Christmas.
+name: clear-juices-christmas-2025
+group: overstock_clearance
+brief: >-
+  Plan a Christmas promotion for Beverages in South and West for weeks 63-64, with a marketing
+  budget of ₹1.5 lakh. Clear at least 40% of our Tropica Juices 200ml stock.
+as_of_week: 62
+seed: 0
+labels:
+  regions: [South, West]
+  categories: [Beverages]
+  promo_window: {start_week: 63, end_week: 64}
+  marketing_budget: 150000
+  clearance_targets:
+    - {sku_id: SKU0036, sell_through: 0.4}
+expect:
+  - declares_infeasible: false
+  - meets_clearance: SKU0036

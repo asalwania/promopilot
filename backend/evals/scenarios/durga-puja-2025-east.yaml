@@ -1,0 +1,18 @@
+# Regional holiday: Durga Puja (East only, week 52), planned at week 50.
+name: durga-puja-2025-east
+group: regional_holidays
+brief: >-
+  Plan a Durga Puja promotion for Snacks and Dairy in East for weeks 51-52, with a marketing
+  budget of ₹1.5 lakh.
+as_of_week: 50
+seed: 0
+labels:
+  regions: [East]
+  categories: [Snacks, Dairy]
+  promo_window: {start_week: 51, end_week: 52}
+  marketing_budget: 150000
+expect:
+  - declares_infeasible: false
+  - excludes_region: North
+  - excludes_region: South
+  - excludes_region: West

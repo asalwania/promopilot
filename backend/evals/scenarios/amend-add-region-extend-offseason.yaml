@@ -1,0 +1,19 @@
+# Mid-plan amendments: a region is added, then the window is extended by a week.
+name: amend-add-region-extend-offseason
+group: mid_plan_amendments
+brief: >-
+  Plan an off-season promotion for Home Care in North for weeks 84-85, with a marketing budget
+  of ₹1.5 lakh.
+as_of_week: 82
+seed: 0
+amendments:
+  - "Add East"
+  - "Extend it to weeks 84-86"
+labels:
+  regions: [North, East]
+  categories: [Home Care]
+  promo_window: {start_week: 84, end_week: 86}
+  marketing_budget: 150000
+expect:
+  - declares_infeasible: false
+  - diff_changes: promo_window

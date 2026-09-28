@@ -1,0 +1,17 @@
+# Conflicting: the brief allows a margin below company policy's 15% floor, so it must be flagged.
+name: conflict-margin-below-floor
+group: vague_or_conflicting
+brief: >-
+  Plan a Christmas promotion for Snacks in North for weeks 63-64, with a marketing budget of
+  ₹1 lakh. Margin can go as low as 5%.
+as_of_week: 62
+seed: 0
+labels:
+  regions: [North]
+  categories: [Snacks]
+  promo_window: {start_week: 63, end_week: 64}
+  marketing_budget: 100000
+  min_margin: 0.05
+expect:
+  - flags_assumption: min_margin
+  - declares_infeasible: false

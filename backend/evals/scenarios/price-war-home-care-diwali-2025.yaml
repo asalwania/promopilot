@@ -1,0 +1,18 @@
+# Competitor price war: competitors undercut six Home Care KVIs in North at week 50.
+name: price-war-home-care-diwali-2025
+group: competitor_price_war
+brief: >-
+  Plan a Diwali promotion for Home Care in North and West for weeks 54-55, with a marketing
+  budget of ₹3 lakh. Competitors are undercutting our KVIs: keep KVI prices within 2% of
+  competitor prices.
+as_of_week: 50
+seed: 0
+labels:
+  regions: [North, West]
+  categories: [Home Care]
+  promo_window: {start_week: 54, end_week: 55}
+  marketing_budget: 300000
+  kvi_price_tolerance: 0.02
+expect:
+  - declares_infeasible: false
+  - kvi_response_present: true

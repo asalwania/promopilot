@@ -1,0 +1,18 @@
+# Mid-plan amendment: the budget is cut once a plan waits for approval.
+name: amend-budget-cut-christmas-2025
+group: mid_plan_amendments
+brief: >-
+  Plan a Christmas promotion for Bakery and Beverages in North and South for weeks 63-64, with a
+  marketing budget of ₹3 lakh.
+as_of_week: 62
+seed: 0
+amendments:
+  - "Budget cut to ₹1.5 lakh"
+labels:
+  regions: [North, South]
+  categories: [Bakery, Beverages]
+  promo_window: {start_week: 63, end_week: 64}
+  marketing_budget: 150000
+expect:
+  - declares_infeasible: false
+  - diff_changes: marketing_budget

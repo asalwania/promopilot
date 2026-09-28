@@ -1,0 +1,15 @@
+# Tight budget: an off-season summer push (weeks 84-87, no festival) on ₹50k.
+name: tight-offseason-beverages
+group: tight_budget
+brief: >-
+  Plan a summer promotion for Beverages in North and West for weeks 84-87, with a marketing
+  budget of ₹50k.
+as_of_week: 82
+seed: 0
+labels:
+  regions: [North, West]
+  categories: [Beverages]
+  promo_window: {start_week: 84, end_week: 87}
+  marketing_budget: 50000
+expect:
+  - declares_infeasible: false

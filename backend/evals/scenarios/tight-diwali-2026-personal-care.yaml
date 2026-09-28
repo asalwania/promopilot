@@ -1,0 +1,16 @@
+# Tight budget: Diwali 2026 across every region on ₹60k, with a tighter per-category SKU cap.
+name: tight-diwali-2026-personal-care
+group: tight_budget
+brief: >-
+  Plan a Diwali promotion for Personal Care across all regions for weeks 108-109, with a
+  marketing budget of ₹60k. Promote at most 2 SKUs per category in each region.
+as_of_week: 104
+seed: 0
+labels:
+  regions: [North, South, East, West]
+  categories: [Personal Care]
+  promo_window: {start_week: 108, end_week: 109}
+  marketing_budget: 60000
+  max_promoted_skus_per_category_per_region: 2
+expect:
+  - declares_infeasible: false

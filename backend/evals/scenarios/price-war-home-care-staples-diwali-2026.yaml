@@ -1,0 +1,19 @@
+# Competitor price war: KVI response against a high margin floor at Diwali 2026.
+name: price-war-home-care-staples-diwali-2026
+group: competitor_price_war
+brief: >-
+  Plan a Diwali promotion for Home Care and Staples in North and West for weeks 108-109, with a
+  marketing budget of ₹4 lakh. Keep margin above 20%. Competitors are undercutting our KVIs:
+  keep KVI prices within 1.5% of competitor prices.
+as_of_week: 104
+seed: 0
+labels:
+  regions: [North, West]
+  categories: [Home Care, Staples]
+  promo_window: {start_week: 108, end_week: 109}
+  marketing_budget: 400000
+  min_margin: 0.2
+  kvi_price_tolerance: 0.015
+expect:
+  - declares_infeasible: false
+  - kvi_response_present: true

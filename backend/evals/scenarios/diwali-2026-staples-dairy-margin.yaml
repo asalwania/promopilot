@@ -1,0 +1,17 @@
+# Standard festive: Diwali 2026 (week 109) with a minimum margin above the policy floor.
+name: diwali-2026-staples-dairy-margin
+group: standard_festive
+brief: >-
+  Plan a Diwali promotion for Staples and Dairy in North and East for weeks 108-109, with a
+  marketing budget of ₹3 lakh. Keep margin above 16%. Target families.
+as_of_week: 104
+seed: 0
+labels:
+  regions: [North, East]
+  categories: [Staples, Dairy]
+  promo_window: {start_week: 108, end_week: 109}
+  marketing_budget: 300000
+  min_margin: 0.16
+expect:
+  - declares_infeasible: false
+  - excludes_region: South

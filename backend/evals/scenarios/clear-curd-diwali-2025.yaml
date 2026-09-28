@@ -1,0 +1,22 @@
+# Overstock clearance: every 400g curd pack is overstocked at week 50; clear half of it.
+name: clear-curd-diwali-2025
+group: overstock_clearance
+brief: >-
+  Plan a Diwali promotion for Dairy in North and South for weeks 54-55, with a marketing budget
+  of ₹2 lakh. We are overstocked on 400g curd packs — clear at least 50% of that stock.
+as_of_week: 50
+seed: 0
+labels:
+  regions: [North, South]
+  categories: [Dairy]
+  promo_window: {start_week: 54, end_week: 55}
+  marketing_budget: 200000
+  clearance_targets:
+    - {sku_id: SKU0057, sell_through: 0.5}
+    - {sku_id: SKU0059, sell_through: 0.5}
+    - {sku_id: SKU0061, sell_through: 0.5}
+expect:
+  - declares_infeasible: false
+  - meets_clearance: SKU0057
+  - meets_clearance: SKU0059
+  - meets_clearance: SKU0061

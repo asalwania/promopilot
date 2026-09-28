@@ -1,0 +1,19 @@
+# Infeasible: clearing 95% of the 400g namkeen stock cannot be paid for with ₹10k.
+name: infeasible-clearance-tiny-budget
+group: infeasible_constraints
+brief: >-
+  Plan a Diwali promotion for Snacks in North for weeks 108-109, with a marketing budget of
+  ₹10k. We are overstocked on 400g namkeen packs — clear at least 95% of that stock.
+as_of_week: 104
+seed: 0
+labels:
+  regions: [North]
+  categories: [Snacks]
+  promo_window: {start_week: 108, end_week: 109}
+  marketing_budget: 10000
+  clearance_targets:
+    - {sku_id: SKU0002, sell_through: 0.95}
+    - {sku_id: SKU0006, sell_through: 0.95}
+expect:
+  - declares_infeasible: true
+  - relaxation_touches: clearance_target
