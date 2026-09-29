@@ -6,6 +6,7 @@ brief: >-
   marketing budget of ₹3 lakh.
 as_of_week: 62
 seed: 0
+smoke: true   # in the CI smoke eval (ADR 0069)
 amendments:
   - "Budget cut to ₹1.5 lakh"
 labels:

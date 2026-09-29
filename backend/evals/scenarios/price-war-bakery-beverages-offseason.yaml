@@ -7,6 +7,7 @@ brief: >-
   competitor prices.
 as_of_week: 82
 seed: 0
+smoke: true   # in the CI smoke eval (ADR 0069)
 labels:
   regions: [North]
   categories: [Bakery, Beverages]

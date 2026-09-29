@@ -174,6 +174,8 @@ class Scenario(_Frozen):
     """Made in order, each once the session waits for approval."""
     labels: RequestLabels = RequestLabels()
     expect: tuple[ExpectedProperty, ...] = ()
+    smoke: bool = False
+    """One of the five scenarios CI's smoke eval replays on every PR (`--smoke`, ADR 0069)."""
 
     @property
     def clarified_fields(self) -> tuple[str, ...]:

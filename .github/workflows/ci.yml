@@ -50,6 +50,40 @@ jobs:
       - run: uv sync --locked
       - run: uv run pytest -m integration
 
+  eval-smoke:
+    name: Eval smoke (5 scenarios, replay, no key)
+    runs-on: ubuntu-latest
+    # Four model fits (35-60 s each) and six planning rounds (150-250 s each), ADR 0069.
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.2.0
+        with:
+          version: "0.12.18"
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
+      - run: uv sync --locked
+      # The seed-42 world is generated and fitted in memory: no Docker, `make data` or
+      # `make train`. A run with no plan, a broken constraint or expected property, a vague or
+      # infeasible scenario handled wrongly, or any cassette miss fails the job (exit 3).
+      - name: Replay the smoke scenarios and check the report
+        env:
+          LLM_PROVIDER: replay
+        run: uv run python -m promopilot.evals --smoke --check
+      - name: Add the report to the job summary
+        if: always()
+        run: if [ -f evals/reports/latest.md ]; then cat evals/reports/latest.md >> "$GITHUB_STEP_SUMMARY"; fi
+      - if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: eval-smoke-report
+          path: backend/evals/reports/
+          retention-days: 14
+          if-no-files-found: ignore
+
   frontend:
     name: Frontend (lint, typecheck, unit tests, build)
     runs-on: ubuntu-latest

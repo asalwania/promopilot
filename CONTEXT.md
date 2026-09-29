@@ -356,6 +356,13 @@ The share of infeasible-constraint scenarios' sessions whose final plan revision
 **Grounding pass rate**:
 The share of the Explainer's runs, where the LLM answered, whose explanation passed numeric grounding. A run where the LLM was unavailable is not scored. Target 98% (ADR 0062).
 
+**Smoke eval**:
+The five scenarios tagged `smoke: true`, replayed from the committed cassettes on every CI run with no key. It fails when a session ends with no plan, breaks a hard constraint or an expected property, or mishandles a vague or infeasible scenario, or when any request misses its cassette. The ratio metrics are only reported (ADR 0069).
+_Avoid_: smoke test (the stack smoke is the Playwright journey)
+
+**Cassette miss**:
+A request replay holds no cassette for. The stack falls back as if the LLM were down, and each eval run lists the missed request hashes (ADR 0069).
+
 **Model recovery**:
 How close the fitted models, as of the eval world's default week, come to the ground truth. It covers the median absolute % error of the own-price elasticities, and the precision and recall of the substitutes and complements. The same rows report the baseline's holdout WAPE, which needs no ground truth (ADR 0064).
 _Avoid_: model accuracy

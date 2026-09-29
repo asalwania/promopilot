@@ -93,6 +93,39 @@ class LiveUsage:
             self.meter.record(usage)
 
 
+class MissLog:
+    """Wraps a provider and notes the hash of every request it held no cassette for, once
+    each, in the order first asked; the miss is raised on as before, so the stack falls back
+    (ADR 0069)."""
+
+    def __init__(self, inner: LLMProvider) -> None:
+        self._inner = inner
+        self.misses: list[str] = []
+
+    async def complete_structured[T: BaseModel](
+        self, schema: type[T], messages: Sequence[Message]
+    ) -> T:
+        try:
+            return await self._inner.complete_structured(schema, messages)
+        except CassetteMissError as miss:
+            self._note(miss)
+            raise
+
+    async def complete_with_tools(
+        self, tools: Sequence[ToolSpec], messages: Sequence[Message]
+    ) -> ToolTurn:
+        try:
+            return await self._inner.complete_with_tools(tools, messages)
+        except CassetteMissError as miss:
+            self._note(miss)
+            raise
+
+    def _note(self, miss: CassetteMissError) -> None:
+        missed = miss.digest or str(miss)
+        if missed not in self.misses:
+            self.misses.append(missed)
+
+
 def replay_provider(eval_dir: Path, app_dir: Path) -> LLMProvider:
     """Replays the eval's cassettes, then the app's; a request neither holds misses."""
     return _Layered(ReplayProvider(eval_dir), ReplayProvider(app_dir))

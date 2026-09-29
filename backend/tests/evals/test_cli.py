@@ -144,3 +144,95 @@ def test_recording_plays_the_scenarios_live_into_the_eval_cassettes_and_says_wha
     printed = capsys.readouterr().out
     assert f"recorded into {eval_cassettes}" in printed
     assert "0 live calls" in printed
+
+
+def test_smoke_plays_only_the_tagged_scenarios_and_check_fails_on_every_cassette_miss(
+    paths: tuple[Path, Path, Path], capsys: pytest.CaptureFixture[str]
+) -> None:
+    scenarios, reports, config = paths
+    (scenarios / "plain.yaml").write_text(SCENARIO + "smoke: true\n", encoding="utf-8")
+
+    code = main(
+        [
+            "--scenarios",
+            str(scenarios),
+            "--config",
+            str(config),
+            "--out",
+            str(reports),
+            "--smoke",
+            "--check",
+        ]
+    )
+
+    assert code == 3
+    report = json.loads((reports / "latest.json").read_text(encoding="utf-8"))
+    assert [scenario["name"] for scenario in report["scenarios"]] == ["plain"]
+    [played] = report["scenarios"][0]["runs"]
+    assert played["cassette_misses"], "no cassette is recorded"
+    err = capsys.readouterr().err
+    assert "check failed" in err
+    assert f"plain run 1: {len(played['cassette_misses'])} requests no cassette holds" in err
+
+
+def test_check_passes_a_report_with_no_problem(
+    paths: tuple[Path, Path, Path],
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    scenarios, reports, config = paths
+    monkeypatch.setattr(cli, "report_problems", lambda report: [])
+
+    code = main(
+        [
+            "--scenarios",
+            str(scenarios),
+            "--only",
+            "plain",
+            "--config",
+            str(config),
+            "--out",
+            str(reports),
+            "--check",
+        ]
+    )
+
+    assert code == 0
+    assert "check passed" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize(
+    ("args", "problem"),
+    [
+        (["--smoke", "--only", "plain"], "--smoke"),
+        (["--smoke"], "no smoke scenario"),
+    ],
+)
+def test_smoke_is_refused_with_only_or_with_no_tagged_scenario(
+    paths: tuple[Path, Path, Path],
+    capsys: pytest.CaptureFixture[str],
+    args: list[str],
+    problem: str,
+) -> None:
+    scenarios, reports, _ = paths
+
+    code = main(["--scenarios", str(scenarios), "--out", str(reports), *args])
+
+    assert code == 2
+    assert problem in capsys.readouterr().err
+    assert not reports.exists()
+
+
+def test_check_needs_the_replay_provider(
+    paths: tuple[Path, Path, Path],
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    scenarios, reports, _ = paths
+    monkeypatch.setenv("LLM_PROVIDER", "openai")
+
+    code = main(["--scenarios", str(scenarios), "--out", str(reports), "--check"])
+
+    assert code == 2
+    assert "--check replays" in capsys.readouterr().err
+    assert not reports.exists()

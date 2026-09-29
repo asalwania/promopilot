@@ -82,6 +82,18 @@ def test_the_suite_plans_at_four_as_of_weeks_with_seed_0() -> None:
     assert {scenario.seed for scenario in SUITE} == {0}
 
 
+def test_five_scenarios_make_the_smoke_eval_across_five_groups_and_every_as_of_week() -> None:
+    # CI plays these with the replay provider on every PR (ADR 0069).
+    smoke = [scenario for scenario in SUITE if scenario.smoke]
+
+    assert len(smoke) == 5
+    assert len({scenario.group for scenario in smoke}) == 5
+    assert {scenario.as_of_week for scenario in smoke} == AS_OF_WEEKS
+    assert {G.INFEASIBLE_CONSTRAINTS, G.MID_PLAN_AMENDMENTS, G.VAGUE_OR_CONFLICTING} <= {
+        scenario.group for scenario in smoke
+    }
+
+
 @pytest.mark.parametrize("season", ["Diwali", "Durga Puja", "Christmas", "Pongal", "off-season"])
 def test_the_briefs_cover_each_season(season: str) -> None:
     assert any(season in scenario.brief for scenario in SUITE)

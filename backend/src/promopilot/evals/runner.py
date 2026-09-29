@@ -64,6 +64,7 @@ from promopilot.evals.behaviour import (
     session_usage,
     unneeded_asks,
 )
+from promopilot.evals.cassettes import MissLog
 from promopilot.evals.metrics import (
     check_constraints,
     check_property,
@@ -196,9 +197,10 @@ async def _run(
     session = _Session(route=[], asked=[])
     trace = MemoryTrace()
     session_id = uuid5(NAMESPACE_URL, f"promopilot:eval:{scenario.name}:{number}")
+    logged = MissLog(provider)
     try:
         outcome = await _play(
-            scenario, session_id, provider, world, settings, policy, pricing, trace, session
+            scenario, session_id, logged, world, settings, policy, pricing, trace, session
         )
         result = await _score(scenario, number, outcome, session, world, policy)
         result = await _assess(scenario, result, session, benchmarks)
@@ -220,6 +222,7 @@ async def _run(
         update={
             **_behaviour(scenario, session, result.outcome),
             "usage": session_usage(trace.of(session_id)),
+            "cassette_misses": tuple(logged.misses),
             "session_s": 0.0 if session.started is None else ended - session.started,
             "duration_s": ended - started,
         }

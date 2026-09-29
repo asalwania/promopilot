@@ -6,6 +6,7 @@ brief: >-
   leading up to Diwali.
 as_of_week: 104
 seed: 0
+smoke: true   # in the CI smoke eval (ADR 0069)
 clarifications:
   marketing_budget: "₹2 lakh"
 labels:

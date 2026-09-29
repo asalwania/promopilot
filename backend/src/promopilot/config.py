@@ -44,6 +44,10 @@ class Settings(BaseSettings):
     llm_prices: dict[str, ModelPrice] = Field(default_factory=lambda: dict(DEFAULT_LLM_PRICES))
     usd_inr_rate: float = Field(default=96.0, gt=0)
 
+    # Where `GET /api/evals/latest` reads `latest.json` from (ADR 0069): by default the folder
+    # `make eval` writes. Relative paths are from backend/.
+    eval_report_dir: Path = Path("evals/reports")
+
     # The live trace (ADR 0047): how often an open SSE stream looks for new trace events, in
     # seconds, and whether logs are JSON lines (`json`) or readable text (`console`).
     trace_poll_interval_s: float = Field(default=0.5, gt=0, le=10)

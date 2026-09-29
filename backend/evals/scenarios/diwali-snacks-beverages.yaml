@@ -6,6 +6,7 @@ brief: >-
   leading up to Diwali, with a marketing budget of ₹2 lakh.
 as_of_week: 104
 seed: 0
+smoke: true   # in the CI smoke eval (ADR 0069)
 labels:
   regions: [North, West]
   categories: [Snacks, Beverages]

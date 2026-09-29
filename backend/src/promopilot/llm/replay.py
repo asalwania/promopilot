@@ -33,6 +33,11 @@ from promopilot.llm.usage import Usage, UsageMeter, record_usage, track_usage
 class CassetteMissError(LLMError):
     """No cassette was recorded for this request (a prompt or schema changed, or never recorded)."""
 
+    def __init__(self, message: str, *, digest: str | None = None) -> None:
+        super().__init__(message)
+        self.digest = digest
+        """The missed request's hash, the cassette's file name without `.json`."""
+
 
 def _wire(messages: Sequence[Message]) -> list[dict[str, Any]]:
     # Empty tool fields are left out, so plain messages hash exactly as before tool calls existed;
@@ -127,7 +132,8 @@ class ReplayProvider:
         if not path.is_file():
             raise CassetteMissError(
                 f"no cassette for request {digest} ({what}) in {self._dir}; "
-                "re-record with `make record-cassettes`"
+                "re-record with `make record-cassettes`",
+                digest=digest,
             )
         cassette: dict[str, Any] = json.loads(path.read_text(encoding="utf-8"))
         # Re-report what the recorded call was billed, so replayed sessions show real counters.

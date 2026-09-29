@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import create_async_engine
 from promopilot.agents import GraphTools, MemoryCheckpoints, OptimisingPlanner
 from promopilot.api.catalog import CatalogService
 from promopilot.api.competitors import CompetitorService
+from promopilot.api.evals import EvalReportService
 from promopilot.api.main import create_app
 from promopilot.api.models import ModelService
 from promopilot.api.plans import PlanService
@@ -77,6 +78,7 @@ def main() -> None:
             policy=CompanyPolicy(),
             defaults=SimulationSettings(n_runs=DEFAULT_RUNS, seed=0),
         ),
+        evals=EvalReportService(Path("unused")),
     )
     document = json.dumps(app.openapi(), indent=2, sort_keys=True) + "\n"
     # Write bytes so Windows doesn't emit CRLF; CI diffs this file on Linux.
