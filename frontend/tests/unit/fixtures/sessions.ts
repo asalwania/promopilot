@@ -675,3 +675,114 @@ export const repeatedQuestionSession: SessionResponse = {
     },
   ],
 };
+
+// The amendment "Budget cut to ₹1.5 lakh" of plan revision 1 (ADR 0052). Revision 2
+// drops SKU0011 in West, cuts SKU0003 in North to 15% off, adds
+// SKU0020 in North and keeps SKU0003 in West as it was.
+const budgetCut = {
+  text: "Budget cut to ₹1.5 lakh",
+  amends_revision: 1,
+  relaxation: null,
+  amended_at: "2026-09-28T10:20:00Z",
+};
+
+const shallowerNorth: PlanRevisionLine = {
+  ...planLines[0],
+  line: { ...planLines[0].line, depth_pct: 15 },
+  promo_cost: 9000,
+  expected_incremental_profit: -8000,
+};
+
+const addedNorth: PlanRevisionLine = {
+  ...planLines[2],
+  line: {
+    ...planLines[2].line,
+    sku_id: "SKU0020",
+    region: "North",
+    mechanism: "PCT_OFF",
+    depth_pct: 10,
+    start_week: 105,
+    duration_weeks: 3,
+    target_segment: "All customers",
+  },
+  promo_cost: 4500,
+  expected_incremental_profit: 2600,
+};
+
+export const amendedSession: SessionResponse = {
+  ...awaitingApprovalSession,
+  planning_request: {
+    ...awaitingApprovalSession.planning_request!,
+    marketing_budget: 150000,
+  },
+  plan_revision: {
+    ...awaitingApprovalSession.plan_revision!,
+    number: 2,
+    lines: [shallowerNorth, addedNorth, planLines[2]],
+    objective: 9800,
+    simulation: null,
+    explanation: {
+      ...awaitingApprovalSession.plan_revision!.explanation!,
+      rationales: [
+        "SKU0003 in North at 15% off fits the smaller budget.",
+        "SKU0020 in North at 10% off adds ₹2,600.",
+        "SKU0003 in West sells best to Families as a BOGO.",
+      ],
+      changes:
+        "Plan revision 2 changes plan revision 1. The marketing budget went from ₹2 lakh to ₹1.5 lakh, so SKU0011 in West was removed.",
+    },
+    diff: {
+      from_revision: 1,
+      added: [addedNorth],
+      removed: [planLines[1]],
+      changed: [
+        {
+          sku_id: "SKU0003",
+          region: "North",
+          fields: ["depth_pct"],
+          before: planLines[0],
+          after: shallowerNorth,
+        },
+      ],
+      unchanged: 1,
+      objective_before: 12731.1,
+      objective_after: 9800,
+      objective_delta: -2931.1,
+      promo_cost_before: 146368.9,
+      promo_cost_after: 22600,
+      promo_cost_delta: -123768.9,
+      request_changes: [
+        { field: "marketing_budget", before: "₹2 lakh", after: "₹1.5 lakh" },
+      ],
+    },
+  },
+  amendments: [budgetCut],
+};
+
+// The same amendment just sent: the Planner is at work, and the read model still holds
+// plan revision 1 until the new round's revision is saved (ADR 0052 D10).
+export const replanningSession: SessionResponse = {
+  ...awaitingApprovalSession,
+  status: "planning",
+  amendments: [budgetCut],
+};
+
+// Revision 1 rejected, then amended; revision 2 approved: the audit trail (ADR 0046 D8).
+export const approvedAfterAmendmentSession: SessionResponse = {
+  ...amendedSession,
+  status: "approved",
+  decisions: [
+    {
+      decision: "rejected",
+      revision_number: 1,
+      reason: "Too deep on Beverages in West.",
+      decided_at: "2026-09-28T10:15:00Z",
+    },
+    {
+      decision: "approved",
+      revision_number: 2,
+      reason: null,
+      decided_at: "2026-09-28T10:30:00Z",
+    },
+  ],
+};

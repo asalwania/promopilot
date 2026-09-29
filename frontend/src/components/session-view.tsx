@@ -10,9 +10,13 @@ import { TraceTimeline } from "@/components/trace-timeline";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
+  amendSession,
+  approveSession,
   clarifySession,
   getSession,
+  rejectSession,
   SessionLoadError,
+  type SessionActionResult,
 } from "@/lib/api/sessions";
 import { useCompetitorGaps } from "@/lib/competitor-gaps";
 import { useTraceStream } from "@/lib/trace-stream";
@@ -39,17 +43,23 @@ export function SessionView({ sessionId }: { sessionId: string }) {
   });
 
   // Each action's response is the session itself: showing it at once restarts the
-  // poll while planning resumes. A conflict means the session moved on, so reload it.
+  // poll while planning resumes. A conflict means the session moved on, so reload it
+  // (ADR 0061 D8–D9, ADR 0066).
+  const show = (result: SessionActionResult) => {
+    if (result.ok) {
+      queryClient.setQueryData(queryKey, result.session);
+    } else if (result.conflict) {
+      void query.refetch();
+    }
+    return result;
+  };
   const actions: SessionActions = {
-    clarify: async (answers) => {
-      const result = await clarifySession(sessionId, answers);
-      if (result.ok) {
-        queryClient.setQueryData(queryKey, result.session);
-      } else if (result.conflict) {
-        void query.refetch();
-      }
-      return result;
-    },
+    clarify: async (answers) => show(await clarifySession(sessionId, answers)),
+    amend: async (amendment) => show(await amendSession(sessionId, amendment)),
+    approve: async (revisionNumber) =>
+      show(await approveSession(sessionId, revisionNumber)),
+    reject: async (revisionNumber, reason) =>
+      show(await rejectSession(sessionId, revisionNumber, reason)),
   };
 
   // Undercut callouts on the plan; the plan still shows if the gaps fail (ADR 0060).

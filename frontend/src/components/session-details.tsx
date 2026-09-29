@@ -1,12 +1,21 @@
 import { LoaderCircle } from "lucide-react";
 
+import { type SubmitAmendment } from "@/components/amend-box";
 import { AssumptionsPanel } from "@/components/assumptions-panel";
+import { AuditTrail } from "@/components/audit-trail";
 import {
   ClarificationForm,
   type SubmitAnswers,
 } from "@/components/clarification-form";
 import { PlanSummary } from "@/components/plan-summary";
 import { RegionPlanTabs } from "@/components/region-plan-tabs";
+import {
+  ReviewPanel,
+  type Approve,
+  type Reject,
+} from "@/components/review-panel";
+import { RevisionDiffView } from "@/components/revision-diff";
+import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { UsageMeter } from "@/components/usage-meter";
 import type { CompetitorGap } from "@/lib/api/catalog";
@@ -21,13 +30,25 @@ const STATUS_LABELS: Record<SessionStatus, string> = {
   failed: "Planning failed",
 };
 
-// What the manager can do from the session page; SessionView owns the calls (ADR 0061).
+// What the manager can do from the session page; SessionView owns the calls
+// (ADR 0061 D12, ADR 0066).
 export type SessionActions = {
   clarify: SubmitAnswers;
+  amend: SubmitAmendment;
+  approve: Approve;
+  reject: Reject;
 };
 
+const cannot = (what: string) => async () => ({
+  ok: false as const,
+  reason: `${what} can't be sent here`,
+});
+
 const NO_ACTIONS: SessionActions = {
-  clarify: async () => ({ ok: false, reason: "answers can't be sent here" }),
+  clarify: cannot("answers"),
+  amend: cannot("amendments"),
+  approve: cannot("approvals"),
+  reject: cannot("rejections"),
 };
 
 export function SessionDetails({
@@ -36,11 +57,17 @@ export function SessionDetails({
   competitorGaps,
 }: {
   session: Session;
-  actions?: SessionActions;
+  actions?: Partial<SessionActions>;
   // The KVI gaps at the request's as-of week, for the plan's undercut callouts.
   competitorGaps?: CompetitorGap[];
 }) {
   const decision = latestDecision(session);
+  const act = { ...NO_ACTIONS, ...actions };
+  const revision = session.plan_revision;
+  const final = session.status === "approved";
+  const replanning = replanningAmendment(session);
+  const reviewable =
+    session.status === "awaiting_approval" || session.status === "rejected";
   return (
     <div className="flex w-full flex-col gap-4">
       <Card>
@@ -54,11 +81,18 @@ export function SessionDetails({
               />
             )}
             {STATUS_LABELS[session.status]}
+            {final && <Badge variant="secondary">Final</Badge>}
           </CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col gap-2">
           <p className="text-muted-foreground text-sm">{session.brief}</p>
           {decision && <DecisionNote decision={decision} />}
+          {final && (
+            <p className="text-sm">
+              This plan is final: it can no longer be amended, approved or
+              rejected.
+            </p>
+          )}
           {session.error && (
             <p role="alert" className="text-destructive text-sm">
               {session.error}
@@ -73,38 +107,67 @@ export function SessionDetails({
             key={session.clarifications.length}
             questions={session.questions}
             clarifications={session.clarifications}
-            onSubmit={actions.clarify}
+            onSubmit={act.clarify}
           />
         )}
+      {reviewable && revision && (
+        // Keyed so a new revision, or a decision on this one, starts a fresh review.
+        <ReviewPanel
+          key={`${revision.number}-${session.status}`}
+          revision={revision}
+          status={session.status as "awaiting_approval" | "rejected"}
+          onAmend={act.amend}
+          onApprove={act.approve}
+          onReject={act.reject}
+        />
+      )}
       <UsageMeter usage={session.usage} />
       <AssumptionsPanel
         assumptions={session.assumptions}
         status={session.status}
       />
-      {session.plan_revision && (
+      {revision && (
         <Card>
           <CardHeader>
-            <CardTitle>Plan revision {session.plan_revision.number}</CardTitle>
+            <CardTitle>Plan revision {revision.number}</CardTitle>
           </CardHeader>
           <CardContent className="flex flex-col gap-2">
+            {replanning && (
+              <p className="text-muted-foreground text-sm">
+                Re-planning after your amendment “{replanning.text}”: showing
+                plan revision {revision.number} until the new one is ready.
+              </p>
+            )}
             {/* The relaxation itself is shown in E10 (ADR 0044). */}
-            {session.plan_revision.solver_status === "INFEASIBLE" && (
+            {revision.solver_status === "INFEASIBLE" && (
               <p role="alert" className="text-destructive text-sm">
                 Infeasible: no plan reaches every clearance target within the
                 brief&apos;s constraints.
               </p>
             )}
-            {session.plan_revision.explanation && (
-              <PlanSummary explanation={session.plan_revision.explanation} />
+            {revision.explanation && (
+              <PlanSummary explanation={revision.explanation} />
             )}
-            {session.plan_revision.lines.length > 0 ? (
+            {revision.diff && (
+              <RevisionDiffView
+                diff={revision.diff}
+                explanation={revision.explanation}
+                amendment={session.amendments.findLast(
+                  (amendment) =>
+                    amendment.amends_revision === revision.diff?.from_revision,
+                )}
+              />
+            )}
+            {revision.lines.length > 0 ? (
+              // Keyed so a new revision opens on its first region (ADR 0066).
               <RegionPlanTabs
-                revision={session.plan_revision}
+                key={revision.number}
+                revision={revision}
                 regions={session.planning_request?.scope.regions ?? []}
                 competitorGaps={competitorGaps}
               />
             ) : (
-              session.plan_revision.solver_status !== "INFEASIBLE" && (
+              revision.solver_status !== "INFEASIBLE" && (
                 <p className="text-muted-foreground text-sm">
                   No promo option pays for itself within the brief&apos;s
                   constraints.
@@ -114,11 +177,26 @@ export function SessionDetails({
           </CardContent>
         </Card>
       )}
+      <AuditTrail
+        amendments={session.amendments}
+        decisions={session.decisions}
+      />
     </div>
   );
 }
 
-// Approve and reject buttons, and the full audit trail, arrive in E10 (ADR 0046).
+// The amendment being planned, while the read model still holds the revision it
+// amended (ADR 0052 D10).
+function replanningAmendment(session: Session) {
+  const amendment = session.amendments.at(-1);
+  return session.status === "planning" &&
+    amendment &&
+    amendment.amends_revision === session.plan_revision?.number
+    ? amendment
+    : undefined;
+}
+
+// The latest decision, in the status card; the audit trail lists them all.
 function latestDecision(session: Session): PlanDecision | undefined {
   return session.decisions.at(-1);
 }

@@ -1,17 +1,22 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  amendSession,
+  approveSession,
   clarifySession,
   createSession,
   getSession,
+  rejectSession,
   SessionLoadError,
 } from "@/lib/api/sessions";
 
 import {
+  approvedSession,
   awaitingApprovalSession,
   infeasibleSession,
   openIssuesSession,
   planningSession,
+  rejectedSession,
   SESSION_ID,
 } from "./fixtures/sessions";
 
@@ -313,6 +318,189 @@ describe("clarifySession", () => {
     );
 
     const result = await clarifySession(SESSION_ID, answers, fetchImpl);
+
+    expect(result).toEqual({
+      ok: false,
+      conflict: false,
+      reason: "unexpected session response",
+    });
+  });
+});
+
+describe("amendSession", () => {
+  it("posts the amendment's text and returns the session, back in planning", async () => {
+    const { calls, fetchImpl } = recordingFetch(() =>
+      Response.json(planningSession, { status: 202 }),
+    );
+
+    const result = await amendSession(
+      SESSION_ID,
+      { text: "Budget cut to ₹6 lakh" },
+      fetchImpl,
+    );
+
+    expect(result).toEqual({ ok: true, session: planningSession });
+    expect(calls).toHaveLength(1);
+    expect(calls[0].url).toBe(`/api/sessions/${SESSION_ID}/amend`);
+    expect(calls[0].init?.method).toBe("POST");
+    expect(JSON.parse(String(calls[0].init?.body))).toEqual({
+      text: "Budget cut to ₹6 lakh",
+    });
+  });
+
+  it("accepts the latest revision's relaxation instead of text (ADR 0052 D7)", async () => {
+    const { calls, fetchImpl } = recordingFetch(() =>
+      Response.json(planningSession, { status: 202 }),
+    );
+
+    await amendSession(SESSION_ID, { acceptRelaxation: true }, fetchImpl);
+
+    expect(JSON.parse(String(calls[0].init?.body))).toEqual({
+      accept_relaxation: true,
+    });
+  });
+
+  it("reports a conflict with the API's reason", async () => {
+    const { fetchImpl } = recordingFetch(() =>
+      Response.json(
+        {
+          detail:
+            "the session is approved: only a session awaiting approval, or rejected, can be amended",
+        },
+        { status: 409 },
+      ),
+    );
+
+    const result = await amendSession(SESSION_ID, { text: "x" }, fetchImpl);
+
+    expect(result).toEqual({
+      ok: false,
+      conflict: true,
+      reason:
+        "the session is approved: only a session awaiting approval, or rejected, can be amended",
+    });
+  });
+
+  it("reports the first validation message when the amendment is invalid", async () => {
+    const { fetchImpl } = recordingFetch(() =>
+      Response.json(
+        {
+          detail: [
+            {
+              loc: ["body", "text"],
+              msg: "Value error, an amendment needs text",
+              type: "value_error",
+            },
+          ],
+        },
+        { status: 422 },
+      ),
+    );
+
+    const result = await amendSession(SESSION_ID, { text: " " }, fetchImpl);
+
+    expect(result).toEqual({
+      ok: false,
+      conflict: false,
+      reason: "Value error, an amendment needs text",
+    });
+  });
+
+  it("reports the network error when the amendment cannot be sent", async () => {
+    const failingFetch: typeof fetch = async () => {
+      throw new TypeError("fetch failed");
+    };
+
+    const result = await amendSession(SESSION_ID, { text: "x" }, failingFetch);
+
+    expect(result).toEqual({
+      ok: false,
+      conflict: false,
+      reason: "fetch failed",
+    });
+  });
+});
+
+describe("approveSession", () => {
+  it("approves the shown plan revision by its number", async () => {
+    const { calls, fetchImpl } = recordingFetch(() =>
+      Response.json(approvedSession),
+    );
+
+    const result = await approveSession(SESSION_ID, 1, fetchImpl);
+
+    expect(result).toEqual({ ok: true, session: approvedSession });
+    expect(calls[0].url).toBe(`/api/sessions/${SESSION_ID}/approve`);
+    expect(calls[0].init?.method).toBe("POST");
+    expect(JSON.parse(String(calls[0].init?.body))).toEqual({
+      revision_number: 1,
+    });
+  });
+
+  it("reports a stale revision as a conflict with the API's reason", async () => {
+    const { fetchImpl } = recordingFetch(() =>
+      Response.json(
+        {
+          detail: "plan revision 1 is not the session's latest plan revision",
+        },
+        { status: 409 },
+      ),
+    );
+
+    const result = await approveSession(SESSION_ID, 1, fetchImpl);
+
+    expect(result).toEqual({
+      ok: false,
+      conflict: true,
+      reason: "plan revision 1 is not the session's latest plan revision",
+    });
+  });
+
+  it("reports why planning is unavailable", async () => {
+    const { fetchImpl } = recordingFetch(() =>
+      Response.json(
+        { detail: "planning is unavailable: no checkpoints" },
+        { status: 503 },
+      ),
+    );
+
+    const result = await approveSession(SESSION_ID, 1, fetchImpl);
+
+    expect(result).toEqual({
+      ok: false,
+      conflict: false,
+      reason: "planning is unavailable: no checkpoints",
+    });
+  });
+});
+
+describe("rejectSession", () => {
+  it("rejects the shown plan revision with the reason", async () => {
+    const { calls, fetchImpl } = recordingFetch(() =>
+      Response.json(rejectedSession),
+    );
+
+    const result = await rejectSession(
+      SESSION_ID,
+      1,
+      "Too deep on Beverages in West.",
+      fetchImpl,
+    );
+
+    expect(result).toEqual({ ok: true, session: rejectedSession });
+    expect(calls[0].url).toBe(`/api/sessions/${SESSION_ID}/reject`);
+    expect(JSON.parse(String(calls[0].init?.body))).toEqual({
+      revision_number: 1,
+      reason: "Too deep on Beverages in West.",
+    });
+  });
+
+  it("fails plainly when the decided session breaks the contract", async () => {
+    const { fetchImpl } = recordingFetch(() =>
+      Response.json({ status: "sideways" }),
+    );
+
+    const result = await rejectSession(SESSION_ID, 1, "No.", fetchImpl);
 
     expect(result).toEqual({
       ok: false,
