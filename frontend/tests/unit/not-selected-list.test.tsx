@@ -56,6 +56,8 @@ describe("NotSelectedList", () => {
       max_promoted_skus: "Too many promoted SKUs in its category and region",
       misses_clearance_target: "Would leave a clearance target unmet",
       breaks_kvi_tolerance: "Breaks the KVI price tolerance",
+      strong_substitute:
+        "Strong substitute of SKU0003, which the plan promotes at the same time",
       cannibalises: "Cannibalises SKU0003",
       time_limit: "Not settled before the solver's time limit",
     };

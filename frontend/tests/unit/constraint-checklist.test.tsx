@@ -59,6 +59,9 @@ describe("ConstraintChecklist", () => {
     );
     expect(resultOf("Stock")).toBe("Pass");
     expect(resultOf("Policy")).toBe("Pass");
+    expect(rowOf("Policy")).toHaveTextContent(
+      "promoted-SKU cap, KVI price tolerance and strong substitutes kept apart.",
+    );
     // No target in the brief: nothing to pass or fail.
     expect(resultOf("Clearance")).toBe("Not set");
     expect(rowOf("Clearance")).toHaveTextContent(
@@ -94,6 +97,31 @@ describe("ConstraintChecklist", () => {
     expect(
       screen.queryByText(/runs out of stock in 24%/),
     ).not.toBeInTheDocument();
+  });
+
+  it("fails the Policy row on strong substitutes promoted together", () => {
+    const message =
+      "SKU0194 and SKU0195 are strong substitutes (estimated θ 0.54, at least 0.35) promoted together in North: promote one of them, or run them in different weeks or segments";
+    renderChecklist({
+      ...awaitingApprovalSession,
+      plan_revision: {
+        ...awaitingApprovalSession.plan_revision!,
+        open_issues: [
+          {
+            kind: "violation",
+            code: "STRONG_SUBSTITUTES",
+            message,
+            sku_id: "SKU0194",
+            region: "North",
+            actual: 0.54,
+            limit: 0.35,
+          },
+        ],
+      },
+    });
+
+    expect(resultOf("Policy")).toBe("Fail");
+    expect(rowOf("Policy")).toHaveTextContent(message);
   });
 
   it("names the brief's minimum margin and clearance targets when they pass", () => {

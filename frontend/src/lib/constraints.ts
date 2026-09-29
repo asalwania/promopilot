@@ -33,6 +33,8 @@ export function constraintLabel(constraint: {
       return "KVI price tolerance";
     case "clearance_target":
       return `Clearance target for ${constraint.sku_id ?? "a SKU"}${inRegion}`;
+    case "strong_substitutes":
+      return "Strong substitutes kept apart";
   }
 }
 
@@ -42,13 +44,15 @@ const MONEY: ReadonlySet<ConstraintKind> = new Set([
 ]);
 
 // A constraint's value as its kind reads: rupees for a budget, a SKU count for the
-// promoted-SKU cap, and a share, to a basis point, for the rest.
+// promoted-SKU cap, the least estimated θ of a strong substitute pair (ADR 0075), and a
+// share, to a basis point, for the rest.
 export function formatConstraintValue(
   kind: ConstraintKind,
   value: number,
 ): string {
   if (MONEY.has(kind)) return formatMoney(value);
   if (kind === "max_promoted_skus") return String(value);
+  if (kind === "strong_substitutes") return `θ ≥ ${value.toFixed(2)}`;
   return formatBasisPoints(value);
 }
 
@@ -82,6 +86,7 @@ const CHECK_OF: Record<ViolationCode, CheckName> = {
   WINDOW: "Policy",
   MAX_SKUS: "Policy",
   KVI_TOLERANCE: "Policy",
+  STRONG_SUBSTITUTES: "Policy",
   DUPLICATE_LINE: "Policy",
 };
 

@@ -206,7 +206,7 @@ function passText(
       );
     }
     case "Policy":
-      return "Within company policy: maximum discount, unit cost, promo window, promoted-SKU cap and KVI price tolerance.";
+      return "Within company policy: maximum discount, unit cost, promo window, promoted-SKU cap, KVI price tolerance and strong substitutes kept apart.";
   }
 }
 

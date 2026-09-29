@@ -60,6 +60,7 @@ const constraintKindSchema = z.enum([
   "regional_budget",
   "clearance_target",
   "kvi_price_tolerance",
+  "strong_substitutes",
 ]);
 
 const constraintSourceSchema = z.enum(["brief", "company_policy"]);
@@ -107,6 +108,7 @@ export const notSelectedOptionSchema = z.object({
       "max_promoted_skus",
       "misses_clearance_target",
       "breaks_kvi_tolerance",
+      "strong_substitute",
       "cannibalises",
       "time_limit",
     ]),
@@ -182,6 +184,7 @@ export const violationSchema = z.object({
     "DUPLICATE_LINE",
     "CLEARANCE_TARGET",
     "KVI_TOLERANCE",
+    "STRONG_SUBSTITUTES",
   ]),
   message: z.string(),
   sku_id: z.string().nullable().optional(),

@@ -668,7 +668,8 @@
           "max_promoted_skus",
           "regional_budget",
           "clearance_target",
-          "kvi_price_tolerance"
+          "kvi_price_tolerance",
+          "strong_substitutes"
         ],
         "title": "ConstraintKind",
         "type": "string"
@@ -1781,6 +1782,7 @@
           "max_promoted_skus",
           "misses_clearance_target",
           "breaks_kvi_tolerance",
+          "strong_substitute",
           "cannibalises",
           "time_limit"
         ],
@@ -4135,7 +4137,8 @@
           "MAX_SKUS",
           "DUPLICATE_LINE",
           "CLEARANCE_TARGET",
-          "KVI_TOLERANCE"
+          "KVI_TOLERANCE",
+          "STRONG_SUBSTITUTES"
         ],
         "title": "ViolationCode",
         "type": "string"

@@ -13,9 +13,9 @@ import { SOURCES } from "@/lib/sources";
 type NotSelectedOption = PlanRevision["not_selected"][number];
 type NotSelectedReason = NotSelectedOption["reasons"][number];
 
-// Why the optimiser left an option out (F-01 AC3, ADR 0038, ADR 0040).
+// Why the optimiser left an option out (F-01 AC3, ADR 0038, ADR 0040, ADR 0075).
 const REASON_LABELS: Record<
-  Exclude<NotSelectedReason, "cannibalises">,
+  Exclude<NotSelectedReason, "cannibalises" | "strong_substitute">,
   string
 > = {
   low_uplift: "Low uplift: not worth it on its own",
@@ -35,6 +35,11 @@ function reasonLabel(
   reason: NotSelectedReason,
   option: NotSelectedOption,
 ): string {
+  if (reason === "strong_substitute") {
+    return option.cannibalises.length > 0
+      ? `Strong substitute of ${option.cannibalises.join(", ")}, which the plan promotes at the same time`
+      : "Strong substitute of a SKU the plan promotes at the same time";
+  }
   if (reason !== "cannibalises") return REASON_LABELS[reason];
   return option.cannibalises.length > 0
     ? `Cannibalises ${option.cannibalises.join(", ")}`
