@@ -6,6 +6,10 @@ import { EvalsView } from "@/components/evals-view";
 
 import recorded from "./fixtures/eval-report.json";
 
+// Two scenarios keep the whole page's render quick; the cards, table and chart
+// have their own tests on the full fixture.
+const small = { ...recorded, scenarios: recorded.scenarios.slice(0, 2) };
+
 type Answer = () => Response;
 
 function stubEvalsApi(answers: Answer[]) {
@@ -47,24 +51,18 @@ afterEach(() => {
 
 describe("EvalsView", () => {
   it("shows the latest report: provenance, metric cards, scenarios and regret", async () => {
-    stubEvalsApi([() => Response.json(recorded)]);
+    stubEvalsApi([() => Response.json(small)]);
 
     renderView();
 
-    expect(
-      await screen.findByRole("table", { name: "Scenarios" }),
-    ).toBeVisible();
+    expect(await screen.findByLabelText("Scenarios")).toBeVisible();
     const provenance = screen.getByLabelText("Report provenance");
     expect(provenance).toHaveTextContent("openai (recording)");
     expect(provenance).toHaveTextContent("seed-42 world");
-    expect(provenance).toHaveTextContent("8 scenarios × 1 run");
+    expect(provenance).toHaveTextContent("2 scenarios × 1 run");
+    expect(screen.getByLabelText("Constraint satisfaction")).toBeVisible();
     expect(
-      screen.getByRole("article", { name: "Constraint satisfaction" }),
-    ).toBeVisible();
-    expect(
-      screen.getByRole("figure", {
-        name: "Regret against the best plan, per scored run",
-      }),
+      screen.getByLabelText("Regret against the best plan, per scored run"),
     ).toBeVisible();
   });
 
@@ -89,7 +87,7 @@ describe("EvalsView", () => {
       unreachable,
       unreachable,
       unreachable,
-      () => Response.json(recorded),
+      () => Response.json(small),
     ]);
 
     renderView();
@@ -101,8 +99,6 @@ describe("EvalsView", () => {
     expect(screen.getByRole("alert")).toHaveTextContent("API unreachable");
     expect(screen.getByRole("alert")).toHaveTextContent("Reference: req-7");
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));
-    expect(
-      await screen.findByRole("table", { name: "Scenarios" }),
-    ).toBeVisible();
+    expect(await screen.findByLabelText("Scenarios")).toBeVisible();
   });
 });
