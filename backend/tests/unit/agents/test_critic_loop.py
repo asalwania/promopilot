@@ -823,7 +823,10 @@ async def test_a_finding_goes_away_when_the_next_attempt_leaves_its_sku_out(
     assert fixed.findings == ()
     assert "SKU0004" in {line.line.sku_id for line in flagged.plan.lines}
     assert "SKU0004" not in {line.line.sku_id for line in fixed.plan.lines}
-    # Leaving SKU0004 out gives up 5.2% of the plan-time objective (₹2,737.60 against
-    # ₹2,887.82), more than the Critic's 5% tolerance: the flagged plan goes on (ADR 0078).
-    assert (flagged.plan.objective, fixed.plan.objective) == (2_887.82, 2_737.6)
+    # Leaving SKU0004 out gives up about 5.2% of the plan-time objective (₹2,737.60 against
+    # ₹2,887.82 here, ₹2,724.47 against ₹2,874.67 on Linux's fit), more than the Critic's
+    # 5% tolerance: the flagged plan goes on (ADR 0078).
+    assert flagged.plan.objective is not None
+    assert fixed.plan.objective is not None
+    assert 0.05 < 1 - fixed.plan.objective / flagged.plan.objective < 0.06
     assert snapshot.values.plan == flagged.plan

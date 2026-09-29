@@ -103,7 +103,7 @@ The tenth scenario, `diwali-2026-staples-dairy-margin`, had 76.9 planner points.
 - **New public names:**
   - `promopilot.evals.quality`: `default_plan` and `regret_breakdown`;
   - `promopilot.evals.report`: `DefaultPlanSummary`, `RegretBreakdown` and `TimedOutPlan`;
-  - `RiskThresholds.objective_tolerance`;
+  - `RiskThresholds.objective_tolerance`, and `promopilot.guardrails.within_objective_tolerance`, which does the tolerance's arithmetic outside the agents package (ADR 0049 D10);
   - the `CRITIC_OBJECTIVE_TOLERANCE` setting.
 - `critic.best_attempt` takes `objective_tolerance`, and `quality.assess` takes `status` and `default`.
 - There is no migration. The OpenAPI contract gains optional fields, and the frontend types are regenerated.

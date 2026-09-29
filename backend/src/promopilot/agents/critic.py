@@ -44,6 +44,7 @@ from promopilot.guardrails import (
     check_numeric_grounding,
     review_risks,
     validate_plan,
+    within_objective_tolerance,
 )
 from promopilot.llm import LLMError, LLMProvider, Message
 
@@ -144,18 +145,17 @@ def best_attempt(attempts: tuple[PlanAttempt, ...], *, objective_tolerance: floa
        (a share) of the highest one's, so fewer risk findings never cost more than that;
     3. among those, the fewest risk findings, then the highest objective.
 
-    A tie goes to the later attempt. An attempt with no objective is never ruled out by it."""
-    fewest = min(_counts(attempt)[0] for attempt in attempts)
-    candidates = [attempt for attempt in attempts if _counts(attempt)[0] == fewest]
-    known = [a.plan.objective for a in candidates if a.plan.objective is not None]
-    if known:
-        top = max(known)
-        floor = top - objective_tolerance * abs(top)
-        candidates = [
-            attempt
-            for attempt in candidates
-            if attempt.plan.objective is None or attempt.plan.objective >= floor
-        ]
+    A tie goes to the later attempt. An attempt with no objective is never ruled out by it.
+    The tolerance's numbers are `within_objective_tolerance`'s (ADR 0049 D10)."""
+    fewest = [
+        attempt
+        for attempt in attempts
+        if not any(_counts(other)[0] < _counts(attempt)[0] for other in attempts)
+    ]
+    near = within_objective_tolerance(
+        [attempt.plan.objective for attempt in fewest], objective_tolerance
+    )
+    candidates = [attempt for attempt, kept in zip(fewest, near, strict=True) if kept]
     best = candidates[0]
     for attempt in candidates[1:]:
         if _at_least_as_good(attempt, best):
