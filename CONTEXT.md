@@ -302,7 +302,7 @@ A risk the critic's risk review flags in a plan that may break no hard constrain
 _Avoid_: warning, risk score
 
 **Planner attempt**:
-One plan the planner produces within a planning round. The critic reviews each attempt and sends its findings back at most 3 times, and stops early when an attempt's findings repeat the previous attempt's exactly; only the best attempt becomes a plan revision (ADR 0051, ADR 0059).
+One plan the planner produces within a planning round. The critic reviews each attempt and sends its findings back at most 3 times, and stops early when an attempt's findings repeat the previous attempt's exactly; only the best attempt becomes a plan revision: the fewest violations, then the fewest risk findings among the attempts within the objective tolerance (5%) of the best plan-time objective, then the highest objective (ADR 0051, ADR 0059, ADR 0078).
 _Avoid_: iteration (which counts every planner run in a session), draft revision
 
 **Checkpoint**:
@@ -401,11 +401,19 @@ _Avoid_: baseline (which is sales with no promotion), naive plan
 Our own optimiser run on true-parameter predictions for the final planning request: the plan regret is measured against. The harness builds it (ADR 0063).
 _Avoid_: optimum, oracle plan
 
+**Default plan**:
+The same optimiser run on the scenario's fitted models for the final planning request: the plan the default sequence makes. Regret by cause is measured against it (ADR 0078).
+_Avoid_: fitted plan, fallback plan
+
 **Plan quality**:
 The share of scenarios whose every scored final plan earns more, by the oracle, than the rule-based baseline. Target 90% (ADR 0063).
 
 **Regret**:
-(Oracle profit of the best plan − oracle profit of our plan) / oracle profit of the best plan, where oracle profit is the objective: incremental profit plus clearance value. It is signed; when the best plan earns nothing, matching it is 0 and earning less is 1. Target: median 10% or less (ADR 0063).
+(Oracle profit of the best plan − oracle profit of our plan) / oracle profit of the best plan, where oracle profit is the objective: incremental profit plus clearance value. It is signed; when the best plan earns nothing, matching it is 0 and earning less is 1. Target: median 10% or less (ADR 0063). A run whose best plan timed out (FEASIBLE) is flagged and left out of the median (ADR 0078).
+
+**Regret by cause**:
+A run's regret split into three signed shares of the best plan's oracle profit that sum to it: **model error** (best − default plan) / best, the **planner**'s choices (default plan − ours) / best, and **timeouts**, either of those parts whose two plans include one the solver stopped as FEASIBLE (ADR 0078).
+_Avoid_: regret attribution
 
 **Consistency**:
 How alike a scenario's runs plan: the mean Jaccard overlap of the SKUs every two runs' final plan revisions promote. Target 0.9; it needs at least two runs per scenario (ADR 0063).

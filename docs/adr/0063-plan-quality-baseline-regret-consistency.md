@@ -27,6 +27,7 @@ SPEC §12, #11 and #53 leave open how both comparison plans are built, what regr
   - Regret = (best − ours) / best. It is signed and not clipped: a plan that beats the best plan's approximations (pairwise terms, stock caps, true spend over budget) shows below 0. The rupee gap is kept next to it.
   - When the best plan earns ₹0.01 or less, regret is 0 if ours earns at least as much (within a paisa), else 1.
   - A run is left out when its own plan is not scored (infeasible or no plan). So is one whose best plan is `INFEASIBLE` in truth, counted as `best_infeasible`.
+  - **Amended by ADR 0078:** a run whose best plan timed out (FEASIBLE) is left out too, counted as `best_timed_out`, and each run's regret splits into model error, the planner's choices and timeouts against the default plan.
 - **D10–D11. Metric values**
   - Regret is the median over scored runs. Its count is the runs within 10%.
   - Plan quality is per scenario. A scenario beats the baseline when every scored run beats it by more than a paisa; one with a losing run loses; the rest tie. Scenarios with no scored run are left out, and the breakdown counts each verdict.

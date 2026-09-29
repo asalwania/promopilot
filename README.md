@@ -350,6 +350,7 @@ Every step of the graph is a trace event, stored in Postgres in order (ADR 0047)
 | `CRITIC_GROUP_SPEND_SHARE` | `0.8` | So is a category or region above this share, when the scope has more than one |
 | `CRITIC_CANNIBALISATION_SHARE` | `0.5` | Cannibalisation at or above this share of a line's incremental profit is heavy |
 | `CRITIC_STOCKOUT_PROBABILITY` | `0.2` | A line that runs out of stock in at least this share of simulated runs is a stock-out risk |
+| `CRITIC_OBJECTIVE_TOLERANCE` | `0.05` | Of the planner's attempts with the fewest violations, one with fewer risk findings goes on only if its plan-time objective is within this share of the best attempt's (ADR 0078) |
 
 The Critic and the Explainer call them.
 
@@ -448,7 +449,7 @@ The report goes to `backend/evals/reports/` (gitignored) as `<UTC timestamp>.jso
   - **Substitute and complement precision / recall** (targets ≥ 0.8 / ≥ 0.7): the pairs the relations model keeps, as unordered pairs across the catalogue, against every true pair.
   - **Baseline WAPE** (reported, aim ≤ 25%): the demand model's own 12-week holdout WAPE at the store × SKU × segment, store × SKU and region × SKU grains (ADR 0023).
 - **Plan quality** (target 90%): the share of scenarios whose every scored plan earns more, by the oracle's objective (incremental profit plus clearance value), than the **rule-based baseline**. That baseline is 20% off the top 10 sellers in scope (units over the 12 weeks before the as-of week), to All customers, in every region of the scope, over the promo window (at most its first 4 weeks), with sellers dropped from the bottom until its expected promo cost fits the budget and any regional cap (ADR 0063).
-- **Regret** (target: median 10% or less): (best − ours) / best, where the **best plan** is our own option generation and optimiser run on true-parameter predictions from the ground truth, with the session's work budgets and the scenario's seed, scored by the oracle. It is signed; when the best plan earns nothing, matching it is 0 and earning less is 100%.
+- **Regret** (target: median 10% or less): (best − ours) / best, where the **best plan** is our own option generation and optimiser run on true-parameter predictions from the ground truth, with the session's work budgets and the scenario's seed, scored by the oracle. It is signed; when the best plan earns nothing, matching it is 0 and earning less is 100%. Each run's regret splits by cause (ADR 0078), against the **default plan**, the same optimiser on the scenario's fitted models for the same request: **model error** (best − default) / best, the **planner**'s choices (default − ours) / best, and **timeouts**, either part whose two plans include one the solver stopped as FEASIBLE. The three sum to the regret. A run whose best plan timed out is flagged and left out of the median whatever its sign (`best_timed_out`); the metric also counts, for each run above the target, its largest part.
 - **Consistency** (target 0.9): the mean Jaccard overlap of the SKUs every two runs of a scenario promote. It needs `RUNS` of at least 2 (`make eval RUNS=5`), so the default run shows it as n/a. With the replay provider a scenario's runs are identical: only a live LLM varies them.
 - **Expected properties**: each scenario's `expect` list, pass or fail per run.
 
@@ -558,6 +559,7 @@ docs/agents/ Agent workflow config (issue tracker, triage labels, domain docs)
 - [ADR 0075: Strong substitutes are never promoted together: a hard, always-on company-policy rule on the relations model's estimated θ, at most one option per pair, region, week and segment](docs/adr/0075-never-promote-strong-substitutes-together.md)
 - [ADR 0076: An eval scenario's amendment can accept the waiting revision's relaxation, sent as the API sends it; the labels stay as stated and the accepted values replace them when scored](docs/adr/0076-eval-scenarios-accept-a-relaxation.md)
 - [ADR 0077: The performance pass reuses work within a session: one baseline forecast per region, a loop-back read off the first candidate set, each option pair priced once, and session time that ends with the session](docs/adr/0077-performance-pass-reuses-work-within-a-session.md)
+- [ADR 0078: Regret splits into model error, the planner's choices and timeouts against the default plan; a timed-out best plan is not counted; and the Critic keeps a risk-reducing attempt only within 5% of the best objective](docs/adr/0078-regret-by-cause-and-the-critics-objective-tolerance.md)
 - [ADR 0082: The API docs are Markdown generated from the OpenAPI contract by a small stdlib script that `make api-types` runs, and CI fails when the committed page drifts](docs/adr/0082-api-docs-generated-from-the-contract.md)
 
 The domain glossary is [CONTEXT.md](CONTEXT.md).

@@ -71,6 +71,7 @@ We chose these with the owner (D1–D10 on #48; every recommended option).
   - When the graph has no planner agent, or the attempt is degraded (ADR 0049 D7), the Critic hands the plan on at once. The default sequence would plan the same revision again.
   - We rejected looping anyway, which costs up to 3 identical re-solves, about 30–45 s. We also rejected teaching the default sequence to act on feedback.
 - **D7. The best attempt** has the fewest violations, then the fewest risk findings, then the highest objective; a tie goes to the later attempt (`critic.best_attempt`). Its findings are the revision's open issues. We rejected "always the last attempt" and "the highest objective without violations".
+  - **Amended by ADR 0078:** fewer risk findings win only among the attempts within `CRITIC_OBJECTIVE_TOLERANCE` (5%) of the best plan-time objective.
 - **D8. Attempts are drafts, and only the chosen plan becomes a plan revision.**
   - The Planner node appends a `PlanAttempt` (plan, plan facts, notes, degraded reason) to `PlanningState.attempts`. The Critic fills in its findings.
   - When the Critic hands on, it saves the best attempt as the plan revision, then its open issues. It also sets `plan`, `plan_facts`, `planner_notes`, `planner_degraded` and `critic_findings` in the state from that attempt.
