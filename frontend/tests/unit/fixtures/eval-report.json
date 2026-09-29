@@ -1,0 +1,1556 @@
+{
+  "generated_at": "2026-09-29T07:21:10.959318Z",
+  "provider": "openai (recording)",
+  "world_seed": 42,
+  "runs_per_scenario": 1,
+  "planning_settings": {
+    "optimizer_deterministic_limit": 10.0,
+    "optimizer_time_limit_seconds": 60.0,
+    "optimizer_workers": 1,
+    "optimizer_seed": 0,
+    "optimizer_binding_deterministic_limit": 6.0,
+    "optimizer_binding_time_limit_seconds": 30.0,
+    "optimizer_relaxation_deterministic_limit": 10.0,
+    "optimizer_relaxation_time_limit_seconds": 60.0,
+    "simulation_runs": 1000,
+    "simulation_seed": 0,
+    "critic_line_spend_share": 0.25,
+    "critic_group_spend_share": 0.8,
+    "critic_cannibalisation_share": 0.5,
+    "critic_stockout_probability": 0.2
+  },
+  "metrics": [
+    {
+      "name": "constraint_satisfaction",
+      "label": "Constraint satisfaction",
+      "value": 0.9655172413793104,
+      "count": 28,
+      "of": 29,
+      "target": 1.0,
+      "direction": "at_least",
+      "passed": false,
+      "breakdown": {
+        "failed": 1,
+        "infeasible": 3,
+        "no_plan": 0
+      },
+      "unit": "share",
+      "aim": null
+    },
+    {
+      "name": "oracle_breach_rate",
+      "label": "Oracle breach rate",
+      "value": 0.41379310344827586,
+      "count": 12,
+      "of": 29,
+      "target": null,
+      "direction": null,
+      "passed": null,
+      "breakdown": {
+        "promo_cost_over_budget": 7,
+        "margin_below_minimum": 2,
+        "demand_over_stock": 7
+      },
+      "unit": "share",
+      "aim": null
+    },
+    {
+      "name": "extraction_accuracy",
+      "label": "Extraction accuracy",
+      "value": 1.0,
+      "count": 147,
+      "of": 147,
+      "target": 0.95,
+      "direction": "at_least",
+      "passed": true,
+      "breakdown": {},
+      "unit": "share",
+      "aim": null
+    },
+    {
+      "name": "clarification_behaviour",
+      "label": "Clarification behaviour",
+      "value": 1.0,
+      "count": 3,
+      "of": 3,
+      "target": 1.0,
+      "direction": "at_least",
+      "passed": true,
+      "breakdown": {
+        "asked": 2,
+        "flagged_only": 1,
+        "neither": 0,
+        "unneeded_asks": 0
+      },
+      "unit": "share",
+      "aim": null
+    },
+    {
+      "name": "infeasibility_handling",
+      "label": "Infeasibility handling",
+      "value": 1.0,
+      "count": 2,
+      "of": 2,
+      "target": 1.0,
+      "direction": "at_least",
+      "passed": true,
+      "breakdown": {
+        "not_declared": 0,
+        "no_relaxation": 0,
+        "nothing_binds": 0,
+        "no_plan": 0
+      },
+      "unit": "share",
+      "aim": null
+    },
+    {
+      "name": "grounding",
+      "label": "Grounding",
+      "value": 1.0,
+      "count": 37,
+      "of": 37,
+      "target": 0.98,
+      "direction": "at_least",
+      "passed": true,
+      "breakdown": {
+        "llm": 37,
+        "ungrounded": 0,
+        "invalid_answer": 0,
+        "llm_unavailable": 0
+      },
+      "unit": "share",
+      "aim": null
+    },
+    {
+      "name": "session_latency_p50",
+      "label": "P50 session time",
+      "value": 148.81715569997323,
+      "count": 32,
+      "of": 32,
+      "target": null,
+      "direction": null,
+      "passed": null,
+      "breakdown": {
+        "max_s": 868
+      },
+      "unit": "seconds",
+      "aim": null
+    },
+    {
+      "name": "session_cost_p50",
+      "label": "P50 session cost",
+      "value": 3.0370944,
+      "count": 32,
+      "of": 32,
+      "target": null,
+      "direction": null,
+      "passed": null,
+      "breakdown": {
+        "calls": 363,
+        "input_tokens": 2735938,
+        "output_tokens": 64236,
+        "unpriced_runs": 0
+      },
+      "unit": "rupees",
+      "aim": null
+    },
+    {
+      "name": "elasticity_recovery",
+      "label": "Elasticity recovery (median abs % error)",
+      "value": 0.08066043063806766,
+      "count": 679,
+      "of": 800,
+      "target": 0.2,
+      "direction": "at_most",
+      "passed": true,
+      "breakdown": {},
+      "unit": "share",
+      "aim": null
+    },
+    {
+      "name": "substitute_precision",
+      "label": "Substitute precision",
+      "value": 0.8666666666666667,
+      "count": 91,
+      "of": 105,
+      "target": 0.8,
+      "direction": "at_least",
+      "passed": true,
+      "breakdown": {},
+      "unit": "share",
+      "aim": null
+    },
+    {
+      "name": "substitute_recall",
+      "label": "Substitute recall",
+      "value": 1.0,
+      "count": 91,
+      "of": 91,
+      "target": 0.7,
+      "direction": "at_least",
+      "passed": true,
+      "breakdown": {},
+      "unit": "share",
+      "aim": null
+    },
+    {
+      "name": "complement_precision",
+      "label": "Complement precision",
+      "value": 1.0,
+      "count": 39,
+      "of": 39,
+      "target": 0.8,
+      "direction": "at_least",
+      "passed": true,
+      "breakdown": {},
+      "unit": "share",
+      "aim": null
+    },
+    {
+      "name": "complement_recall",
+      "label": "Complement recall",
+      "value": 0.975,
+      "count": 39,
+      "of": 40,
+      "target": 0.7,
+      "direction": "at_least",
+      "passed": true,
+      "breakdown": {},
+      "unit": "share",
+      "aim": null
+    },
+    {
+      "name": "baseline_wape",
+      "label": "Baseline WAPE, store x SKU x segment",
+      "value": 0.43535436547308715,
+      "count": 0,
+      "of": 0,
+      "target": null,
+      "direction": "at_most",
+      "passed": null,
+      "breakdown": {},
+      "unit": "share",
+      "aim": 0.25
+    },
+    {
+      "name": "baseline_wape_store_sku",
+      "label": "Baseline WAPE, store x SKU",
+      "value": 0.2514114353342071,
+      "count": 0,
+      "of": 0,
+      "target": null,
+      "direction": "at_most",
+      "passed": null,
+      "breakdown": {},
+      "unit": "share",
+      "aim": 0.25
+    },
+    {
+      "name": "baseline_wape_region_sku",
+      "label": "Baseline WAPE, region x SKU",
+      "value": 0.1346807685427776,
+      "count": 0,
+      "of": 0,
+      "target": null,
+      "direction": "at_most",
+      "passed": null,
+      "breakdown": {},
+      "unit": "share",
+      "aim": 0.25
+    },
+    {
+      "name": "plan_quality",
+      "label": "Plan quality (beats the rule-based baseline)",
+      "value": 0.9310344827586207,
+      "count": 27,
+      "of": 29,
+      "target": 0.9,
+      "direction": "at_least",
+      "passed": true,
+      "breakdown": {
+        "beats": 27,
+        "ties": 2,
+        "loses": 0
+      },
+      "unit": "share",
+      "aim": null
+    },
+    {
+      "name": "regret",
+      "label": "Regret (median, against the best plan)",
+      "value": 0.23538226775938856,
+      "count": 12,
+      "of": 29,
+      "target": 0.1,
+      "direction": "at_most",
+      "passed": false,
+      "breakdown": {
+        "best_infeasible": 0
+      },
+      "unit": "share",
+      "aim": null
+    },
+    {
+      "name": "consistency",
+      "label": "Consistency (Jaccard of selected SKUs across runs)",
+      "value": null,
+      "count": 0,
+      "of": 0,
+      "target": 0.9,
+      "direction": "at_least",
+      "passed": null,
+      "breakdown": {},
+      "unit": "share",
+      "aim": null
+    }
+  ],
+  "scenarios": [
+    {
+      "name": "amend-budget-cut-christmas-2025",
+      "group": "mid_plan_amendments",
+      "as_of_week": 62,
+      "seed": 0,
+      "runs": [
+        {
+          "run": 1,
+          "outcome": "planned",
+          "error": null,
+          "route": [
+            "context",
+            "planner",
+            "critic",
+            "planner",
+            "critic",
+            "explainer",
+            "approval",
+            "approval",
+            "context",
+            "planner",
+            "critic",
+            "explainer",
+            "approval"
+          ],
+          "questions_asked": [],
+          "amendments_applied": 1,
+          "fallbacks": [],
+          "revision": {
+            "number": 2,
+            "lines": 27,
+            "regions": ["North", "South"],
+            "solver_status": "OPTIMAL",
+            "objective": 116407.52,
+            "promo_cost": 149157.18319955567,
+            "marketing_budget": 150000.0,
+            "sku_ids": [
+              "SKU0029",
+              "SKU0030",
+              "SKU0031",
+              "SKU0032",
+              "SKU0034",
+              "SKU0035",
+              "SKU0040",
+              "SKU0042",
+              "SKU0047",
+              "SKU0049",
+              "SKU0050",
+              "SKU0179",
+              "SKU0184",
+              "SKU0192",
+              "SKU0194",
+              "SKU0195"
+            ]
+          },
+          "constraints": "passed",
+          "violations": [],
+          "oracle": {
+            "incremental_profit": 28594.366903451733,
+            "clearance_value": 43413.858489159546,
+            "promo_cost": 132850.38135388447,
+            "blended_margin": 0.23432883559484025,
+            "stock_capped_lines": 0,
+            "breaches": []
+          },
+          "properties": [
+            {
+              "property": "declares_infeasible: false",
+              "passed": true,
+              "detail": "revision 2 is OPTIMAL"
+            },
+            {
+              "property": "diff_changes: marketing_budget",
+              "passed": true,
+              "detail": "revision 2's diff changes marketing_budget"
+            }
+          ],
+          "quality": {
+            "objective": 72008.22539261128,
+            "rule_based": {
+              "sku_ids": ["SKU0192"],
+              "dropped_sku_ids": [
+                "SKU0026",
+                "SKU0195",
+                "SKU0181",
+                "SKU0037",
+                "SKU0029",
+                "SKU0031",
+                "SKU0187",
+                "SKU0033",
+                "SKU0032"
+              ],
+              "lines": 2,
+              "expected_promo_cost": 109448.29103325703,
+              "objective": -34729.13367259533
+            },
+            "best": {
+              "solver_status": "OPTIMAL",
+              "lines": 29,
+              "sku_ids": [
+                "SKU0028",
+                "SKU0029",
+                "SKU0030",
+                "SKU0031",
+                "SKU0032",
+                "SKU0035",
+                "SKU0040",
+                "SKU0041",
+                "SKU0047",
+                "SKU0049",
+                "SKU0179",
+                "SKU0184",
+                "SKU0192",
+                "SKU0194",
+                "SKU0195"
+              ],
+              "objective": 94383.01689843487
+            },
+            "versus_rule_based": "beats",
+            "regret": 0.2370637455878424,
+            "regret_rupees": 22374.791505823596
+          },
+          "duration_s": 395.494816099992,
+          "extraction": [
+            {
+              "field": "regions",
+              "expected": "North, South",
+              "got": "North, South",
+              "matched": true
+            },
+            {
+              "field": "categories",
+              "expected": "Bakery, Beverages",
+              "got": "Bakery, Beverages",
+              "matched": true
+            },
+            {
+              "field": "promo_window",
+              "expected": "63-64",
+              "got": "63-64",
+              "matched": true
+            },
+            {
+              "field": "marketing_budget",
+              "expected": "150000",
+              "got": "150000",
+              "matched": true
+            }
+          ],
+          "flagged": [],
+          "clarification": null,
+          "unneeded_asks": [],
+          "infeasibility": null,
+          "explanations": [
+            {
+              "revision": 1,
+              "source": "llm",
+              "fallback_reason": null
+            },
+            {
+              "revision": 2,
+              "source": "llm",
+              "fallback_reason": null
+            }
+          ],
+          "session_s": 250.17326300003333,
+          "usage": {
+            "calls": 15,
+            "input_tokens": 120200,
+            "output_tokens": 3163,
+            "cost_usd": 0.0531408,
+            "cost_inr": 5.1015168,
+            "unpriced_models": []
+          },
+          "cassette_misses": [],
+          "passed": true
+        }
+      ],
+      "passed": true,
+      "consistency": null
+    },
+    {
+      "name": "cannibal-bakery-diwali-2026",
+      "group": "heavy_cannibalisation",
+      "as_of_week": 104,
+      "seed": 0,
+      "runs": [
+        {
+          "run": 1,
+          "outcome": "planned",
+          "error": null,
+          "route": [
+            "context",
+            "planner",
+            "critic",
+            "planner",
+            "critic",
+            "explainer",
+            "approval"
+          ],
+          "questions_asked": [],
+          "amendments_applied": 0,
+          "fallbacks": [],
+          "revision": {
+            "number": 1,
+            "lines": 6,
+            "regions": ["North", "West"],
+            "solver_status": "OPTIMAL",
+            "objective": 8439.91,
+            "promo_cost": 15204.096142112818,
+            "marketing_budget": 150000.0,
+            "sku_ids": ["SKU0194", "SKU0195", "SKU0198"]
+          },
+          "constraints": "passed",
+          "violations": [],
+          "oracle": {
+            "incremental_profit": 392.6521510299008,
+            "clearance_value": 5631.949178398219,
+            "promo_cost": 13100.480096672976,
+            "blended_margin": 0.2345772544850152,
+            "stock_capped_lines": 0,
+            "breaches": []
+          },
+          "properties": [
+            {
+              "property": "declares_infeasible: false",
+              "passed": true,
+              "detail": "revision 1 is OPTIMAL"
+            },
+            {
+              "property": "no_strong_substitutes_together: true",
+              "passed": false,
+              "detail": "revision 1 promotes SKU0194 and SKU0195 (θ 0.64) together in North, West"
+            }
+          ],
+          "quality": {
+            "objective": 6024.60132942812,
+            "rule_based": {
+              "sku_ids": ["SKU0181", "SKU0185"],
+              "dropped_sku_ids": [
+                "SKU0198",
+                "SKU0176",
+                "SKU0194",
+                "SKU0197",
+                "SKU0195",
+                "SKU0187",
+                "SKU0186",
+                "SKU0192"
+              ],
+              "lines": 4,
+              "expected_promo_cost": 45425.20456558135,
+              "objective": -22845.456136888723
+            },
+            "best": {
+              "solver_status": "OPTIMAL",
+              "lines": 10,
+              "sku_ids": [
+                "SKU0038",
+                "SKU0064",
+                "SKU0179",
+                "SKU0192",
+                "SKU0194",
+                "SKU0195",
+                "SKU0198"
+              ],
+              "objective": 20581.596216139445
+            },
+            "versus_rule_based": "beats",
+            "regret": 0.7072821142655682,
+            "regret_rupees": 14556.994886711325
+          },
+          "duration_s": 243.73449310002616,
+          "extraction": [
+            {
+              "field": "regions",
+              "expected": "North, West",
+              "got": "North, West",
+              "matched": true
+            },
+            {
+              "field": "categories",
+              "expected": "Bakery",
+              "got": "Bakery",
+              "matched": true
+            },
+            {
+              "field": "promo_window",
+              "expected": "108-109",
+              "got": "108-109",
+              "matched": true
+            },
+            {
+              "field": "marketing_budget",
+              "expected": "150000",
+              "got": "150000",
+              "matched": true
+            }
+          ],
+          "flagged": [],
+          "clarification": null,
+          "unneeded_asks": [],
+          "infeasibility": null,
+          "explanations": [
+            {
+              "revision": 1,
+              "source": "llm",
+              "fallback_reason": null
+            }
+          ],
+          "session_s": 66.64298830000916,
+          "usage": {
+            "calls": 9,
+            "input_tokens": 55465,
+            "output_tokens": 988,
+            "cost_usd": 0.0237668,
+            "cost_inr": 2.2816128,
+            "unpriced_models": []
+          },
+          "cassette_misses": [],
+          "passed": false
+        }
+      ],
+      "passed": false,
+      "consistency": null
+    },
+    {
+      "name": "cannibal-personal-care-offseason",
+      "group": "heavy_cannibalisation",
+      "as_of_week": 82,
+      "seed": 0,
+      "runs": [
+        {
+          "run": 1,
+          "outcome": "planned",
+          "error": null,
+          "route": [
+            "context",
+            "planner",
+            "critic",
+            "planner",
+            "critic",
+            "planner",
+            "critic",
+            "explainer",
+            "approval"
+          ],
+          "questions_asked": [],
+          "amendments_applied": 0,
+          "fallbacks": [],
+          "revision": {
+            "number": 1,
+            "lines": 20,
+            "regions": ["North", "South"],
+            "solver_status": "FEASIBLE",
+            "objective": 104097.99,
+            "promo_cost": 188085.54938455857,
+            "marketing_budget": 200000.0,
+            "sku_ids": [
+              "SKU0077",
+              "SKU0078",
+              "SKU0081",
+              "SKU0083",
+              "SKU0085",
+              "SKU0086",
+              "SKU0087",
+              "SKU0089",
+              "SKU0091",
+              "SKU0093",
+              "SKU0095",
+              "SKU0100",
+              "SKU0102",
+              "SKU0105",
+              "SKU0119"
+            ]
+          },
+          "constraints": "passed",
+          "violations": [],
+          "oracle": {
+            "incremental_profit": 91326.96943951573,
+            "clearance_value": 6014.505207740254,
+            "promo_cost": 189063.74839635633,
+            "blended_margin": 0.36586909927574834,
+            "stock_capped_lines": 0,
+            "breaches": []
+          },
+          "properties": [
+            {
+              "property": "declares_infeasible: false",
+              "passed": true,
+              "detail": "revision 1 is FEASIBLE"
+            },
+            {
+              "property": "no_strong_substitutes_together: true",
+              "passed": false,
+              "detail": "revision 1 promotes SKU0085 and SKU0087 (θ 0.73) together in North; SKU0077 and SKU0078 (θ 0.69) together in North"
+            }
+          ],
+          "quality": {
+            "objective": 97341.47464725598,
+            "rule_based": {
+              "sku_ids": ["SKU0079", "SKU0093", "SKU0095", "SKU0086"],
+              "dropped_sku_ids": [
+                "SKU0089",
+                "SKU0094",
+                "SKU0081",
+                "SKU0077",
+                "SKU0087",
+                "SKU0083"
+              ],
+              "lines": 8,
+              "expected_promo_cost": 139207.4129236462,
+              "objective": -37830.892537748005
+            },
+            "best": {
+              "solver_status": "FEASIBLE",
+              "lines": 13,
+              "sku_ids": [
+                "SKU0077",
+                "SKU0087",
+                "SKU0090",
+                "SKU0091",
+                "SKU0093",
+                "SKU0095",
+                "SKU0099",
+                "SKU0100"
+              ],
+              "objective": 8280.471339052197
+            },
+            "versus_rule_based": "beats",
+            "regret": -10.755547560218707,
+            "regret_rupees": -89061.00330820378
+          },
+          "duration_s": 408.49490399996284,
+          "extraction": [
+            {
+              "field": "regions",
+              "expected": "North, South",
+              "got": "North, South",
+              "matched": true
+            },
+            {
+              "field": "categories",
+              "expected": "Personal Care",
+              "got": "Personal Care",
+              "matched": true
+            },
+            {
+              "field": "promo_window",
+              "expected": "84-86",
+              "got": "84-86",
+              "matched": true
+            },
+            {
+              "field": "marketing_budget",
+              "expected": "200000",
+              "got": "200000",
+              "matched": true
+            }
+          ],
+          "flagged": [],
+          "clarification": null,
+          "unneeded_asks": [],
+          "infeasibility": null,
+          "explanations": [
+            {
+              "revision": 1,
+              "source": "llm",
+              "fallback_reason": null
+            }
+          ],
+          "session_s": 408.4735071999603,
+          "usage": {
+            "calls": 13,
+            "input_tokens": 95301,
+            "output_tokens": 2162,
+            "cost_usd": 0.0415796,
+            "cost_inr": 3.9916416000000003,
+            "unpriced_models": []
+          },
+          "cassette_misses": [],
+          "passed": false
+        }
+      ],
+      "passed": false,
+      "consistency": null
+    },
+    {
+      "name": "clear-curd-diwali-2025",
+      "group": "overstock_clearance",
+      "as_of_week": 50,
+      "seed": 0,
+      "runs": [
+        {
+          "run": 1,
+          "outcome": "planned",
+          "error": null,
+          "route": ["context", "planner", "critic", "explainer", "approval"],
+          "questions_asked": [],
+          "amendments_applied": 0,
+          "fallbacks": [],
+          "revision": {
+            "number": 1,
+            "lines": 19,
+            "regions": ["North", "South"],
+            "solver_status": "FEASIBLE",
+            "objective": 3404.27,
+            "promo_cost": 70058.66763759601,
+            "marketing_budget": 200000.0,
+            "sku_ids": [
+              "SKU0052",
+              "SKU0053",
+              "SKU0057",
+              "SKU0059",
+              "SKU0061",
+              "SKU0062",
+              "SKU0064",
+              "SKU0070",
+              "SKU0073",
+              "SKU0075"
+            ]
+          },
+          "constraints": "failed",
+          "violations": [
+            {
+              "kind": "violation",
+              "code": "CLEARANCE_TARGET",
+              "message": "SKU0057 in North is expected to sell through 28.3% of its stock, below the clearance target 50.0%: short by 867 units",
+              "sku_id": "SKU0057",
+              "region": "North",
+              "actual": 0.28264441478959784,
+              "limit": 0.5
+            }
+          ],
+          "oracle": {
+            "incremental_profit": -27360.512169219233,
+            "clearance_value": 24544.867763004884,
+            "promo_cost": 63537.80215602729,
+            "blended_margin": 0.15272780451879162,
+            "stock_capped_lines": 0,
+            "breaches": []
+          },
+          "properties": [
+            {
+              "property": "declares_infeasible: false",
+              "passed": true,
+              "detail": "revision 1 is FEASIBLE"
+            },
+            {
+              "property": "meets_clearance: SKU0057",
+              "passed": false,
+              "detail": "North reaches 28.26% of a 50% target, 867 units short"
+            },
+            {
+              "property": "meets_clearance: SKU0059",
+              "passed": true,
+              "detail": "no clearance shortfall in revision 1"
+            },
+            {
+              "property": "meets_clearance: SKU0061",
+              "passed": true,
+              "detail": "no clearance shortfall in revision 1"
+            }
+          ],
+          "quality": {
+            "objective": -2815.644406214349,
+            "rule_based": {
+              "sku_ids": ["SKU0073"],
+              "dropped_sku_ids": [
+                "SKU0068",
+                "SKU0063",
+                "SKU0056",
+                "SKU0069",
+                "SKU0062",
+                "SKU0060",
+                "SKU0061",
+                "SKU0070",
+                "SKU0064"
+              ],
+              "lines": 2,
+              "expected_promo_cost": 141940.63384698943,
+              "objective": -54843.63184047275
+            },
+            "best": {
+              "solver_status": "FEASIBLE",
+              "lines": 14,
+              "sku_ids": [
+                "SKU0052",
+                "SKU0057",
+                "SKU0059",
+                "SKU0061",
+                "SKU0064",
+                "SKU0070",
+                "SKU0073"
+              ],
+              "objective": -1078.7264737942642
+            },
+            "versus_rule_based": "beats",
+            "regret": 1.0,
+            "regret_rupees": 1736.917932420085
+          },
+          "duration_s": 314.61221800005296,
+          "extraction": [
+            {
+              "field": "regions",
+              "expected": "North, South",
+              "got": "North, South",
+              "matched": true
+            },
+            {
+              "field": "categories",
+              "expected": "Dairy",
+              "got": "Dairy",
+              "matched": true
+            },
+            {
+              "field": "promo_window",
+              "expected": "54-55",
+              "got": "54-55",
+              "matched": true
+            },
+            {
+              "field": "marketing_budget",
+              "expected": "200000",
+              "got": "200000",
+              "matched": true
+            },
+            {
+              "field": "clearance_targets",
+              "expected": "SKU0057 0.5, SKU0059 0.5, SKU0061 0.5",
+              "got": "SKU0057 0.5, SKU0059 0.5, SKU0061 0.5",
+              "matched": true
+            }
+          ],
+          "flagged": [],
+          "clarification": null,
+          "unneeded_asks": [],
+          "infeasibility": null,
+          "explanations": [
+            {
+              "revision": 1,
+              "source": "llm",
+              "fallback_reason": null
+            }
+          ],
+          "session_s": 173.43383330001961,
+          "usage": {
+            "calls": 8,
+            "input_tokens": 64031,
+            "output_tokens": 2885,
+            "cost_usd": 0.0302284,
+            "cost_inr": 2.9019264000000002,
+            "unpriced_models": []
+          },
+          "cassette_misses": [],
+          "passed": false
+        }
+      ],
+      "passed": false,
+      "consistency": null
+    },
+    {
+      "name": "demo-budget-cut-drop-west",
+      "group": "mid_plan_amendments",
+      "as_of_week": 104,
+      "seed": 0,
+      "runs": [
+        {
+          "run": 1,
+          "outcome": "planned",
+          "error": null,
+          "route": [
+            "context",
+            "planner",
+            "critic",
+            "explainer",
+            "approval",
+            "approval",
+            "context",
+            "planner",
+            "critic",
+            "explainer",
+            "approval",
+            "approval",
+            "context",
+            "planner",
+            "critic",
+            "explainer",
+            "approval"
+          ],
+          "questions_asked": [],
+          "amendments_applied": 2,
+          "fallbacks": [],
+          "revision": {
+            "number": 3,
+            "lines": 13,
+            "regions": ["North"],
+            "solver_status": "INFEASIBLE",
+            "objective": 16877.89,
+            "promo_cost": 101054.26939028769,
+            "marketing_budget": 600000.0,
+            "sku_ids": [
+              "SKU0002",
+              "SKU0006",
+              "SKU0017",
+              "SKU0025",
+              "SKU0029",
+              "SKU0030",
+              "SKU0031",
+              "SKU0032",
+              "SKU0033",
+              "SKU0035",
+              "SKU0040",
+              "SKU0049",
+              "SKU0050"
+            ]
+          },
+          "constraints": "infeasible",
+          "violations": [],
+          "oracle": null,
+          "properties": [
+            {
+              "property": "excludes_region: West",
+              "passed": true,
+              "detail": "revision 3 has 0 plan line(s) in West"
+            },
+            {
+              "property": "meets_clearance: SKU0002",
+              "passed": true,
+              "detail": "no clearance shortfall in revision 3"
+            },
+            {
+              "property": "meets_clearance: SKU0006",
+              "passed": false,
+              "detail": "North reaches 59.87% of a 60% target, 1 units short"
+            }
+          ],
+          "quality": null,
+          "duration_s": 183.10132700001122,
+          "extraction": [
+            {
+              "field": "regions",
+              "expected": "North",
+              "got": "North",
+              "matched": true
+            },
+            {
+              "field": "categories",
+              "expected": "Beverages, Snacks",
+              "got": "Beverages, Snacks",
+              "matched": true
+            },
+            {
+              "field": "marketing_budget",
+              "expected": "600000",
+              "got": "600000",
+              "matched": true
+            },
+            {
+              "field": "min_margin",
+              "expected": "0.18",
+              "got": "0.18",
+              "matched": true
+            },
+            {
+              "field": "clearance_targets",
+              "expected": "SKU0002 0.6, SKU0006 0.6",
+              "got": "SKU0002 0.6, SKU0006 0.6",
+              "matched": true
+            }
+          ],
+          "flagged": ["target_segment"],
+          "clarification": null,
+          "unneeded_asks": [],
+          "infeasibility": null,
+          "explanations": [
+            {
+              "revision": 1,
+              "source": "llm",
+              "fallback_reason": null
+            },
+            {
+              "revision": 2,
+              "source": "llm",
+              "fallback_reason": null
+            },
+            {
+              "revision": 3,
+              "source": "llm",
+              "fallback_reason": null
+            }
+          ],
+          "session_s": 183.03031140001258,
+          "usage": {
+            "calls": 25,
+            "input_tokens": 256650,
+            "output_tokens": 5706,
+            "cost_usd": 0.11178960000000002,
+            "cost_inr": 10.7318016,
+            "unpriced_models": []
+          },
+          "cassette_misses": [],
+          "passed": false
+        }
+      ],
+      "passed": false,
+      "consistency": null
+    },
+    {
+      "name": "diwali-no-budget",
+      "group": "vague_or_conflicting",
+      "as_of_week": 104,
+      "seed": 0,
+      "runs": [
+        {
+          "run": 1,
+          "outcome": "planned",
+          "error": null,
+          "route": [
+            "context",
+            "clarify",
+            "clarify",
+            "context",
+            "planner",
+            "critic",
+            "planner",
+            "critic",
+            "explainer",
+            "approval"
+          ],
+          "questions_asked": ["marketing_budget"],
+          "amendments_applied": 0,
+          "fallbacks": [],
+          "revision": {
+            "number": 1,
+            "lines": 37,
+            "regions": ["North", "West"],
+            "solver_status": "OPTIMAL",
+            "objective": 149863.21,
+            "promo_cost": 199964.47033387487,
+            "marketing_budget": 200000.0,
+            "sku_ids": [
+              "SKU0002",
+              "SKU0005",
+              "SKU0007",
+              "SKU0009",
+              "SKU0010",
+              "SKU0013",
+              "SKU0017",
+              "SKU0019",
+              "SKU0025",
+              "SKU0029",
+              "SKU0030",
+              "SKU0031",
+              "SKU0032",
+              "SKU0033",
+              "SKU0034",
+              "SKU0040",
+              "SKU0041",
+              "SKU0042",
+              "SKU0049",
+              "SKU0050"
+            ]
+          },
+          "constraints": "passed",
+          "violations": [],
+          "oracle": {
+            "incremental_profit": 69364.91747428558,
+            "clearance_value": 73818.31434857535,
+            "promo_cost": 204184.37078833015,
+            "blended_margin": 0.2598938939882538,
+            "stock_capped_lines": 1,
+            "breaches": ["promo_cost_over_budget", "demand_over_stock"]
+          },
+          "properties": [
+            {
+              "property": "asks_clarification: marketing_budget",
+              "passed": true,
+              "detail": "asked about marketing_budget"
+            },
+            {
+              "property": "declares_infeasible: false",
+              "passed": true,
+              "detail": "revision 1 is OPTIMAL"
+            }
+          ],
+          "quality": {
+            "objective": 143183.23182286095,
+            "rule_based": {
+              "sku_ids": [
+                "SKU0023",
+                "SKU0043",
+                "SKU0037",
+                "SKU0031",
+                "SKU0029"
+              ],
+              "dropped_sku_ids": [
+                "SKU0040",
+                "SKU0005",
+                "SKU0033",
+                "SKU0009",
+                "SKU0049"
+              ],
+              "lines": 10,
+              "expected_promo_cost": 182540.19335282646,
+              "objective": -63024.92945147655
+            },
+            "best": {
+              "solver_status": "OPTIMAL",
+              "lines": 35,
+              "sku_ids": [
+                "SKU0002",
+                "SKU0006",
+                "SKU0007",
+                "SKU0010",
+                "SKU0017",
+                "SKU0019",
+                "SKU0023",
+                "SKU0025",
+                "SKU0029",
+                "SKU0030",
+                "SKU0031",
+                "SKU0032",
+                "SKU0033",
+                "SKU0035",
+                "SKU0040",
+                "SKU0041",
+                "SKU0042",
+                "SKU0049",
+                "SKU0050"
+              ],
+              "objective": 157802.87388981867
+            },
+            "versus_rule_based": "beats",
+            "regret": 0.09264496714530983,
+            "regret_rupees": 14619.64206695772
+          },
+          "duration_s": 170.4056675999891,
+          "extraction": [
+            {
+              "field": "regions",
+              "expected": "North, West",
+              "got": "North, West",
+              "matched": true
+            },
+            {
+              "field": "categories",
+              "expected": "Beverages, Snacks",
+              "got": "Beverages, Snacks",
+              "matched": true
+            },
+            {
+              "field": "promo_window",
+              "expected": "108-109",
+              "got": "108-109",
+              "matched": true
+            },
+            {
+              "field": "marketing_budget",
+              "expected": "200000",
+              "got": "200000",
+              "matched": true
+            }
+          ],
+          "flagged": [],
+          "clarification": {
+            "named": ["marketing_budget"],
+            "asked": ["marketing_budget"],
+            "flagged": [],
+            "passed": true
+          },
+          "unneeded_asks": [],
+          "infeasibility": null,
+          "explanations": [
+            {
+              "revision": 1,
+              "source": "llm",
+              "fallback_reason": null
+            }
+          ],
+          "session_s": 170.38609669997822,
+          "usage": {
+            "calls": 10,
+            "input_tokens": 84647,
+            "output_tokens": 2569,
+            "cost_usd": 0.0379692,
+            "cost_inr": 3.6450432,
+            "unpriced_models": []
+          },
+          "cassette_misses": ["3f9c2a7e1b4d"],
+          "passed": true
+        }
+      ],
+      "passed": true,
+      "consistency": null
+    },
+    {
+      "name": "infeasible-clearance-high-margin",
+      "group": "infeasible_constraints",
+      "as_of_week": 50,
+      "seed": 0,
+      "runs": [
+        {
+          "run": 1,
+          "outcome": "planned",
+          "error": null,
+          "route": ["context", "planner", "critic", "explainer", "approval"],
+          "questions_asked": [],
+          "amendments_applied": 0,
+          "fallbacks": [],
+          "revision": {
+            "number": 1,
+            "lines": 0,
+            "regions": [],
+            "solver_status": "INFEASIBLE",
+            "objective": 0.0,
+            "promo_cost": 0.0,
+            "marketing_budget": 200000.0,
+            "sku_ids": []
+          },
+          "constraints": "infeasible",
+          "violations": [],
+          "oracle": null,
+          "properties": [
+            {
+              "property": "declares_infeasible: true",
+              "passed": true,
+              "detail": "revision 1 is INFEASIBLE"
+            },
+            {
+              "property": "relaxation_touches: clearance_target",
+              "passed": true,
+              "detail": "revision 1's relaxation changes minimum_margin, clearance_target"
+            }
+          ],
+          "quality": null,
+          "duration_s": 69.43571869999869,
+          "extraction": [
+            {
+              "field": "regions",
+              "expected": "South",
+              "got": "South",
+              "matched": true
+            },
+            {
+              "field": "categories",
+              "expected": "Dairy",
+              "got": "Dairy",
+              "matched": true
+            },
+            {
+              "field": "promo_window",
+              "expected": "54-55",
+              "got": "54-55",
+              "matched": true
+            },
+            {
+              "field": "marketing_budget",
+              "expected": "200000",
+              "got": "200000",
+              "matched": true
+            },
+            {
+              "field": "min_margin",
+              "expected": "0.35",
+              "got": "0.35",
+              "matched": true
+            },
+            {
+              "field": "clearance_targets",
+              "expected": "SKU0057 0.9, SKU0059 0.9, SKU0061 0.9",
+              "got": "SKU0057 0.9, SKU0059 0.9, SKU0061 0.9",
+              "matched": true
+            }
+          ],
+          "flagged": [],
+          "clarification": null,
+          "unneeded_asks": [],
+          "infeasibility": {
+            "revision": 1,
+            "declared": true,
+            "relaxation": true,
+            "binding_named": true,
+            "passed": true
+          },
+          "explanations": [
+            {
+              "revision": 1,
+              "source": "llm",
+              "fallback_reason": null
+            }
+          ],
+          "session_s": 69.41881539998576,
+          "usage": {
+            "calls": 10,
+            "input_tokens": 83684,
+            "output_tokens": 1223,
+            "cost_usd": 0.0354304,
+            "cost_inr": 3.4013184,
+            "unpriced_models": []
+          },
+          "cassette_misses": [],
+          "passed": true
+        }
+      ],
+      "passed": true,
+      "consistency": null
+    },
+    {
+      "name": "price-war-staples-christmas-2025",
+      "group": "competitor_price_war",
+      "as_of_week": 62,
+      "seed": 0,
+      "runs": [
+        {
+          "run": 1,
+          "outcome": "planned",
+          "error": null,
+          "route": ["context", "planner", "critic", "explainer", "approval"],
+          "questions_asked": [],
+          "amendments_applied": 0,
+          "fallbacks": [],
+          "revision": {
+            "number": 1,
+            "lines": 2,
+            "regions": ["North"],
+            "solver_status": "OPTIMAL",
+            "objective": 3344.08,
+            "promo_cost": 26978.13983929001,
+            "marketing_budget": 200000.0,
+            "sku_ids": ["SKU0135", "SKU0138"]
+          },
+          "constraints": "passed",
+          "violations": [],
+          "oracle": {
+            "incremental_profit": -2214.4916421326816,
+            "clearance_value": 0.0,
+            "promo_cost": 25222.090245522995,
+            "blended_margin": 0.16162636237465786,
+            "stock_capped_lines": 0,
+            "breaches": []
+          },
+          "properties": [
+            {
+              "property": "declares_infeasible: false",
+              "passed": true,
+              "detail": "revision 1 is OPTIMAL"
+            },
+            {
+              "property": "kvi_response_present: true",
+              "passed": true,
+              "detail": "the notes and the summary carry the KVI response"
+            }
+          ],
+          "quality": {
+            "objective": -2214.4916421326816,
+            "rule_based": {
+              "sku_ids": ["SKU0144", "SKU0148"],
+              "dropped_sku_ids": [
+                "SKU0135",
+                "SKU0136",
+                "SKU0127",
+                "SKU0129",
+                "SKU0126",
+                "SKU0146",
+                "SKU0138",
+                "SKU0149"
+              ],
+              "lines": 2,
+              "expected_promo_cost": 85618.65385517654,
+              "objective": -34871.73615622682
+            },
+            "best": {
+              "solver_status": "OPTIMAL",
+              "lines": 1,
+              "sku_ids": ["SKU0138"],
+              "objective": 1575.2006253731888
+            },
+            "versus_rule_based": "beats",
+            "regret": 2.405847360940474,
+            "regret_rupees": 3789.6922675058704
+          },
+          "duration_s": 19.764115899975877,
+          "extraction": [
+            {
+              "field": "regions",
+              "expected": "North",
+              "got": "North",
+              "matched": true
+            },
+            {
+              "field": "categories",
+              "expected": "Staples",
+              "got": "Staples",
+              "matched": true
+            },
+            {
+              "field": "promo_window",
+              "expected": "63-64",
+              "got": "63-64",
+              "matched": true
+            },
+            {
+              "field": "marketing_budget",
+              "expected": "200000",
+              "got": "200000",
+              "matched": true
+            },
+            {
+              "field": "min_margin",
+              "expected": "0.16",
+              "got": "0.16",
+              "matched": true
+            },
+            {
+              "field": "kvi_price_tolerance",
+              "expected": "0.02",
+              "got": "0.02",
+              "matched": true
+            }
+          ],
+          "flagged": [],
+          "clarification": null,
+          "unneeded_asks": [],
+          "infeasibility": null,
+          "explanations": [
+            {
+              "revision": 1,
+              "source": "llm",
+              "fallback_reason": null
+            }
+          ],
+          "session_s": 19.74676189996535,
+          "usage": {
+            "calls": 5,
+            "input_tokens": 27263,
+            "output_tokens": 592,
+            "cost_usd": 0.0118524,
+            "cost_inr": 1.1378304000000001,
+            "unpriced_models": []
+          },
+          "cassette_misses": [],
+          "passed": true
+        }
+      ],
+      "passed": true,
+      "consistency": null
+    }
+  ]
+}

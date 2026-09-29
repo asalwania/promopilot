@@ -11,7 +11,7 @@ beforeEach(() => {
 });
 
 describe("SiteNav", () => {
-  it("links Home, Models and Data", () => {
+  it("links Home, Models, Data and Evals", () => {
     render(<SiteNav />);
 
     const nav = screen.getByRole("navigation", { name: "Main" });
@@ -27,6 +27,10 @@ describe("SiteNav", () => {
     expect(screen.getByRole("link", { name: "Data" })).toHaveAttribute(
       "href",
       "/data",
+    );
+    expect(screen.getByRole("link", { name: "Evals" })).toHaveAttribute(
+      "href",
+      "/evals",
     );
   });
 
