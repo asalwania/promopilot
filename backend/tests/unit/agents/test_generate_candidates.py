@@ -368,3 +368,40 @@ async def test_a_sku_that_cannot_be_left_out_is_invalid_input(
     assert isinstance(result, ToolError)
     assert result.code == "invalid_input"
     assert message in result.message
+
+
+async def test_a_narrowing_of_a_stored_set_is_read_off_it_and_prices_pairs_once(
+    small_models: tuple[DemandModel, Relations],
+    small_dataset: GeneratedDataset,
+    tools: ToolRegistry,
+    store: CandidateStore,
+    small_history: DemandHistory,
+) -> None:
+    # The Critic's loop-back leaves SKUs out of the set the planner generated first (ADR 0077).
+    left_out = first_category_skus(small_history)[:2]
+    whole = await tools.call("generate_candidates", arguments(small_history))
+    narrowed = await tools.call(
+        "generate_candidates", arguments(small_history, exclude_sku_ids=left_out)
+    )
+
+    assert isinstance(whole, ToolOk)
+    assert isinstance(narrowed, ToolOk)
+    assert isinstance(whole.output, GenerateCandidatesOutput)
+    assert isinstance(narrowed.output, GenerateCandidatesOutput)
+    first = store.get(whole.output.candidate_set_id)
+    second = store.get(narrowed.output.candidate_set_id)
+    assert first is not None
+    assert second is not None
+    assert second.facts is first.facts  # pairwise terms already priced are not priced again
+    kept = {id(line) for line in first.options.lines}
+    assert all(id(line) in kept for line in second.options.lines)
+    # What the planner sees is what generating the narrowed set afresh gives it.
+    fresh = await build(small_models, small_dataset, CandidateStore()).call(
+        "generate_candidates", arguments(small_history, exclude_sku_ids=left_out)
+    )
+    assert isinstance(fresh, ToolOk)
+    assert isinstance(fresh.output, GenerateCandidatesOutput)
+    registered = {"demand_model", "relations_model"}  # each build registers its own ids
+    assert narrowed.output.model_dump(exclude=registered) == fresh.output.model_dump(
+        exclude=registered
+    )

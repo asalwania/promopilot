@@ -440,12 +440,12 @@ def test_no_options_survive_an_empty_scope() -> None:
 # --- on a fitted world -----------------------------------------------------------------
 
 
-def test_the_fitted_models_generate_options_deterministically(
+def small_context(
     small_models: tuple[DemandModel, Relations], small_history: Any, small_dataset: Any
-) -> None:
+) -> OptionContext:
+    """The small world's fitted models, with its pooled stock at the as-of week."""
     model, found = small_models
     products = small_history.products
-    category = str(products["category"].iloc[0])
     inventory = small_dataset.inventory
     snapshot = inventory[inventory["snapshot_week"] == SMALL_AS_OF - 1].merge(
         small_history.stores[["store_id", "region"]], on="store_id"
@@ -456,18 +456,34 @@ def test_the_fitted_models_generate_options_deterministically(
     pooled = pooled.assign(
         available_stock=pooled["on_hand"] - pooled["safety_stock"], is_overstock=False
     )
-    fitted = OptionContext(
+    return OptionContext(
         demand_model=model,
         relations=found,
         products=products,
         stock=pooled[["sku_id", "region", "available_stock", "is_overstock"]],
         policy=CompanyPolicy(),
     )
-    planning = request(
+
+
+def small_request(context: OptionContext, *regions: Region) -> PlanningRequest:
+    return request(
         as_of_week=SMALL_AS_OF,
-        scope=Scope(regions=(Region.NORTH,), categories=(category,)),
+        scope=Scope(
+            regions=regions or (Region.NORTH,),
+            categories=(str(context.products["category"].iloc[0]),),
+        ),
         promo_window=PromoWindow(start_week=SMALL_AS_OF + 1, end_week=SMALL_AS_OF + 2),
     )
+
+
+def test_the_fitted_models_generate_options_deterministically(
+    small_models: tuple[DemandModel, Relations], small_history: Any, small_dataset: Any
+) -> None:
+    model, found = small_models
+    products = small_history.products
+    category = str(products["category"].iloc[0])
+    fitted = small_context(small_models, small_history, small_dataset)
+    planning = small_request(fitted)
 
     first = generate_options(planning, fitted)
     again = generate_options(planning, fitted)
@@ -671,3 +687,153 @@ def test_the_optimisers_facts_name_each_kvis_competitor_price() -> None:
     north, south = facts.sku("A", Region.NORTH), facts.sku("A", Region.SOUTH)
     assert (north.is_kvi, north.competitor_price) == (True, 87.5)
     assert (south.is_kvi, south.competitor_price) == (False, None)
+
+
+# --- narrowing a set already generated (ADR 0077) ---------------------------------------------
+
+
+def assert_same_options(narrowed: PromoOptions, generated: PromoOptions) -> None:
+    """Every field, the table's values bit for bit: the planner sees these counts, and the
+    Explainer's plan data reads these numbers. A column the narrowing leaves all zeros, such
+    as partner units without a BUNDLE, may keep the float type of the wider set."""
+    assert narrowed.lines == generated.lines
+    pd.testing.assert_frame_equal(
+        narrowed.table, generated.table, check_exact=True, check_dtype=False
+    )
+    assert narrowed.enumerated == generated.enumerated
+    assert narrowed.pruned == generated.pruned
+    assert dict(narrowed.pruned_by_mechanism) == dict(generated.pruned_by_mechanism)
+    assert narrowed.clearance == generated.clearance
+    assert narrowed.price_matches == generated.price_matches
+
+
+NARROWINGS: list[dict[str, Any]] = [
+    {"exclude_sku_ids": ["A"]},
+    {"sku_ids": ["B", "D"]},
+    {"mechanisms": [Mechanism.PCT_OFF, Mechanism.BUNDLE]},
+    {"mechanisms": [Mechanism.FIXED_PRICE]},
+    {"target_segments": [TargetSegment.FAMILIES, TargetSegment.ALL_CUSTOMERS]},
+    {
+        "exclude_sku_ids": ["B"],
+        "mechanisms": [Mechanism.BOGO, Mechanism.PCT_OFF],
+        "target_segments": [TargetSegment.YOUNG_URBAN],
+    },
+    {"sku_ids": ["B"], "mechanisms": [Mechanism.BUNDLE]},
+]
+
+
+@pytest.mark.parametrize("narrowing", NARROWINGS)
+def test_narrowing_a_generated_set_gives_what_generating_it_narrowed_gives(
+    narrowing: dict[str, Any],
+) -> None:
+    # Every pruning rule fires: B sells below cost, D has no North stock, A is an undercut
+    # KVI with a price match, and D is named for clearance.
+    planning = request(clearance_targets=cleared("D"))
+    found = gaps(("A", Region.NORTH, 87.5, True))
+    inventory = stock(D_North=(1.0, False), B_South=(900.0, False))
+
+    def fitted(demand: FakeDemand) -> OptionContext:
+        return replace(context(demand, inventory), competitor_gaps=found)
+
+    unnarrowed = generate_options(planning, fitted(PathDemand()))
+    fresh = PathDemand()
+
+    narrowed = generate_options(planning, fitted(fresh), unnarrowed=unnarrowed, **narrowing)
+
+    assert fresh.predicted == []  # nothing enumerated or predicted again
+    assert_same_options(narrowed, generate_options(planning, fitted(PathDemand()), **narrowing))
+
+
+def test_a_narrowing_of_a_generated_set_is_checked_as_generation_checks_it() -> None:
+    planning = request(clearance_targets=cleared("D"))
+    unnarrowed = generate_options(planning, context(PathDemand()))
+
+    with pytest.raises(ValueError, match="scope: C"):
+        generate_options(planning, context(PathDemand()), unnarrowed=unnarrowed, sku_ids=["C"])
+    with pytest.raises(ValueError, match="clearance target of the brief: D"):
+        generate_options(
+            planning, context(PathDemand()), unnarrowed=unnarrowed, exclude_sku_ids=["D"]
+        )
+
+
+def test_an_empty_narrowing_generates_afresh() -> None:
+    unnarrowed = generate_options(request(), context())
+
+    narrowed = generate_options(request(), context(), unnarrowed=unnarrowed, mechanisms=[])
+
+    assert_same_options(narrowed, generate_options(request(), context(), mechanisms=[]))
+
+
+def test_narrowing_a_fitted_set_is_exact(
+    small_models: tuple[DemandModel, Relations], small_history: Any, small_dataset: Any
+) -> None:
+    fitted = small_context(small_models, small_history, small_dataset)
+    planning = small_request(fitted, Region.NORTH, Region.SOUTH)
+    unnarrowed = generate_options(planning, fitted)
+    left_out = sorted({line.sku_id for line in unnarrowed.lines})[:2]
+
+    for narrowing in (
+        {"exclude_sku_ids": left_out},
+        {"mechanisms": [Mechanism.PCT_OFF], "target_segments": [TargetSegment.ALL_CUSTOMERS]},
+    ):
+        narrowed = generate_options(planning, fitted, unnarrowed=unnarrowed, **narrowing)
+        assert_same_options(narrowed, generate_options(planning, fitted, **narrowing))
+
+
+def test_a_narrowing_that_keeps_nothing_matches_generation() -> None:
+    no_stock = stock(D_North=(0.0, False), D_South=(0.0, False))
+    unnarrowed = generate_options(request(), context(inventory=no_stock))
+
+    for narrowing in ({"sku_ids": ["D"]}, {"sku_ids": ["B"], "mechanisms": [Mechanism.BOGO]}):
+        narrowed = generate_options(
+            request(), context(inventory=no_stock), unnarrowed=unnarrowed, **narrowing
+        )
+        assert not narrowed.lines
+        assert_same_options(
+            narrowed, generate_options(request(), context(inventory=no_stock), **narrowing)
+        )
+
+
+class CountingPathDemand(PathDemand):
+    """PathDemand that counts the line paths and baselines pairwise terms ask for."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.asked = 0
+
+    def line_paths(self, options: Sequence[PlanLine], context: PredictionContext) -> pd.DataFrame:
+        self.asked += 1
+        return super().line_paths(options, context)
+
+    def baseline(
+        self,
+        weeks: Iterable[int],
+        *,
+        regions: Sequence[str] | None = None,
+        store_ids: Sequence[str] | None = None,
+        sku_ids: Sequence[str] | None = None,
+    ) -> pd.DataFrame:
+        self.asked += 1
+        return super().baseline(weeks, regions=regions, store_ids=store_ids, sku_ids=sku_ids)
+
+
+def test_the_facts_price_each_option_pair_once() -> None:
+    options = generate_options(request(), context(PathDemand()), sku_ids=["A", "B"])
+    a = lines_of(options, sku_id="A", region=Region.NORTH, mechanism=Mechanism.PCT_OFF)
+    b = lines_of(options, sku_id="B", region=Region.NORTH, mechanism=Mechanism.FIXED_PRICE)
+    first, second, third = (a[0], b[0]), (a[1], b[1]), (a[2], b[2])
+    demand = CountingPathDemand()
+    facts = FittedOptionFacts(context(demand))
+
+    priced = facts.pairwise_cannibalisation([first, second])
+    asked = demand.asked
+    again = facts.pairwise_cannibalisation([second, first])
+
+    assert asked > 0
+    assert demand.asked == asked  # both pairs were priced already
+    assert list(again) == [priced[1], priced[0]]
+    mixed = facts.pairwise_cannibalisation([first, third])
+    assert demand.asked > asked  # only the new pair is priced
+    alone = FittedOptionFacts(context(PathDemand())).pairwise_cannibalisation([third])
+    assert list(mixed) == [priced[0], alone[0]]
+    assert (np.asarray(priced) != 0).any()
