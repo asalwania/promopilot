@@ -355,5 +355,19 @@ The hidden true parameters used to generate the synthetic data. Only evals may r
 **Oracle**:
 The true demand function built from ground truth, used to score plans.
 
+**Rule-based baseline**:
+The simple plan a final plan must beat: 20% off the top 10 sellers in scope, to All customers, over the promo window, dropped from the bottom until it fits the budget. The harness builds it from the final planning request (ADR 0063).
+_Avoid_: baseline (which is sales with no promotion), naive plan
+
+**Best plan**:
+Our own optimiser run on true-parameter predictions for the final planning request: the plan regret is measured against. The harness builds it (ADR 0063).
+_Avoid_: optimum, oracle plan
+
+**Plan quality**:
+The share of scenarios whose every scored final plan earns more, by the oracle, than the rule-based baseline. Target 90% (ADR 0063).
+
 **Regret**:
-(Oracle profit of the best plan − oracle profit of our plan) / oracle profit of the best plan.
+(Oracle profit of the best plan − oracle profit of our plan) / oracle profit of the best plan, where oracle profit is the objective: incremental profit plus clearance value. It is signed; when the best plan earns nothing, matching it is 0 and earning less is 1. Target: median 10% or less (ADR 0063).
+
+**Consistency**:
+How alike a scenario's runs plan: the mean Jaccard overlap of the SKUs every two runs' final plan revisions promote. Target 0.9; it needs at least two runs per scenario (ADR 0063).

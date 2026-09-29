@@ -13,6 +13,9 @@ The session's trace is kept in memory: its token-usage events give the session's
 the agent's behaviour is scored from its outcome (#55, ADR 0062): the final request against
 the scenario's labels, what it asked and flagged, how it handled an infeasible request, each
 Explainer run, and its time without fitting models.
+
+A scored plan is also compared with the rule-based baseline and the best plan for its
+final request (ADR 0063).
 """
 
 import time
@@ -68,6 +71,13 @@ from promopilot.evals.metrics import (
     oracle_breach_rate,
     oracle_breaches,
 )
+from promopilot.evals.quality import (
+    Benchmarks,
+    consistency,
+    plan_quality,
+    regret_metric,
+    scenario_consistency,
+)
 from promopilot.evals.recovery import recovery_metrics
 from promopilot.evals.report import (
     ConstraintCheck,
@@ -110,11 +120,14 @@ async def run(
         raise ValueError("runs_per_scenario must be at least 1")
     policy = policy or CompanyPolicy()
     pricing = pricing or LLMPricing()
+    benchmarks = Benchmarks(world, settings, policy)
     results = []
     for scenario in scenarios:
         runs = []
         for number in range(1, runs_per_scenario + 1):
-            played = await _run(scenario, number, provider, world, settings, policy, pricing)
+            played = await _run(
+                scenario, number, provider, world, settings, policy, pricing, benchmarks
+            )
             runs.append(played)
             if progress is not None:
                 progress(
@@ -129,6 +142,7 @@ async def run(
                 seed=scenario.seed,
                 runs=tuple(runs),
                 passed=all(played.passed for played in runs),
+                consistency=scenario_consistency(runs),
             )
         )
     every_run = [played for result in results for played in result.runs]
@@ -145,6 +159,9 @@ async def run(
             oracle_breach_rate(every_run),
             *behaviour_metrics(every_run),
             *recovery,
+            plan_quality(results),
+            regret_metric(every_run),
+            consistency(results),
         ),
         scenarios=tuple(results),
     )
@@ -172,6 +189,7 @@ async def _run(
     settings: PlanningSettings,
     policy: CompanyPolicy,
     pricing: LLMPricing,
+    benchmarks: Benchmarks,
 ) -> RunResult:
     started = time.perf_counter()
     session = _Session(route=[], asked=[])
@@ -182,6 +200,7 @@ async def _run(
             scenario, session_id, provider, world, settings, policy, pricing, trace, session
         )
         result = await _score(scenario, number, outcome, session, world, policy)
+        result = await _assess(scenario, result, session, benchmarks)
     except Exception as error:  # a failed session is a result, not the end of the eval
         result = RunResult(
             run=number,
@@ -376,6 +395,20 @@ def _behaviour(scenario: Scenario, session: _Session, outcome: RunOutcome) -> di
     }
 
 
+async def _assess(
+    scenario: Scenario, result: RunResult, session: _Session, benchmarks: Benchmarks
+) -> RunResult:
+    """A plan the oracle scored, against the rule-based baseline and the best plan for its
+    final request (ADR 0063)."""
+    state = None if session.snapshot is None else session.snapshot.values
+    request = None if state is None else state.plan_request
+    if result.oracle is None or request is None:
+        return result
+    objective = result.oracle.incremental_profit + result.oracle.clearance_value
+    quality = await benchmarks.assess(request, scenario.seed, objective)
+    return result.model_copy(update={"quality": quality})
+
+
 def _summary(revision: PlanRevision, request: PlanningRequest) -> RevisionSummary:
     return RevisionSummary(
         number=revision.number,
@@ -385,6 +418,7 @@ def _summary(revision: PlanRevision, request: PlanningRequest) -> RevisionSummar
         objective=revision.objective,
         promo_cost=sum(line.promo_cost for line in revision.lines),
         marketing_budget=request.marketing_budget,
+        sku_ids=tuple(sorted({sku for line in revision.lines for sku in line.line.skus})),
     )
 
 

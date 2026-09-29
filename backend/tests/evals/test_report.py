@@ -14,6 +14,7 @@ from promopilot.domain import (
     ViolationCode,
 )
 from promopilot.evals.report import (
+    BestPlanSummary,
     Breach,
     ClarificationCheck,
     ConstraintCheck,
@@ -23,8 +24,10 @@ from promopilot.evals.report import (
     InfeasibilityCheck,
     Metric,
     OracleScore,
+    PlanQuality,
     PropertyResult,
     RevisionSummary,
+    RuleBasedSummary,
     RunOutcome,
     RunResult,
     ScenarioResult,
@@ -251,3 +254,41 @@ def test_session_time_and_the_latency_value_are_left_out_of_the_comparable_repor
 
     assert later.comparable() == BEHAVED.comparable()
     assert later.comparable()["metrics"][-1]["value"] == 4.5, "cost is deterministic in replay"
+
+
+def test_the_markdown_compares_each_scored_plan_with_both_benchmarks(tmp_path: Path) -> None:
+    scored = FAILED_RUN.model_copy(
+        update={
+            "quality": PlanQuality(
+                objective=90_000.0,
+                rule_based=RuleBasedSummary(
+                    sku_ids=("SKU0001",),
+                    dropped_sku_ids=("SKU0002",),
+                    lines=2,
+                    expected_promo_cost=19_000.0,
+                    objective=-4_500.5,
+                ),
+                best=BestPlanSummary(
+                    solver_status=SolveStatus.OPTIMAL,
+                    lines=5,
+                    sku_ids=("SKU0001", "SKU0003"),
+                    objective=100_000.0,
+                ),
+                versus_rule_based="beats",
+                regret=0.1,
+                regret_rupees=10_000.0,
+            )
+        }
+    )
+    report = REPORT.model_copy(
+        update={"scenarios": (REPORT.scenarios[0].model_copy(update={"runs": (scored,)}),)}
+    )
+
+    markdown = write_report(report, tmp_path).markdown.read_text(encoding="utf-8")
+
+    assert "## Plan quality" in markdown
+    assert (
+        "| amend-drop-west | 1 | ₹90,000 | ₹-4,500 (1 of 2 sellers kept) | ₹100,000 (OPTIMAL, 5 "
+        "lines) | 10.0% | beats |"
+    ) in markdown
+    assert "Consistency needs at least two runs per scenario" in markdown

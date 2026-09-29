@@ -106,6 +106,8 @@ def _summary(report: EvalReport) -> None:
         )
         verdict = "" if metric.passed is None else (" pass" if metric.passed else " FAIL")
         print(f"{metric.label}: {value}{counted}{target}{aim}{verdict}")
+    if report.runs_per_scenario < 2:
+        print("consistency needs at least two runs per scenario: make eval RUNS=5")
     passed = sum(scenario.passed for scenario in report.scenarios)
     print(f"scenarios passed: {passed} of {len(report.scenarios)}")
 

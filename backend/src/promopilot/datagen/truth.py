@@ -14,6 +14,7 @@ For SKU i, store s, week t, segment g:
     units ~ NegativeBinomial(mean, dispersion_i)
 """
 
+from collections.abc import Sequence
 from datetime import date
 
 import numpy as np
@@ -104,7 +105,7 @@ class TrueDemand:
         skus = truth.skus
         self.sku_ids = [sku.sku_id for sku in skus]
         self.reference_prices: Array = np.array([sku.reference_price for sku in skus])
-        index = {sku_id: i for i, sku_id in enumerate(self.sku_ids)}
+        index = self._index = {sku_id: i for i, sku_id in enumerate(self.sku_ids)}
         n = len(skus)
         self._base = np.array([sku.base_level for sku in skus])
         self._affinity = np.array(
@@ -154,12 +155,17 @@ class TrueDemand:
         prices: Array,
         mechanisms: NDArray[np.int_],
         promoted_before: NDArray[np.bool_] | None = None,
+        *,
+        sku_ids: Sequence[str] | None = None,
     ) -> Array:
         """Expected units, shape (stores in region, weeks, segments, skus).
 
         `promoted_before` (k, segments, skus) marks promotions in the k weeks before
-        `start_week`; by default none.
+        `start_week`; by default none. With `sku_ids`, the SKU axis of every array holds only
+        those SKUs, in that order: every other SKU is at its reference price and unpromoted,
+        so it moves none of them.
         """
+        at = slice(None) if sku_ids is None else [self._index[sku_id] for sku_id in sku_ids]
         weeks = prices.shape[0]
         if start_week < 0 or start_week + weeks > self.truth.total_weeks:
             raise ValueError(
@@ -168,32 +174,35 @@ class TrueDemand:
             )
         span = slice(start_week, start_week + weeks)
         t = np.arange(start_week, start_week + weeks)[:, None]  # (W, 1)
-        log_ratio = np.log(prices / self.reference_prices)  # (W, G, N)
-        competitor = self._competitor[region][span][:, None, :]  # (W, 1, N)
+        reference = self.reference_prices[at]
+        log_ratio = np.log(prices / reference)  # (W, G, N)
+        competitor = self._competitor[region][span][:, at][:, None, :]  # (W, 1, N)
 
         time_effect = (
-            self._amplitude * np.sin(2 * np.pi * (t - self._phase) / 52.0)
-            + self._holiday_lift[region][span]
+            self._amplitude[at] * np.sin(2 * np.pi * (t - self._phase[at]) / 52.0)
+            + self._holiday_lift[region][span][:, at]
         )  # (W, N)
         log_mean = (
             time_effect[:, None, :]
-            + self._beta * log_ratio
-            + self._gamma * np.log(competitor / prices)
-            + log_ratio @ self._theta.T
-            + self._mechanism_effect(mechanisms)
-            - self._phi * self._pull_forward_share(prices, mechanisms, promoted_before)
+            + self._beta[:, at] * log_ratio
+            + self._gamma[at] * np.log(competitor / prices)
+            + log_ratio @ self._theta[at][:, at].T
+            + self._mechanism_effect(mechanisms, self._mu[at])
+            - self._phi[at]
+            * self._pull_forward_share(prices, mechanisms, promoted_before, reference)
         )  # (W, G, N)
         stores = self._stores[region]
         store_level = np.array([store.level for store in stores])[:, None]  # (S, 1)
         mix = np.log(np.array([[store.segment_mix[g] for g in SEGMENTS] for store in stores]))
-        static = self._base + store_level[:, :, None] + mix[:, :, None] + self._affinity
+        static = self._base[at] + store_level[:, :, None] + mix[:, :, None] + self._affinity[:, at]
         return np.asarray(np.exp(static[:, None, :, :] + log_mean[None, ...]))  # (S, W, G, N)
 
-    def _mechanism_effect(self, mechanisms: NDArray[np.int_]) -> Array:
+    @staticmethod
+    def _mechanism_effect(mechanisms: NDArray[np.int_], mu: Array) -> Array:
         effect = np.zeros(mechanisms.shape)
         promoted = mechanisms >= 0
         sku = np.broadcast_to(np.arange(mechanisms.shape[-1]), mechanisms.shape)
-        effect[promoted] = self._mu[sku[promoted], mechanisms[promoted]]
+        effect[promoted] = mu[sku[promoted], mechanisms[promoted]]
         return effect
 
     def _pull_forward_share(
@@ -201,9 +210,10 @@ class TrueDemand:
         prices: Array,
         mechanisms: NDArray[np.int_],
         promoted_before: NDArray[np.bool_] | None,
+        reference: Array,
     ) -> Array:
         k = self.truth.pull_forward_window_weeks
-        promoted = (mechanisms >= 0) | (prices < self.reference_prices - 1e-9)
+        promoted = (mechanisms >= 0) | (prices < reference - 1e-9)
         history = np.zeros((k, *promoted.shape[1:]), dtype=bool)
         if promoted_before is not None:
             recent = promoted_before[-k:]
