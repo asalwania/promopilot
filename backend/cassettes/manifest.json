@@ -47,7 +47,8 @@
           "number": 1,
           "explanation": "llm"
         }
-      ]
+      ],
+      "amendments": []
     },
     "demo": {
       "script": {
@@ -57,16 +58,25 @@
           {
             "answers": null,
             "amend": "Budget cut to ₹6 lakh",
+            "accept_relaxation": false,
             "approve": false
           },
           {
             "answers": null,
             "amend": "Drop West",
+            "accept_relaxation": false,
             "approve": false
           },
           {
             "answers": null,
             "amend": null,
+            "accept_relaxation": true,
+            "approve": false
+          },
+          {
+            "answers": null,
+            "amend": null,
+            "accept_relaxation": false,
             "approve": true
           }
         ]
@@ -85,6 +95,18 @@
         "approval",
         "approval",
         "context",
+        "planner",
+        "critic",
+        "explainer",
+        "approval",
+        "approval",
+        "context",
+        "planner",
+        "critic",
+        "planner",
+        "critic",
+        "planner",
+        "critic",
         "planner",
         "critic",
         "explainer",
@@ -117,7 +139,28 @@
         "53af92e007c55ca053d6e21c61aed7a1e85c1f60a91897e188671734c216a35c",
         "fc7c8d66f2c68f4ec99564d50304dfc1ec9fb230d7374965f66b427530fe1e2f",
         "8023295f3a0d250454413727a2dc8ebb5c66a9565fafe638403fb96b018fd5fc",
-        "f27b14110214fdda72c7165ae784f7d744e185fe461e183f73e982f1209d071e"
+        "f27b14110214fdda72c7165ae784f7d744e185fe461e183f73e982f1209d071e",
+        "b0c125f916c803ade70ed869683286ad1d6cbd6bc30e1d69107ae9d9b0d72f4e",
+        "4006f95244eb9878533bc507648449e771aff44dd932f149eb74d2d66883b394",
+        "35ddeb5b689cf20d2d3fb4f3e6f6a287dbcfabd8c4a7ea5d7edbd13d1dba5f45",
+        "ee68a12da1f1f7b0c17a9a0fd6e25e3fbd99a3d365c8d4deeeb334116457f88f",
+        "e1fd4a7b319fecc366c191c81f68194dc5e3edff2c375eef5d1304525c00c09b",
+        "1122f0d5c5f38ac1a73260d9185c475198ba09de29f3e2743242173914301bc8",
+        "28f38c92aee14c8b326540f1d98b166d4915a0d40a941eeb3924b26d4b32ee58",
+        "ade6573df76d840fe8fa8c5b97f9d8ba5bccbf68bcbf4ae0bb45f146d20c575a",
+        "0f19bc30454429bd8d916c8a0a7f853e5583100c0fa9459bd92577f690c341ac",
+        "0c4dabff08679b60375d7333ff6c4d166e660da4e3ae531a6f1e3a5ab4434673",
+        "4367069018570eb9cc0e8eb22247e9b307ceb7bb9a003479802f2c0b29974c2e",
+        "acacbef3e7ed7b5eb6a7f0f3998690c49cf97f2c64acf14cde44f81f33e64f72",
+        "d4a8ca0b4cb789f2d2128ed253466f76df2da4f209df1a8276caec442210601a",
+        "1e559cba32f68ec96cf8ceb88d1ee5f45472683abc38bedde7cf25ba1a5776fd",
+        "632717b315a77c36fb92c3d9c7afaf97017d9d5edeff2ce28994e30d6e32408f",
+        "eac36793ee93bceecab9edc67cc4c5be4ed1120d972fff7dbeb54f79333e83a0",
+        "00ccd45ddd142e252cdc89ae835f6ceb5830c08dd0c6ab1b5ac83ce348c523cc",
+        "91ed3cb9a5b6d6dced1f92a29048cccaa68bcaed5f0c5cf39106193c9c7d431d",
+        "5d4ce85da22fe1cf1912652d7ce4551fc754d7d9d08da19cf4e55b19d8f6f12c",
+        "f7f7d6fe86710623621cbb08208a5c482743d1f043a4666014c2a152b5cc2df2",
+        "ef4c0701f1741755881f3c3501b66bd3549ccbeec559fc6fb991f3a25a033ecb"
       ],
       "revisions": [
         {
@@ -131,7 +174,16 @@
         {
           "number": 3,
           "explanation": "llm"
+        },
+        {
+          "number": 4,
+          "explanation": "llm"
         }
+      ],
+      "amendments": [
+        "Budget cut to ₹6 lakh",
+        "Drop West",
+        "Accept the smallest relaxation: lower the clearance target for SKU0006 to 59.86% sell-through."
       ]
     },
     "clarify": {
@@ -144,6 +196,7 @@
               "marketing_budget": "₹2 lakh"
             },
             "amend": null,
+            "accept_relaxation": false,
             "approve": false
           }
         ]
@@ -177,7 +230,8 @@
           "number": 1,
           "explanation": "llm"
         }
-      ]
+      ],
+      "amendments": []
     },
     "regional": {
       "script": {
@@ -210,7 +264,8 @@
           "number": 1,
           "explanation": "llm"
         }
-      ]
+      ],
+      "amendments": []
     }
   }
 }
