@@ -1,8 +1,36 @@
-"""Amendments the system writes for the manager: accepting a relaxation (ADR 0044) is an
-amendment stating each change exactly, which the Context agent reads like any other
-(ADR 0052). Every value is the relaxation's own, shown to the paisa or basis point."""
+"""Amendments the system writes for the manager, and what a decision on a plan revision may
+not do. Accepting a relaxation (ADR 0044) is an amendment stating each change exactly, which the
+Context agent reads like any other (ADR 0052). Every value is the relaxation's own, shown to the
+paisa or basis point.
 
-from promopilot.domain import ConstraintKind, Relaxation, RelaxedConstraint
+The API and the cassette recorder apply the same two rules (ADR 0070): an infeasible revision is
+never approved (ADR 0046 D10), and only a relaxation that changes something can be accepted."""
+
+from promopilot.domain import (
+    ConstraintKind,
+    PlanRevision,
+    Relaxation,
+    RelaxedConstraint,
+    SolveStatus,
+)
+
+
+def approval_refusal(revision: PlanRevision) -> str | None:
+    """Why `revision` cannot be approved: it is infeasible. None when it can."""
+    if revision.solver_status is SolveStatus.INFEASIBLE:
+        return (
+            f"plan revision {revision.number} is infeasible: amend the brief with its "
+            "relaxation before approving"
+        )
+    return None
+
+
+def acceptable_relaxation(revision: PlanRevision) -> Relaxation | None:
+    """The relaxation `revision` offers to accept, or None when it offers no change."""
+    relaxation = revision.relaxation
+    if relaxation is None or not relaxation.changes:
+        return None
+    return relaxation
 
 
 def relaxation_amendment(relaxation: Relaxation) -> str:

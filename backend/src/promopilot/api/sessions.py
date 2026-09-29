@@ -35,6 +35,8 @@ from promopilot.agents import (
     GraphTools,
     PlanningError,
     PlanningGraph,
+    acceptable_relaxation,
+    approval_refusal,
     build_graph,
     graph_state,
     relaxation_amendment,
@@ -59,7 +61,6 @@ from promopilot.domain import (
     DecisionKind,
     DecisionMade,
     SessionStatus,
-    SolveStatus,
     TraceEvent,
 )
 from promopilot.llm import LLMError, LLMProvider
@@ -249,8 +250,8 @@ class SessionService:
                     raise SessionConflictError("the session has no plan revision to amend")
                 relaxation = None
                 if accept_relaxation:
-                    relaxation = latest.relaxation
-                    if relaxation is None or not relaxation.changes:
+                    relaxation = acceptable_relaxation(latest)
+                    if relaxation is None:
                         raise SessionConflictError(
                             f"plan revision {latest.number} has no relaxation to accept"
                         )
@@ -345,11 +346,9 @@ class SessionService:
                 raise SessionConflictError(
                     f"plan revision {revision_number} is not the session's latest plan revision"
                 )
-            if decision is DecisionKind.APPROVED and latest.solver_status is SolveStatus.INFEASIBLE:
-                raise SessionConflictError(
-                    f"plan revision {revision_number} is infeasible: amend the brief with its "
-                    "relaxation before approving"
-                )
+            refusal = approval_refusal(latest)
+            if decision is DecisionKind.APPROVED and refusal is not None:
+                raise SessionConflictError(refusal)
             thread_id = session.thread_id
             paused = None if thread_id is None else await graph_state(graph, thread_id)
             if thread_id is None or paused is None or not paused.awaits_decision:

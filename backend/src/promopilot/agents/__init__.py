@@ -9,7 +9,11 @@ validates the plan and reviews its risks, sending findings back to the planner a
 the Approval interrupt waits for a decision.
 """
 
-from promopilot.agents.amendments import relaxation_amendment
+from promopilot.agents.amendments import (
+    acceptable_relaxation,
+    approval_refusal,
+    relaxation_amendment,
+)
 from promopilot.agents.assumptions import ContextReading
 from promopilot.agents.checkpoints import Checkpoints, MemoryCheckpoints, PostgresCheckpoints
 from promopilot.agents.context import BriefError, BriefReading, ClearanceAsk, RegionalCap
@@ -152,6 +156,8 @@ __all__ = [
     "TraceSink",
     "TracedProvider",
     "TracedToolRegistry",
+    "acceptable_relaxation",
+    "approval_refusal",
     "build_graph",
     "check_cassettes",
     "checkpoint_serializer",

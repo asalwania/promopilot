@@ -9,6 +9,7 @@
     "steps": [
       { "amend": "Budget cut to ₹6 lakh" },
       { "amend": "Drop West" },
+      { "accept_relaxation": true },
       { "approve": true }
     ]
   },

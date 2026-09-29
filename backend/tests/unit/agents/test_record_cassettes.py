@@ -6,6 +6,7 @@ planner agent's tools are scripted on the small world."""
 import json
 from collections.abc import Sequence
 from pathlib import Path
+from uuid import UUID
 
 import pytest
 from pydantic import BaseModel, ValidationError
@@ -18,6 +19,7 @@ from promopilot.agents import (
     ExplainerAnswer,
     FindingFeedback,
     LineRationale,
+    PlannedRevision,
     RecordedPlanning,
     RecordingError,
     SessionScript,
@@ -30,7 +32,18 @@ from promopilot.agents import (
     ungrounded_answers,
 )
 from promopilot.datagen import GeneratedDataset
-from promopilot.domain import ExplanationSource, PlanningRequest, Region
+from promopilot.domain import (
+    BindingConstraint,
+    BindingEvidence,
+    ConstraintKind,
+    ConstraintSource,
+    ExplanationSource,
+    PlanningRequest,
+    Region,
+    Relaxation,
+    RelaxedConstraint,
+    SolveStatus,
+)
 from promopilot.llm import (
     FakeProvider,
     LLMError,
@@ -560,3 +573,209 @@ async def test_only_answers_a_request_a_kept_session_recorded_from_its_cassette(
     )
 
     assert await check_cassettes([first, second], data, tmp_path, planning()) == []
+
+
+# --- accepting a relaxation, as the API does (ADR 0052 D7, ADR 0070) --------------------------
+
+RELAXATION = Relaxation(
+    changes=(
+        RelaxedConstraint(
+            kind=ConstraintKind.CLEARANCE_TARGET,
+            sku_id="SKU0001",
+            current=0.6,
+            relaxed=0.5986,
+            change=0.0023,
+        ),
+    ),
+    policy_binds=True,
+    proven=True,
+)
+ACCEPTED = (
+    "Accept the smallest relaxation: lower the clearance target for SKU0001 to 59.86% sell-through."
+)
+
+
+def infeasible() -> PlannedRevision:
+    """Plan revision 1, infeasible: its clearance target is out of reach (ADR 0044)."""
+    base = planned()
+    revision = base.revision.model_copy(
+        update={
+            "solver_status": SolveStatus.INFEASIBLE,
+            "relaxation": RELAXATION,
+            "binding_constraints": (
+                BindingConstraint(
+                    kind=ConstraintKind.CLEARANCE_TARGET,
+                    source=ConstraintSource.BRIEF,
+                    limit=0.6,
+                    region="North",
+                    sku_id="SKU0001",
+                    evidence=BindingEvidence.INFEASIBLE,
+                    objective_gain=None,
+                ),
+            ),
+        }
+    )
+    return PlannedRevision(revision, base.facts)
+
+
+class InTurn:
+    """The plan revision of each planning round in turn; the last one stays."""
+
+    def __init__(self, *revisions: PlannedRevision) -> None:
+        self._revisions = list(revisions)
+
+    async def revision(self, candidate_set_id: UUID) -> PlannedRevision | None:
+        return self._revisions.pop(0) if len(self._revisions) > 1 else self._revisions[0]
+
+
+def planning_in_turn(*revisions: PlannedRevision) -> RecordedPlanning:
+    tools = ScriptedTools(
+        {
+            "generate_candidates": [Generated(candidate_set_id=SET_ID)],
+            "run_optimizer": [optimised()],
+        }
+    )
+    return RecordedPlanning(
+        agent=AgentTools(tools=tools, revisions=InTurn(*revisions)),
+        default=ScriptedPlanner(planned(promo_cost=900.0)),
+        settings=SETTINGS,
+    )
+
+
+RELAXED_BUDGET = 21_000.0  # the relaxed round reads another request than the first
+
+
+async def accepted_round(data: InMemoryRetailData) -> list[BaseModel]:
+    """The live answers of the round that accepts the relaxation."""
+    relaxed = await request_for(data, budget=RELAXED_BUDGET)
+    return [reading(budget=RELAXED_BUDGET), *round_turns(relaxed), CHANGED]
+
+
+async def test_accepting_the_relaxation_re_plans_and_the_feasible_revision_is_approved(
+    data: InMemoryRetailData, tmp_path: Path
+) -> None:
+    demo = script("demo", BRIEF, {"accept_relaxation": True}, {"approve": True})
+    live = FakeProvider(
+        [
+            reading(),
+            *round_turns(await request_for(data)),
+            GROUNDED,
+            *await accepted_round(data),
+        ]
+    )
+
+    manifest = await record_cassettes(
+        [demo], live, data, tmp_path, planning_in_turn(infeasible(), planned())
+    )
+
+    recorded = manifest.sessions["demo"]
+    assert recorded.amendments == (ACCEPTED,)
+    assert recorded.route[-2:] == ("approval", "done")
+    assert [r.number for r in recorded.revisions] == [1, 2]
+    assert (
+        await check_cassettes([demo], data, tmp_path, planning_in_turn(infeasible(), planned()))
+        == []
+    )
+
+
+async def test_approving_an_infeasible_revision_fails_the_run_as_the_api_refuses_it(
+    data: InMemoryRetailData, tmp_path: Path
+) -> None:
+    before = old_cassettes(tmp_path)
+    live = FakeProvider([reading(), *round_turns(await request_for(data)), GROUNDED])
+
+    with pytest.raises(
+        RecordingError, match="step 1 approves plan revision 1, which is infeasible"
+    ):
+        await record_cassettes(
+            [script("demo", BRIEF, {"approve": True})],
+            live,
+            data,
+            tmp_path,
+            planning_in_turn(infeasible()),
+        )
+
+    assert names(tmp_path) == before
+
+
+async def test_accepting_a_relaxation_the_revision_does_not_have_fails_the_run(
+    data: InMemoryRetailData, tmp_path: Path
+) -> None:
+    before = old_cassettes(tmp_path)
+    live = FakeProvider([reading(), *round_turns(await request_for(data)), GROUNDED])
+
+    with pytest.raises(RecordingError, match="plan revision 1 has no relaxation to accept"):
+        await record_cassettes(
+            [script("demo", BRIEF, {"accept_relaxation": True})],
+            live,
+            data,
+            tmp_path,
+            planning(),
+        )
+
+    assert names(tmp_path) == before
+
+
+async def test_the_check_refuses_an_infeasible_approval_too(
+    data: InMemoryRetailData, tmp_path: Path
+) -> None:
+    planned_only = script("demo")
+    live = FakeProvider([reading(), *round_turns(await request_for(data)), GROUNDED])
+    await record_cassettes([planned_only], live, data, tmp_path, planning_in_turn(infeasible()))
+    approved = script("demo", BRIEF, {"approve": True})
+
+    problems = await check_cassettes([approved], data, tmp_path, planning_in_turn(infeasible()))
+
+    assert any("step 1 approves plan revision 1, which is infeasible" in p for p in problems)
+
+
+async def test_only_extends_a_named_session_asking_the_live_model_only_its_new_round(
+    data: InMemoryRetailData, tmp_path: Path
+) -> None:
+    # The demo gains a step: its earlier rounds keep their recorded answers byte for byte, and
+    # only the new round is asked live (ADR 0070).
+    other = script("other", VAGUE, {"answers": {"marketing_budget": "₹20k"}})
+    planned_first = script("demo")
+    turns = round_turns(await request_for(data))
+    await record_cassettes(
+        [other, planned_first],
+        FakeProvider(
+            [reading(budget=None), reading(), *turns, GROUNDED, reading(), *turns, GROUNDED]
+        ),
+        data,
+        tmp_path,
+        planning_in_turn(infeasible()),
+    )
+    before = {path.name: path.read_bytes() for path in cassette_paths(tmp_path)}
+    extended = script("demo", BRIEF, {"accept_relaxation": True}, {"approve": True})
+
+    manifest = await record_cassettes(
+        [other, extended],
+        FakeProvider(await accepted_round(data)),
+        data,
+        tmp_path,
+        planning_in_turn(infeasible(), planned()),
+        only=["demo"],
+    )
+
+    after = {path.name: path.read_bytes() for path in cassette_paths(tmp_path)}
+    assert {name: after.get(name) for name in before} == before
+    assert len(after) == len(before) + 5, "the reading, three planner steps, the explanation"
+    assert manifest.sessions["demo"].amendments == (ACCEPTED,)
+    assert manifest_problems([other, extended], tmp_path) == []
+
+
+def test_a_script_may_accept_the_relaxation_but_not_with_another_thing_in_one_step(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "sessions.json"
+    steps = [{"accept_relaxation": True}, {"approve": True}]
+    path.write_text(json.dumps([{"name": "demo", "brief": BRIEF, "steps": steps}]), "utf-8")
+
+    [demo] = load_scripts(path)
+
+    assert [step.accept_relaxation for step in demo.steps] == [True, False]
+    with pytest.raises(ValidationError):
+        SessionScript.model_validate(
+            {"name": "a", "brief": BRIEF, "steps": [{"accept_relaxation": True, "amend": "x"}]}
+        )

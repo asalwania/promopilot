@@ -9,6 +9,7 @@ export type SessionScript = {
   steps?: Array<{
     answers?: Record<string, string>;
     amend?: string;
+    accept_relaxation?: boolean;
     approve?: boolean;
   }>;
 };

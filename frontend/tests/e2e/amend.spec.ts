@@ -8,7 +8,8 @@ import {
 } from "./session-scripts";
 
 // The recorded `demo` session (ADR 0054): the SPEC §3.2 brief, amended with a budget cut
-// and then with "Drop West". Each amendment re-plans from replayed cassettes.
+// and then with "Drop West", its relaxation accepted and the feasible revision approved
+// (ADR 0070). Each amendment re-plans from replayed cassettes.
 const demo = sessionScript("demo");
 const [budgetCut, dropWest] = (demo.steps ?? []).flatMap((step) =>
   step.amend ? [step.amend] : [],
@@ -16,20 +17,31 @@ const [budgetCut, dropWest] = (demo.steps ?? []).flatMap((step) =>
 if (!budgetCut || !dropWest) {
   throw new Error("the demo session no longer has its two amendments");
 }
+if (
+  !(demo.steps ?? []).some((step) => step.accept_relaxation) ||
+  !demo.steps?.at(-1)?.approve
+) {
+  throw new Error(
+    "the demo session no longer accepts its relaxation and then approves",
+  );
+}
 
 type Session = {
-  amendments: Array<{ text: string }>;
+  status: string;
+  amendments: Array<{ text: string; relaxation?: object | null }>;
+  decisions: Array<{ decision: string; revision_number: number }>;
   plan_revision: {
     number: number;
+    solver_status?: string | null;
     diff?: { from_revision: number } | null;
     explanation?: { source: string } | null;
   } | null;
 };
 
-test("amending a plan re-plans it and shows what changed from the last revision", async ({
+test("amending a plan re-plans it, accepting its relaxation makes it approvable, and approving makes it final", async ({
   page,
 }) => {
-  test.setTimeout(3 * PLANNING_MS + 60_000);
+  test.setTimeout(4 * PLANNING_MS + 60_000);
   await planBrief(page, demo.brief);
 
   // The demo's clearance target is out of reach, so its revisions are infeasible: the
@@ -45,7 +57,7 @@ test("amending a plan re-plans it and shows what changed from the last revision"
   ).toBeVisible();
 
   // Why it is infeasible, and the smallest relaxation, one click from an amendment
-  // (ADR 0044, ADR 0067). Accepting it is not replayed: no cassette records that round.
+  // (ADR 0044, ADR 0067).
   const infeasible = page.getByRole("region", { name: /^Infeasible/ });
   await expect(
     infeasible.getByRole("list", { name: "Binding constraints" }),
@@ -101,22 +113,65 @@ test("amending a plan re-plans it and shows what changed from the last revision"
     page.getByRole("tablist", { name: "Plan regions" }).getByRole("tab"),
   ).toHaveText([/^North/, "Compare regions"]);
 
-  // Both amendments are on the audit trail, oldest first.
+  // Revision 3 is still infeasible: accepting its relaxation re-plans, one click
+  // (ADR 0052 D7, ADR 0067, ADR 0070).
   await expect(
-    page.getByRole("list", { name: "Audit trail" }).getByRole("listitem"),
-  ).toHaveText([
+    page
+      .getByRole("region", { name: "Review plan revision 3" })
+      .getByRole("button", { name: "Approve plan revision 3" }),
+  ).toBeDisabled();
+  await page
+    .getByRole("region", { name: /^Infeasible/ })
+    .getByRole("button", { name: "Accept the relaxation and re-plan" })
+    .click();
+  await expect(page.getByRole("status")).toHaveText("Planning…");
+  const review = page.getByRole("region", { name: "Review plan revision 4" });
+  await expect(review).toBeVisible({ timeout: PLANNING_MS });
+  const relaxed = page.getByRole("region", {
+    name: "What changed from plan revision 3",
+  });
+  await expect(relaxed).toContainText(
+    "After your amendment “Accept the smallest relaxation:",
+  );
+  await expect(
+    relaxed.getByRole("list", { name: "Request changes" }),
+  ).toContainText(/Clearance targets: .+ → .+/);
+
+  // The relaxed revision is feasible, so it can be approved, and the session is final.
+  await review.getByRole("button", { name: "Approve plan revision 4" }).click();
+  await expect(review).toContainText(/Approving makes plan revision 4 final/);
+  await review.getByRole("button", { name: "Confirm approval" }).click();
+  const status = page.getByRole("status");
+  await expect(status).toContainText("Approved");
+  await expect(status).toContainText("Final");
+
+  // Every amendment, the accepted relaxation among them, and the approval are on the
+  // audit trail, oldest first.
+  const trail = page
+    .getByRole("list", { name: "Audit trail" })
+    .getByRole("listitem");
+  await expect(trail).toHaveText([
     new RegExp(`Amended plan revision 1: “${budgetCut}”`),
     new RegExp(`Amended plan revision 2: “${dropWest}”`),
+    /Amended plan revision 3: “Accept the smallest relaxation: .+”\s*Relaxation accepted/,
+    /Approved plan revision 4$/,
   ]);
 
   // Every round replayed: the Explainer's recorded answer explains the last revision.
   const session = await readSession<Session>(page);
+  expect(session.status).toBe("approved");
   expect(session.amendments.map((amendment) => amendment.text)).toEqual([
     budgetCut,
     dropWest,
+    expect.stringMatching(/^Accept the smallest relaxation: /),
   ]);
-  expect(session.plan_revision?.number).toBe(3);
-  expect(session.plan_revision?.diff?.from_revision).toBe(2);
+  expect(session.amendments[2]?.relaxation).toBeTruthy();
+  expect(session.decisions).toMatchObject([
+    { decision: "approved", revision_number: 4 },
+  ]);
+  expect(session.plan_revision?.number).toBe(4);
+  expect(session.plan_revision?.solver_status).not.toBe("INFEASIBLE");
+  expect(session.plan_revision?.diff?.from_revision).toBe(3);
   expect(session.plan_revision?.explanation?.source).toBe("llm");
 });
 

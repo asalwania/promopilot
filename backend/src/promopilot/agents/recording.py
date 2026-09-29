@@ -2,7 +2,9 @@
 (ADR 0019, ADR 0022, ADR 0054).
 
 A **session script** names a brief and what the manager does after it: answer the Clarify
-interrupt's questions, amend the plan, approve it. `record_cassettes` plays each script through
+interrupt's questions, amend the plan, accept its relaxation, approve it. Accepting and
+approving follow the API's rules (ADR 0070): the amendment is the relaxation's own text, and an
+infeasible revision is never approved. `record_cassettes` plays each script through
 the full agent graph (Context, Clarify, Planner, Critic, Explainer, Approval) on a live
 provider, recording every LLM request as a cassette, and writes a manifest of what each
 session called. `check_cassettes` plays the same scripts on the cassettes alone and reports
@@ -27,6 +29,11 @@ from uuid import UUID, uuid4
 from langgraph.checkpoint.memory import InMemorySaver
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, model_validator
 
+from promopilot.agents.amendments import (
+    acceptable_relaxation,
+    approval_refusal,
+    relaxation_amendment,
+)
 from promopilot.agents.critic import CriticFeedback
 from promopilot.agents.explainer import ExplainerAnswer
 from promopilot.agents.graph import (
@@ -81,19 +88,28 @@ class RecordingError(Exception):
 
 class ScriptStep(BaseModel):
     """One thing the manager does while the graph waits: exactly one of answer the Clarify
-    interrupt's questions (by question id), amend the plan, or approve it."""
+    interrupt's questions (by question id), amend the plan, accept the latest revision's
+    relaxation (`/amend {accept_relaxation: true}`), or approve it."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     answers: dict[str, str] | None = None
     amend: str | None = None
+    accept_relaxation: bool = False
     approve: bool = False
 
     @model_validator(mode="after")
     def _exactly_one(self) -> Self:
-        chosen = [self.answers is not None, self.amend is not None, self.approve]
+        chosen = [
+            self.answers is not None,
+            self.amend is not None,
+            self.accept_relaxation,
+            self.approve,
+        ]
         if chosen.count(True) != 1:
-            raise ValueError("a step is exactly one of answers, amend or approve")
+            raise ValueError(
+                "a step is exactly one of answers, amend, accept_relaxation or approve"
+            )
         return self
 
 
@@ -141,6 +157,9 @@ class RecordedSession(BaseModel):
     cassettes: tuple[str, ...]
     """The request hash of every LLM call, in call order, each once."""
     revisions: tuple[RecordedRevision, ...]
+    amendments: tuple[str, ...] = ()
+    """The text of every amendment, in order: as scripted, or written from the relaxation an
+    `accept_relaxation` step accepted (ADR 0070)."""
 
 
 class CassetteManifest(BaseModel):
@@ -288,6 +307,7 @@ async def _play(
     snapshot = await _snapshot(graph, thread)
     problems = _fallbacks(snapshot)
     revisions = _revisions([], snapshot)
+    amendments: list[str] = []
     for number, step in enumerate(script.steps, start=1):
         if problems:
             break
@@ -307,11 +327,35 @@ async def _play(
             problems.append(f"{where} decides on the plan, but the session is at {_at(snapshot)}")
             break
         elif step.amend is not None:
+            amendments.append(step.amend)
             route.extend(await resume_with_amendment(graph, thread, step.amend))
         else:
             revision = snapshot.values.plan
             if revision is None:
                 raise RuntimeError("the session awaits a decision without a plan revision")
+            if step.accept_relaxation:
+                # As `POST /amend {accept_relaxation: true}` does (ADR 0052 D7).
+                relaxation = acceptable_relaxation(revision)
+                if relaxation is None:
+                    problems.append(
+                        f"{where} accepts a relaxation, but plan revision {revision.number} "
+                        "has no relaxation to accept"
+                    )
+                    break
+                accepted = relaxation_amendment(relaxation)
+                amendments.append(accepted)
+                route.extend(await resume_with_amendment(graph, thread, accepted))
+                snapshot = await _snapshot(graph, thread)
+                problems.extend(_fallbacks(snapshot))
+                revisions = _revisions(revisions, snapshot)
+                continue
+            if approval_refusal(revision) is not None:
+                # `POST /approve` answers 409 here (ADR 0046 D10).
+                problems.append(
+                    f"{where} approves plan revision {revision.number}, which is infeasible: "
+                    "accept its relaxation first"
+                )
+                break
             route.extend(
                 await resume_with_decision(
                     graph,
@@ -335,6 +379,7 @@ async def _play(
         route=tuple(route),
         cassettes=tuple(dict.fromkeys(logged.hashes)),
         revisions=tuple(revisions),
+        amendments=tuple(amendments),
     )
     return _Played(session, [f"session {script.name!r}: {problem}" for problem in problems])
 
@@ -464,13 +509,17 @@ async def record_cassettes(
     With `only`, the other sessions keep their recording. Other files are kept.
 
     A request asked again, in the same session or another, is answered from the cassette its
-    first answer was recorded in (`RecordingProvider`), so every session replays.
+    first answer was recorded in (`RecordingProvider`), so every session replays. With `only`,
+    that includes every request the named sessions recorded before (ADR 0070): a session that
+    gains a step asks the live model only what it did not ask before, and its earlier rounds
+    replay byte for byte. To ask a request afresh, delete its cassette first.
     """
     chosen = [script for script in scripts if only is None or script.name in only]
     unknown = sorted(set(only or ()).difference(script.name for script in scripts))
     if unknown:
         raise RecordingError(f"no session script is named {', '.join(unknown)}")
     kept: dict[str, RecordedSession] = {}
+    previously_recorded: list[str] = []
     if only is not None:
         previous = read_manifest(cassette_dir)
         if previous is None or dict(previous.planning_settings) != dict(planning.settings):
@@ -483,6 +532,12 @@ async def record_cassettes(
             for script in scripts
             if script.name not in only and script.name in previous.sessions
         }
+        previously_recorded = [
+            digest
+            for name in only
+            if name in previous.sessions
+            for digest in previous.sessions[name].cassettes
+        ]
     with tempfile.TemporaryDirectory() as scratch:
         # A request a kept session recorded keeps its answer: the recorder answers it from the
         # cassette instead of asking the live model again, so the kept session still replays.
@@ -490,6 +545,11 @@ async def record_cassettes(
             for digest in session.cassettes:
                 name = f"{digest}.json"
                 shutil.copy2(cassette_dir.joinpath(name), Path(scratch).joinpath(name))
+        # So does a request a re-recorded session asked before: only what is new goes live.
+        for digest in previously_recorded:
+            cassette = cassette_dir.joinpath(f"{digest}.json")
+            if cassette.is_file():
+                shutil.copy2(cassette, Path(scratch).joinpath(cassette.name))
         recorder = RecordingProvider(live, Path(scratch))
         played = [await _play(script, recorder, data, planning) for script in chosen]
         problems = [problem for result in played for problem in result.problems]

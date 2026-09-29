@@ -109,7 +109,7 @@ data: db ## Generate the seeded synthetic dataset + ground truth into DATA_DIR a
 	$(BACKEND) uv run python -m promopilot.datagen --out $(DATA_DIR) --load
 
 .PHONY: record-cassettes check-cassettes
-record-cassettes: db ## Record every scripted session's LLM calls live (OPENAI_API_KEY, OPENAI_MODEL; make data, make train first; ONLY=name for one)
+record-cassettes: db ## Record every scripted session's LLM calls live (OPENAI_API_KEY, OPENAI_MODEL; make data, make train first; ONLY=name re-records one, asking live only what it never asked)
 	$(BACKEND) LLM_PROVIDER=openai uv run python -m promopilot.cassettes --sessions cassettes/sessions.json $(foreach name,$(ONLY),--only $(name))
 check-cassettes: db ## Replay every scripted session from the cassettes alone, no key (make data, make train first)
 	$(BACKEND) uv run python -m promopilot.cassettes --sessions cassettes/sessions.json --check
