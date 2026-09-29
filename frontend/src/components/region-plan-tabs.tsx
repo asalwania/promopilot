@@ -37,8 +37,18 @@ export function RegionPlanTabs({
     ? { n_runs: simulation.n_runs, seed: simulation.seed }
     : null;
 
+  const reaction = simulation?.competitor_reaction;
+
   return (
     <Tabs defaultValue={first}>
+      {reaction && (
+        // The stored simulation is a stress test until the next plain one (ADR 0045).
+        <p className="text-muted-foreground text-sm">
+          Profit ranges and stock-out risks below are from the stress test: the
+          competitor matches each plan line&apos;s discount with probability{" "}
+          {formatShare(reaction.match_probability)}.
+        </p>
+      )}
       <TabsList aria-label="Plan regions">
         {shown.map((region) => (
           <TabsTrigger key={region} value={region}>

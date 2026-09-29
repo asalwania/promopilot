@@ -19,7 +19,8 @@ import {
   undercutGaps,
 } from "./fixtures/sessions";
 
-describe("SessionDetails", () => {
+// The plan's simulation chart pays for loading Recharts on the first render.
+describe("SessionDetails", { timeout: 15_000 }, () => {
   it("shows a planning session as in progress with its brief", () => {
     render(<SessionDetails session={planningSession} />);
 
@@ -517,5 +518,99 @@ describe("SessionDetails", () => {
       "aria-selected",
       "true",
     );
+  });
+
+  // The simulation and competitor cards (ADR 0068).
+  it("charts the revision's simulation and offers a stress test while it awaits a decision", async () => {
+    const simulate = vi.fn(async () => ({ ok: true as const }));
+    for (const session of [awaitingApprovalSession, rejectedSession]) {
+      const { unmount } = render(
+        <SessionDetails session={session} actions={{ simulate }} />,
+      );
+      expect(
+        screen.getByRole("figure", {
+          name: "Simulated gross profit by plan line",
+        }),
+      ).toBeInTheDocument();
+      expect(screen.getByText("No competitor reaction")).toBeInTheDocument();
+      fireEvent.click(screen.getByRole("button", { name: "Re-simulate" }));
+      await screen.findByRole("button", { name: "Re-simulate" });
+      unmount();
+    }
+    expect(simulate).toHaveBeenCalledTimes(2);
+    expect(simulate).toHaveBeenLastCalledWith(0.5);
+  });
+
+  it("keeps a final plan's simulation read-only, and re-simulates nothing while planning", () => {
+    for (const session of [approvedSession, replanningSession]) {
+      const { unmount } = render(<SessionDetails session={session} />);
+      expect(
+        screen.getByRole("figure", {
+          name: "Simulated gross profit by plan line",
+        }),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", { name: "Re-simulate" }),
+      ).not.toBeInTheDocument();
+      unmount();
+    }
+  });
+
+  it("says in the plan when its ranges come from a stress test", () => {
+    const revision = awaitingApprovalSession.plan_revision!;
+    render(
+      <SessionDetails
+        session={{
+          ...awaitingApprovalSession,
+          plan_revision: {
+            ...revision,
+            simulation: {
+              ...revision.simulation!,
+              competitor_reaction: { match_probability: 1 },
+            },
+          },
+        }}
+      />,
+    );
+
+    expect(
+      screen.getByText(
+        "Profit ranges and stock-out risks below are from the stress test: the competitor matches each plan line's discount with probability 100%.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("shows the competitor prices the planner saw, with its response", () => {
+    render(
+      <SessionDetails
+        session={awaitingApprovalSession}
+        competitorPrices={{ status: "ready", gaps: undercutGaps }}
+      />,
+    );
+
+    const table = screen.getByRole("table", { name: "Competitor gaps" });
+    expect(within(table).getByText("Masala Chips 150g")).toBeInTheDocument();
+    expect(within(table).getByText("Undercut")).toBeInTheDocument();
+    // Cola is a Beverages KVI, outside the brief's Snacks scope.
+    expect(within(table).queryByText("Cola 750ml")).not.toBeInTheDocument();
+  });
+
+  it("puts the competitor and simulation cards after the plan, before the audit trail", () => {
+    render(
+      <SessionDetails
+        session={rejectedSession}
+        competitorPrices={{ status: "loading" }}
+      />,
+    );
+
+    const plan = screen.getByRole("tablist", { name: "Plan regions" });
+    const prices = screen.getByText("Loading competitor prices…");
+    const chart = screen.getByRole("figure");
+    const trail = screen.getByRole("list", { name: "Audit trail" });
+    const follows = (a: Node, b: Node) =>
+      a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING;
+    expect(follows(plan, prices)).toBeTruthy();
+    expect(follows(prices, chart)).toBeTruthy();
+    expect(follows(chart, trail)).toBeTruthy();
   });
 });

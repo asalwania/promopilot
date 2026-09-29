@@ -1006,6 +1006,11 @@ export interface components {
         PlanExplanation: {
             /** Changes */
             changes?: string | null;
+            /**
+             * Competitor Response
+             * @default []
+             */
+            competitor_response: string[];
             fallback_reason?: components["schemas"]["FallbackReason"] | null;
             /**
              * Rationales

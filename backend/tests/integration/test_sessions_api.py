@@ -700,6 +700,7 @@ async def test_a_plan_revision_keeps_its_clearance_shortfalls_and_the_briefs_con
         summary="Infeasible: SKU0005 reaches 60% of a 90% target.",
         source=ExplanationSource.TEMPLATE,
         fallback_reason=FallbackReason.UNGROUNDED,
+        competitor_response=("Matching on 1 SKU: the plan prices it at or below the competitor.",),
     )
     try:
         session_id = await store.create(BRIEF)

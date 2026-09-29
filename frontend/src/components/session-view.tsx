@@ -6,6 +6,7 @@ import {
   SessionDetails,
   type SessionActions,
 } from "@/components/session-details";
+import type { CompetitorPrices } from "@/components/competitor-panel";
 import { TraceTimeline } from "@/components/trace-timeline";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -16,6 +17,8 @@ import {
   getSession,
   rejectSession,
   SessionLoadError,
+  simulatePlan,
+  type Session,
   type SessionActionResult,
 } from "@/lib/api/sessions";
 import { useCompetitorGaps } from "@/lib/competitor-gaps";
@@ -60,6 +63,27 @@ export function SessionView({ sessionId }: { sessionId: string }) {
       show(await approveSession(sessionId, revisionNumber)),
     reject: async (revisionNumber, reason) =>
       show(await rejectSession(sessionId, revisionNumber, reason)),
+    // A re-simulation answers with the revision's new simulation, which replaces the
+    // stored one, so it goes into the cached session's revision (ADR 0068).
+    simulate: async (matchProbability) => {
+      const result = await simulatePlan(sessionId, matchProbability);
+      if (result.ok) {
+        queryClient.setQueryData<Session>(queryKey, (session) =>
+          session?.plan_revision?.number === result.revisionNumber
+            ? {
+                ...session,
+                plan_revision: {
+                  ...session.plan_revision,
+                  simulation: result.simulation,
+                },
+              }
+            : session,
+        );
+      } else if (result.conflict) {
+        void query.refetch();
+      }
+      return result;
+    },
   };
 
   // Undercut callouts on the plan; the plan still shows if the gaps fail (ADR 0060).
@@ -91,6 +115,7 @@ export function SessionView({ sessionId }: { sessionId: string }) {
         session={query.data}
         actions={actions}
         competitorGaps={gaps.data?.gaps}
+        competitorPrices={competitorPrices(gaps)}
       />
     );
   } else {
@@ -113,6 +138,21 @@ function LiveTrace({ sessionId }: { sessionId: string }) {
   return (
     <TraceTimeline events={events} connection={connection} onRetry={retry} />
   );
+}
+
+// The competitor panel's view of the shared gaps query (ADR 0060 D10, ADR 0068).
+function competitorPrices(
+  gaps: ReturnType<typeof useCompetitorGaps>,
+): CompetitorPrices {
+  if (gaps.data) return { status: "ready", gaps: gaps.data.gaps };
+  if (gaps.error) {
+    return {
+      status: "error",
+      reason: gaps.error.message,
+      retry: () => void gaps.refetch(),
+    };
+  }
+  return { status: "loading" };
 }
 
 function isNotFound(error: unknown): boolean {

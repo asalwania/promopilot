@@ -116,7 +116,56 @@ test("a typed brief becomes a plan table with no API key", async ({ page }) => {
   const response = await page.request.get(`/api/sessions/${sessionId}`);
   expect(response.ok()).toBe(true);
   const session = (await response.json()) as {
-    plan_revision: { explanation?: { source: string } | null } | null;
+    plan_revision: {
+      explanation?: { source: string; competitor_response: string[] } | null;
+    } | null;
   };
   expect(session.plan_revision?.explanation?.source).toBe("llm");
+
+  // Competitor handling (F-08, ADR 0068): the KVI gaps the planner saw, the undercuts,
+  // and its response, kept apart from the summary.
+  const gaps = page.getByRole("table", { name: "Competitor gaps" });
+  await expect(gaps.getByText("Undercut").first()).toBeVisible();
+  const planner = page.getByRole("region", { name: "Planner's response" });
+  await expect(planner.getByRole("listitem").first()).toHaveText(
+    /^Competitor is [\d.]+% cheaper on /,
+  );
+  expect(session.plan_revision?.explanation?.competitor_response).toEqual(
+    await planner.getByRole("listitem").allTextContents(),
+  );
+
+  // The simulation band, then a stress test against a competitor reaction (F-09, ADR
+  // 0068). Re-simulating makes no LLM call, so it needs no cassette.
+  const simulation = page.getByRole("figure", {
+    name: "Simulated gross profit by plan line",
+  });
+  await expect(simulation).toBeVisible();
+  await expect(simulation.locator("svg").first()).toBeVisible();
+  await expect(
+    page.getByText("No competitor reaction", { exact: true }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Show values" }).click();
+  await expect(
+    page.getByRole("table", { name: "Simulated ranges" }).getByRole("row"),
+  ).not.toHaveCount(1);
+  await page
+    .getByLabel("Competitor match probability")
+    .selectOption({ label: "50%" });
+  await page.getByRole("button", { name: "Re-simulate" }).click();
+  await expect(
+    page.getByText(
+      "Stress test: the competitor matches each plan line's discount with probability 50%",
+      { exact: true },
+    ),
+  ).toBeVisible({ timeout: 30_000 });
+  const stressed = (await (
+    await page.request.get(`/api/sessions/${sessionId}`)
+  ).json()) as {
+    plan_revision: {
+      simulation: { competitor_reaction: { match_probability: number } | null };
+    };
+  };
+  expect(stressed.plan_revision.simulation.competitor_reaction).toEqual({
+    match_probability: 0.5,
+  });
 });

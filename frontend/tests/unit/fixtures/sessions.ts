@@ -408,6 +408,7 @@ export const awaitingApprovalSession: SessionResponse = {
       ],
       source: "llm",
       fallback_reason: null,
+      competitor_response: [],
     },
   },
 };
@@ -478,6 +479,7 @@ export const infeasibleSession: SessionResponse = {
       rationales: [],
       source: "template",
       fallback_reason: "llm_unavailable",
+      competitor_response: [],
     },
   },
 };

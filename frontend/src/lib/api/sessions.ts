@@ -285,10 +285,18 @@ const simulatedOutcomesShape = {
   sell_through: percentilesSchema.nullable(),
 };
 
-// The Monte Carlo simulation stored with a plan revision (ADR 0042).
+// A simulation's price-war stress test (ADR 0045): the chance, per plan line and
+// run, that the competitor matches our discount.
+const competitorReactionSchema = z.object({
+  match_probability: z.number(),
+}) satisfies z.ZodType<Schemas["CompetitorReaction"]>;
+
+// The Monte Carlo simulation stored with a plan revision (ADR 0042), labelled
+// with its competitor reaction, if any (ADR 0045).
 export const planSimulationSchema = z.object({
   n_runs: z.number(),
   seed: z.number(),
+  competitor_reaction: competitorReactionSchema.nullable().optional(),
   lines: z.array(
     z.object({
       ...simulatedOutcomesShape,
@@ -318,6 +326,9 @@ export const planExplanationSchema = z.object({
     .nullable()
     .optional(),
   changes: z.string().nullable().optional(),
+  // The planner's response to undercut KVIs, for the competitor panel; empty
+  // for explanations stored before it (ADR 0068).
+  competitor_response: z.array(z.string()).default([]),
 }) satisfies z.ZodType<Schemas["PlanExplanation"]>;
 
 // What changed from the previous plan revision after an amendment (ADR 0052).
@@ -558,6 +569,75 @@ export function rejectSession(
     { revision_number: revisionNumber, reason },
     fetchImpl,
   );
+}
+
+const planSimulationResponseSchema = z.object({
+  session_id: z.string(),
+  revision_number: z.number(),
+  demand_model: z.object({
+    model_id: z.string(),
+    version: z.number(),
+    as_of_week: z.number(),
+  }),
+  as_of_week: z.number(),
+  simulation: planSimulationSchema,
+}) satisfies z.ZodType<Schemas["PlanSimulationResponse"]>;
+
+// A re-simulation answers with the revision's new simulation, not the session: the
+// page puts it in the cached session (ADR 0068). A conflict (409) means the plan is
+// approved or can no longer be simulated, so the page reloads the session.
+export type SimulateResult =
+  | { ok: true; revisionNumber: number; simulation: PlanSimulation }
+  | { ok: false; reason: string; conflict: boolean };
+
+// Re-simulates the session's latest plan revision, with the competitor matching each
+// line's discount at `matchProbability`, or not reacting when null (ADR 0043, ADR
+// 0045). The run count is the server's default; the result replaces the stored one.
+export async function simulatePlan(
+  sessionId: string,
+  matchProbability: number | null,
+  fetchImpl: typeof fetch = fetch,
+): Promise<SimulateResult> {
+  const body = {
+    competitor_reaction:
+      matchProbability === null
+        ? null
+        : { match_probability: matchProbability },
+  };
+  try {
+    const response = await fetchImpl(
+      `/api/plans/${encodeURIComponent(sessionId)}/simulate`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      },
+    );
+    if (!response.ok) {
+      return {
+        ok: false,
+        conflict: response.status === 409,
+        reason: await detailMessage(response),
+      };
+    }
+    const parsed = planSimulationResponseSchema.safeParse(
+      await response.json(),
+    );
+    if (!parsed.success) {
+      return {
+        ok: false,
+        conflict: false,
+        reason: "unexpected simulation response",
+      };
+    }
+    return {
+      ok: true,
+      revisionNumber: parsed.data.revision_number,
+      simulation: parsed.data.simulation,
+    };
+  } catch (error) {
+    return { ok: false, conflict: false, reason: errorMessage(error) };
+  }
 }
 
 // Posts one action to the same-origin proxy. Every action answers with the session;

@@ -40,6 +40,10 @@ class PlanExplanation(BaseModel):
     that is not an amendment's."""
     fallback_reason: FallbackReason | None = None
     """Why the LLM's explanation was not used; None when it was, or when no LLM was asked."""
+    competitor_response: tuple[str, ...] = ()
+    """The planner's response to undercut KVIs (F-08 AC2, ADR 0049), the same sentences the
+    summary opens with, kept apart for the competitor panel (ADR 0068). Empty when no KVI in
+    scope is undercut, and for explanations stored before it."""
 
     @model_validator(mode="after")
     def _fallback_only_for_a_template(self) -> Self:

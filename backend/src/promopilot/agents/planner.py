@@ -71,6 +71,8 @@ class PlannedRevision:
     facts: PlanFacts
     notes: tuple[str, ...] = ()
     """The planner's explanation of the plan, from tool outputs only (ADR 0049)."""
+    competitor_response: tuple[str, ...] = ()
+    """The notes that answer undercut KVIs, without the degraded note (ADR 0068)."""
     degraded: DegradedReason | None = None
     """Why the default sequence planned it instead of the planner agent (ADR 0049)."""
 

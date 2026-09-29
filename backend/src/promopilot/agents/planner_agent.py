@@ -281,14 +281,17 @@ class _Planner:
         if scope.sku_ids:
             arguments["sku_ids"] = list(scope.sku_ids)
         gaps = await self._call(GET_COMPETITOR_GAPS, arguments)
+        response: tuple[str, ...] = ()
         if isinstance(gaps, ToolOk) and isinstance(gaps.output, CompetitorGaps):
-            notes.extend(
-                gaps.output.undercut_response(
-                    [planned_line.line for planned_line in planned.revision.lines]
-                )
+            response = gaps.output.undercut_response(
+                [planned_line.line for planned_line in planned.revision.lines]
             )
         return PlannedRevision(
-            planned.revision, planned.facts, notes=tuple(notes), degraded=degraded
+            planned.revision,
+            planned.facts,
+            notes=(*notes, *response),
+            competitor_response=response,
+            degraded=degraded,
         )
 
     async def _call(self, name: str, arguments: Mapping[str, Any]) -> ToolResult:

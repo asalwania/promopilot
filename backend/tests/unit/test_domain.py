@@ -221,6 +221,12 @@ def test_a_plan_revision_explanation_has_one_rationale_per_plan_line() -> None:
         )
 
 
+def test_an_explanation_stored_before_the_competitor_response_reads_back_with_none() -> None:
+    stored = {"summary": "One line.", "rationales": ["Why."], "source": "llm"}
+
+    assert PlanExplanation.model_validate(stored).competitor_response == ()
+
+
 def test_only_a_template_explanation_records_why_the_llm_was_not_used() -> None:
     fallback = PlanExplanation(
         summary="Template.",
