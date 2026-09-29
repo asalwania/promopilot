@@ -11,7 +11,7 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, computed_field
 
 from promopilot.domain import (
     ExplanationSource,
@@ -238,8 +238,11 @@ class RunResult(_Frozen):
     """The hash of every request the replay provider held no cassette for, once each, in the
     order first asked: every round, not only the final one (ADR 0069)."""
 
+    @computed_field  # type: ignore[prop-decorator]
     @property
     def passed(self) -> bool:
+        """It ran, kept its hard constraints and had every expected property. Written into the
+        JSON, so `/evals` shows it as the report says and never re-derives it (ADR 0072)."""
         return (
             self.outcome is not RunOutcome.FAILED
             and self.constraints is not ConstraintCheck.FAILED

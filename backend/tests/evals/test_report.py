@@ -292,3 +292,18 @@ def test_the_markdown_compares_each_scored_plan_with_both_benchmarks(tmp_path: P
         "lines) | 10.0% | beats |"
     ) in markdown
     assert "Consistency needs at least two runs per scenario" in markdown
+
+
+def test_each_run_writes_whether_it_passed_so_the_dashboard_never_re_derives_it(
+    tmp_path: Path,
+) -> None:
+    """`/evals` shows a run's pass or fail as the report says (ADR 0072)."""
+    dumped = REPORT.model_dump(mode="json")
+    assert dumped["scenarios"][0]["runs"][0]["passed"] is False
+    passing = FAILED_RUN.model_copy(
+        update={"constraints": ConstraintCheck.PASSED, "properties": ()}
+    )
+    assert passing.model_dump(mode="json")["passed"] is True
+
+    paths = write_report(REPORT, tmp_path)
+    assert EvalReport.model_validate_json(paths.latest_json.read_bytes()) == REPORT

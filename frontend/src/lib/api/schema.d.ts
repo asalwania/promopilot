@@ -1759,6 +1759,12 @@ export interface components {
             oracle?: components["schemas"]["OracleScore"] | null;
             outcome: components["schemas"]["RunOutcome"];
             /**
+             * Passed
+             * @description It ran, kept its hard constraints and had every expected property. Written into the
+             *     JSON, so `/evals` shows it as the report says and never re-derives it (ADR 0072).
+             */
+            readonly passed: boolean;
+            /**
              * Properties
              * @default []
              */
