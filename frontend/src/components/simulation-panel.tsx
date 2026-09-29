@@ -4,6 +4,7 @@ import { LoaderCircle } from "lucide-react";
 import { useId, useState, type FormEvent } from "react";
 
 import { type ActionOutcome } from "@/components/amend-box";
+import { ErrorMessage, type ShownError } from "@/components/error-message";
 import { SimulationBandChart } from "@/components/simulation-band-chart";
 import { SourcedNumber } from "@/components/sourced-number";
 import { Button } from "@/components/ui/button";
@@ -314,7 +315,7 @@ function ResimulateForm({ onSimulate }: { onSimulate: Simulate }) {
   const id = useId();
   const [choice, setChoice] = useState<string>("0.5");
   const [sending, setSending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<ShownError | null>(null);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -323,7 +324,12 @@ function ResimulateForm({ onSimulate }: { onSimulate: Simulate }) {
     setError(null);
     const result = await onSimulate(reaction.probability);
     setSending(false);
-    if (!result.ok) setError(`Couldn't re-simulate: ${result.reason}`);
+    if (!result.ok) {
+      setError({
+        message: `Couldn't re-simulate: ${result.reason}`,
+        referenceId: result.referenceId,
+      });
+    }
   }
 
   return (
@@ -365,9 +371,7 @@ function ResimulateForm({ onSimulate }: { onSimulate: Simulate }) {
         simulation.
       </p>
       {error && (
-        <p role="alert" className="text-destructive text-sm">
-          {error}
-        </p>
+        <ErrorMessage message={error.message} referenceId={error.referenceId} />
       )}
     </form>
   );

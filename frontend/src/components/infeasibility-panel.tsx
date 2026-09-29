@@ -3,6 +3,7 @@
 import { useId, useState } from "react";
 
 import { type ActionOutcome } from "@/components/amend-box";
+import { ErrorMessage, type ShownError } from "@/components/error-message";
 import { SourcedNumber } from "@/components/sourced-number";
 import { Button } from "@/components/ui/button";
 import type { PlanRevision } from "@/lib/api/sessions";
@@ -97,13 +98,18 @@ export function InfeasibilityPanel({
 
 function AcceptButton({ onAccept }: { onAccept: AcceptRelaxation }) {
   const [pending, setPending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<ShownError | null>(null);
   const accept = async () => {
     setPending(true);
     setError(null);
     const outcome = await onAccept();
     setPending(false);
-    if (!outcome.ok) setError(outcome.reason);
+    if (!outcome.ok) {
+      setError({
+        message: `Couldn't accept the relaxation: ${outcome.reason}`,
+        referenceId: outcome.referenceId,
+      });
+    }
   };
   return (
     <div className="flex flex-col items-start gap-2">
@@ -114,9 +120,7 @@ function AcceptButton({ onAccept }: { onAccept: AcceptRelaxation }) {
           : "Accept the relaxation and re-plan"}
       </Button>
       {error && (
-        <p role="alert" className="text-destructive text-sm">
-          Couldn&apos;t accept the relaxation: {error}
-        </p>
+        <ErrorMessage message={error.message} referenceId={error.referenceId} />
       )}
     </div>
   );

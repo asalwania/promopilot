@@ -80,7 +80,7 @@ describe("ModelsView", () => {
     expect(screen.getByRole("status")).toHaveTextContent(
       "Couldn't load models",
     );
-    expect(screen.getByText("HTTP 502")).toBeInTheDocument();
+    expect(screen.getByText("API unreachable")).toBeInTheDocument();
     expect(requested).toHaveLength(3);
 
     await act(() => screen.getByRole("button", { name: "Retry" }).click());

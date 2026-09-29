@@ -3,6 +3,7 @@
 import { useQuery, type UseQueryResult } from "@tanstack/react-query";
 
 import { ModelRegistry } from "@/components/model-registry";
+import { ReferenceId } from "@/components/error-message";
 import { RetrainPanel } from "@/components/retrain-panel";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -11,6 +12,7 @@ import {
   MODELS_QUERY_KEY,
   type ModelEntry,
 } from "@/lib/api/models";
+import { referenceIdOf } from "@/lib/api/reason";
 
 const MAX_RETRIES = 2;
 
@@ -36,7 +38,10 @@ function Registry({ query }: { query: UseQueryResult<ModelEntry[]> }) {
     return (
       <Notice title="Couldn't load models">
         <CardContent className="flex items-center justify-between gap-4">
-          <p className="text-muted-foreground text-sm">{query.error.message}</p>
+          <p className="text-muted-foreground text-sm">
+            {query.error.message}
+            <ReferenceId referenceId={referenceIdOf(query.error)} />
+          </p>
           <Button
             variant="outline"
             disabled={query.isFetching}

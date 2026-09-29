@@ -2,16 +2,16 @@
 
 import { useId, useState, type FormEvent } from "react";
 
+import { ErrorMessage, type ShownError } from "@/components/error-message";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import type { AmendInput } from "@/lib/api/sessions";
-
-// Mirrors the API's amendment limit (ADR 0052 D3); the API still validates.
-const AMENDMENT_MAX_CHARS = 2000;
+import { AMENDMENT_MAX_CHARS } from "@/lib/input-limits";
 
 // What a session action told the page: done, or why not (ADR 0061, ADR 0066).
-export type ActionOutcome = { ok: true } | { ok: false; reason: string };
+export type ActionOutcome =
+  { ok: true } | { ok: false; reason: string; referenceId?: string };
 
 // Sends an amendment in the manager's words, or accepts the latest relaxation (#62).
 export type SubmitAmendment = (amendment: AmendInput) => Promise<ActionOutcome>;
@@ -30,7 +30,7 @@ export function AmendBox({
   const [text, setText] = useState("");
   const [blank, setBlank] = useState(false);
   const [sending, setSending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<ShownError | null>(null);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -45,7 +45,10 @@ export function AmendBox({
     if (result.ok) {
       setText("");
     } else {
-      setError(`Couldn't amend the brief: ${result.reason}`);
+      setError({
+        message: `Couldn't amend the brief: ${result.reason}`,
+        referenceId: result.referenceId,
+      });
     }
   }
 
@@ -81,9 +84,7 @@ export function AmendBox({
         </Button>
       </div>
       {error && (
-        <p role="alert" className="text-destructive text-sm">
-          {error}
-        </p>
+        <ErrorMessage message={error.message} referenceId={error.referenceId} />
       )}
     </form>
   );

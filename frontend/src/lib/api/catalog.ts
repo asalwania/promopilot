@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { responseReason } from "@/lib/api/reason";
+import { apiError, ApiRequestError } from "@/lib/api/reason";
 import type { components } from "@/lib/api/schema";
 
 type Schemas = components["schemas"];
@@ -82,9 +82,9 @@ export type InventoryRow = InventoryReport["statuses"][number];
 export type CompetitorGaps = z.infer<typeof competitorGapsSchema>;
 export type CompetitorGap = CompetitorGaps["gaps"][number];
 
-export class CatalogRequestError extends Error {
-  constructor(message: string) {
-    super(message);
+export class CatalogRequestError extends ApiRequestError {
+  constructor(message: string, referenceId?: string) {
+    super(message, referenceId);
     this.name = "CatalogRequestError";
   }
 }
@@ -132,16 +132,19 @@ export function getCompetitorGaps(
 }
 
 // Through the same-origin `/api/*` proxy (ADR 0018). Throws the API's reason
-// (e.g. the 409 "run `make data`"), or the status when it gives none, so
-// TanStack Query can surface it; network errors propagate as they are.
+// (e.g. the 409 "run `make data`") with its reference id, or the status when it
+// gives none, so TanStack Query can surface it; network errors propagate as they
+// are.
 async function read<T>(
   path: string,
   schema: z.ZodType<T>,
   fetchImpl: typeof fetch,
 ): Promise<T> {
   const response = await fetchImpl(path, { cache: "no-store" });
-  if (!response.ok)
-    throw new CatalogRequestError(await responseReason(response));
+  if (!response.ok) {
+    const failure = await apiError(response);
+    throw new CatalogRequestError(failure.message, failure.referenceId);
+  }
   const parsed = schema.safeParse(await response.json());
   if (!parsed.success) {
     throw new CatalogRequestError(`unexpected response from ${path}`);

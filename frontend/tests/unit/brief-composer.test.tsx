@@ -6,6 +6,8 @@ import { EXAMPLE_BRIEFS } from "@/lib/example-briefs";
 
 import { SESSION_ID } from "./fixtures/sessions";
 
+const REFERENCE = "6f1c2a7e-0b1d-4c55-9a0e-3d2b1f0c9e11";
+
 const push = vi.fn();
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push }) }));
 
@@ -88,16 +90,24 @@ describe("BriefComposer", () => {
 
   it("shows why the session could not start and stays on the page", async () => {
     stubCreateSession(() =>
-      Response.json({ detail: "API unreachable" }, { status: 502 }),
+      Response.json(
+        {
+          detail: "API unreachable",
+          code: "api_unreachable",
+          reference_id: REFERENCE,
+          errors: null,
+        },
+        { status: 502 },
+      ),
     );
     render(<BriefComposer />);
 
     typeBrief("Diwali push");
     planIt();
 
-    expect(await screen.findByRole("alert")).toHaveTextContent(
-      "Couldn't start planning: HTTP 502",
-    );
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("Couldn't start planning: API unreachable");
+    expect(alert).toHaveTextContent(`Reference: ${REFERENCE}`);
     expect(push).not.toHaveBeenCalled();
     expect(screen.getByRole("button", { name: "Plan it" })).toBeEnabled();
   });

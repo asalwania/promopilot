@@ -2,6 +2,7 @@
 
 import { useState, type FormEvent } from "react";
 
+import { ErrorMessage, type ShownError } from "@/components/error-message";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -15,9 +16,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { Clarification, ClarificationQuestion } from "@/lib/api/sessions";
 import { fieldLabel } from "@/lib/assumptions";
-
-// Mirrors the API's answer limit (ADR 0048 D5); the API still validates.
-const ANSWER_MAX_CHARS = 2000;
+import { ANSWER_MAX_CHARS } from "@/lib/input-limits";
 
 const REASON_LABELS: Record<ClarificationQuestion["reason"], string> = {
   missing: "Missing",
@@ -27,7 +26,9 @@ const REASON_LABELS: Record<ClarificationQuestion["reason"], string> = {
 
 export type SubmitAnswers = (
   answers: Record<string, string>,
-) => Promise<{ ok: true } | { ok: false; reason: string }>;
+) => Promise<
+  { ok: true } | { ok: false; reason: string; referenceId?: string }
+>;
 
 // The Context agent's open questions, answered in place (AG-02, SPEC §11). Every
 // answer is free text keyed by its question id, sent together (ADR 0048 D5, ADR 0061).
@@ -44,7 +45,7 @@ export function ClarificationForm({
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [missing, setMissing] = useState<Set<string>>(new Set());
   const [sending, setSending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<ShownError | null>(null);
 
   // The latest answer given to each question id, for a question asked again.
   const previous = new Map(
@@ -78,7 +79,10 @@ export function ClarificationForm({
       ),
     );
     if (!result.ok) {
-      setError(`Couldn't send the answers: ${result.reason}`);
+      setError({
+        message: `Couldn't send the answers: ${result.reason}`,
+        referenceId: result.referenceId,
+      });
       setSending(false);
     }
   }
@@ -116,9 +120,10 @@ export function ClarificationForm({
             </Button>
           </div>
           {error && (
-            <p role="alert" className="text-destructive text-sm">
-              {error}
-            </p>
+            <ErrorMessage
+              message={error.message}
+              referenceId={error.referenceId}
+            />
           )}
         </form>
       </CardContent>

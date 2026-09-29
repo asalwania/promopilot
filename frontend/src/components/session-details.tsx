@@ -12,6 +12,7 @@ import {
   type CompetitorPrices,
 } from "@/components/competitor-panel";
 import { ConstraintChecklist } from "@/components/constraint-checklist";
+import { ErrorMessage } from "@/components/error-message";
 import {
   InfeasibilityPanel,
   needsRelaxation,
@@ -109,11 +110,7 @@ export function SessionDetails({
               rejected.
             </p>
           )}
-          {session.error && (
-            <p role="alert" className="text-destructive text-sm">
-              {session.error}
-            </p>
-          )}
+          {session.error && <ErrorMessage message={session.error} />}
         </CardContent>
       </Card>
       {session.status === "awaiting_clarification" &&
