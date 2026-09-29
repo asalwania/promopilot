@@ -15,6 +15,8 @@ class SolveStatus(StrEnum):
     FEASIBLE = "FEASIBLE"
     """The time limit ran out first: the best plan found, not proven best."""
     INFEASIBLE = "INFEASIBLE"
+    """No plan found reaches every clearance target: this is the closest. Proven so unless
+    the relaxation says otherwise (ADR 0044, ADR 0074)."""
 
 
 class ConstraintKind(StrEnum):

@@ -44,16 +44,24 @@ constraint. Each target is then lowered to what that plan reaches, and the secon
 maximises the objective. When every target is reachable this is exactly the hard model; when
 one is not, the plan comes as close as any can and `clearance_shortfalls` reports by how much
 it falls short. The empty plan is always feasible in the first phase, so there is always a
-plan to return, even when no better one is found in time.
+plan to return, even when no better one is found in time. When the first phase runs out of
+work short of a target, a check with every target hard and no objective settles whether any
+plan reaches them all, on up to half the relaxation budget (ADR 0074): proving that none does
+is quick where proving the least shortfall is not. A plan it finds keeps the brief's targets
+for the second phase. Without targets, a solve that finds nothing but the empty plan in time
+returns the greedy plan instead: best value first, each option kept when it keeps every
+constraint and gains net of its pairwise terms (ADR 0074).
 
 A request is infeasible exactly when no plan reaches every clearance target within its other
-constraints: every other constraint is one the empty plan keeps (ADR 0044). Proven so, the
-status is INFEASIBLE (a timeout is FEASIBLE, never INFEASIBLE). The closest plan still comes
-back, and so does the relaxation: the smallest change to the brief's own constraints (budget,
-regional caps, minimum margin down to the floor, a tighter promoted-SKU cap, a KVI tolerance
-the brief turned on, the clearance targets) that makes it feasible, each change weighed in
-basis points of the brief's value. Company policy, the strong-substitute rule included, is
-never relaxed; when only lowering a target helps, policy binds.
+constraints: every other constraint is one the empty plan keeps (ADR 0044). A plan that misses
+a target is INFEASIBLE, never FEASIBLE (ADR 0074): proven when the first phase or the check
+proves no plan reaches every target, and otherwise with a relaxation that says it is not
+proven. The closest plan still comes back, and so does the relaxation: the smallest change to
+the brief's own constraints (budget, regional caps, minimum margin down to the floor, a
+tighter promoted-SKU cap, a KVI tolerance the brief turned on, the clearance targets) that
+makes it feasible, each change weighed in basis points of the brief's value. Company policy,
+the strong-substitute rule included, is never relaxed; when only lowering a target helps,
+policy binds.
 
 Beside the plan, `solve` reports (ADR 0038):
 
@@ -141,7 +149,9 @@ class SolverSettings:
     - the re-solves that find binding constraints, shared: OPTIMIZER_BINDING_DETERMINISTIC_LIMIT
       and OPTIMIZER_BINDING_TIME_LIMIT_SECONDS (ADR 0038);
     - the smallest relaxation of an infeasible request: OPTIMIZER_RELAXATION_DETERMINISTIC_LIMIT
-      and OPTIMIZER_RELAXATION_TIME_LIMIT_SECONDS (ADR 0044);
+      and OPTIMIZER_RELAXATION_TIME_LIMIT_SECONDS (ADR 0044), up to half of each first spent
+      checking whether any plan reaches every clearance target when the closest-plan search
+      runs out of work (ADR 0074);
 
     and the worker count (OPTIMIZER_WORKERS). The work budgets decide the result. A wall-clock
     net that runs out first ends the phase too, but then not the same way on every machine. A
@@ -247,35 +257,57 @@ def solve(
     brief = problem  # with the brief's own clearance targets, before any is lowered
     findings = problem.rules.findings
     closest: _Closest | None = None
+    infeasible = False  # proven that no plan reaches every clearance target
     time_limit, work = settings.time_limit_seconds, settings.deterministic_limit
+    relax_limit = settings.relaxation_time_limit_seconds
+    relax_work = settings.relaxation_deterministic_limit
     if problem.targets:
         # The closest plan takes up to half of each; the main solve what it left (ADR 0055).
         closest = problem.closest(settings, seed, time_limit=time_limit / 2, work=work / 2)
-        problem = problem.lowered(closest.shortfall)
         time_limit = max(time_limit - (time.monotonic() - started), time_limit / 2)
         work = max(work - closest.work, work / 2)
+        infeasible = closest.proven
+        if any(closest.shortfall.values()) and not closest.proven:
+            # The closest search ran out of work short of a target: settle whether any plan
+            # reaches every target, on up to half the relaxation budget (ADR 0074).
+            checked = time.monotonic()
+            check = problem.reach(
+                settings, seed, hint=closest.picked, time_limit=relax_limit / 2, work=relax_work / 2
+            )
+            relax_limit = max(relax_limit - (time.monotonic() - checked), relax_limit / 2)
+            relax_work = max(relax_work - check.work, relax_work / 2)
+            infeasible = check.status == cp_model.INFEASIBLE
+            if check.status in (cp_model.OPTIMAL, cp_model.FEASIBLE):
+                reached = dict.fromkeys(closest.shortfall, 0)
+                closest = _Closest(check.picked, reached, True, closest.work)
+        problem = problem.lowered(closest.shortfall)
     outcome = problem.solve(
         settings, seed, hint=closest.picked if closest else (), time_limit=time_limit, work=work
     )
     found = outcome.status in (cp_model.OPTIMAL, cp_model.FEASIBLE)
-    # No plan found in time: the closest plan keeps every constraint, the lowered targets
-    # included; without targets the empty plan does.
-    picked = outcome.picked if found else (closest.picked if closest else [])
-    charged = outcome.charged if found else problem.charged(picked)
+    picked, charged = (outcome.picked, outcome.charged) if found else ([], 0)
+    if closest is not None and not found:
+        # No plan found in time: the closest plan keeps every constraint, the lowered targets
+        # included.
+        picked, charged = closest.picked, problem.charged(closest.picked)
+    elif closest is None and outcome.status != cp_model.OPTIMAL and not picked:
+        # Nothing but the empty plan found in time: the greedy plan keeps every constraint
+        # too, and is never worse (ADR 0074).
+        picked = problem.greedy()
+        charged = problem.charged(picked)
     objective = int(problem.value[picked].sum()) - charged
     shortfalls = problem.shortfalls(picked)
     relaxation: Relaxation | None = None
     binding: tuple[BindingConstraint, ...]
     if closest is not None and any(closest.shortfall.values()):
         # No plan found reaches every clearance target (ADR 0044): the brief's own constraints
-        # say what must give. Only a proven shortfall is infeasible, never a timeout.
-        relaxation, relaxed_plan = brief.relax(closest, settings, seed)
-        status = SolveStatus.INFEASIBLE if closest.proven else SolveStatus.FEASIBLE
-        binding = (
-            brief.infeasible(relaxation, relaxed_plan, shortfalls)
-            if closest.proven
-            else problem.unproven()
+        # say what must give. A plan that misses a target is never FEASIBLE; when no plan
+        # reaching it is not proven impossible, the relaxation is not proven (ADR 0074).
+        relaxation, relaxed_plan = brief.relax(
+            closest, settings, seed, proven=infeasible, time_limit=relax_limit, work=relax_work
         )
+        status = SolveStatus.INFEASIBLE
+        binding = brief.infeasible(relaxation, relaxed_plan, shortfalls)
     elif outcome.status == cp_model.OPTIMAL and (closest is None or closest.proven):
         status = SolveStatus.OPTIMAL
         binding = problem.binding(picked, objective, settings, seed)
@@ -289,7 +321,7 @@ def solve(
         selected=tuple(problem.eligible[n] for n in picked),
         pairwise_cannibalisation=charged / PAISE,
         eligible=problem.choosable,
-        pairs=len(problem.pairs) if found or closest else 0,
+        pairs=len(problem.pairs) if found or closest or picked else 0,
         binding_constraints=binding,
         why_chosen=tuple(problem.why_chosen(n) for n in picked),
         not_selected=problem.not_selected(picked),
@@ -639,6 +671,56 @@ class _Problem:
             if limit in self.targets
         }
         return _Closest(picked, shortfall, status == cp_model.OPTIMAL, solver.deterministic_time)
+
+    def reach(
+        self,
+        settings: SolverSettings,
+        seed: int,
+        *,
+        hint: Sequence[int],
+        time_limit: float,
+        work: float,
+    ) -> _Outcome:
+        """The first plan found that keeps every constraint, each clearance target at its
+        bound, or proof (INFEASIBLE) that none does (ADR 0074). No objective: proving that
+        some target must be missed is quick where proving the least shortfall is not."""
+        model = cp_model.CpModel()
+        x = self._variables(model)
+        for k in range(len(self.limits)):
+            model.add(_dot(self.coefficients[k], x) <= int(self.bound[k]))
+        hinted = set(hint)
+        for n, chosen in enumerate(x):
+            model.add_hint(chosen, n in hinted)
+        solver = self._solver(settings, seed, time_limit, work, first=True)
+        status = solver.solve(model)
+        if status not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
+            return _Outcome(status, [], 0, solver.deterministic_time)
+        picked = [n for n, chosen in enumerate(x) if solver.boolean_value(chosen)]
+        return _Outcome(status, picked, self.charged(picked), solver.deterministic_time)
+
+    def greedy(self) -> list[int]:
+        """A plan built best value first (ADR 0074): each option joins when it keeps every
+        constraint, one line per SKU and region and the strong-substitute rule (ADR 0075), and
+        gains at least a paisa net of its pairwise terms with the lines already in. No solver
+        and no clock, so the same input gives the same plan; ties go to the earlier option.
+        Empty when the model holds a constraint the empty plan breaks (a clearance target)."""
+        picked: list[int] = []
+        taken: set[tuple[str, Region]] = set()
+        barred: set[int] = set()
+        totals = np.zeros(len(self.limits), dtype=np.int64)
+        for n in np.argsort(-self.value, kind="stable").tolist():
+            if n in barred or any(key in taken for key in self._keys[n]):
+                continue
+            after = totals + self.coefficients[:, n]
+            if (after > self.bound).any():
+                continue
+            if int(self.value[n]) - sum(self._near[n].get(m, 0) for m in picked) < 1:
+                continue
+            picked.append(n)
+            taken.update(self._keys[n])
+            barred |= self._conflicts[n]
+            totals = after
+        return sorted(picked)
 
     def solve(
         self,
@@ -1100,22 +1182,28 @@ class _Problem:
         return tuple(sorted(found, key=lambda s: (s.sku_id, list(Region).index(s.region))))
 
     def relax(
-        self, closest: _Closest, settings: SolverSettings, seed: int
+        self,
+        closest: _Closest,
+        settings: SolverSettings,
+        seed: int,
+        *,
+        proven: bool,
+        time_limit: float,
+        work: float,
     ) -> tuple[Relaxation, list[int]]:
         """The smallest change to the brief's constraints that makes every clearance target
-        reachable (ADR 0044), and a plan that reaches them with it.
+        reachable (ADR 0044), and a plan that reaches them with it. `proven` says whether the
+        request is proven infeasible; only then can the relaxation be proven (ADR 0074).
 
-        Two re-solves share the relaxation budget, in deterministic seconds (ADR 0055). The
+        Two re-solves share what is left of the relaxation budget: `work` deterministic
+        seconds within a `time_limit` net (ADR 0055, ADR 0074). The
         first frees every brief constraint but the clearance targets as far as company policy
         allows: if a target must still come down, policy binds. The second finds the least sum
         of changes, each in basis points of the brief's value. When it finds nothing within its
         budget, the closest plan gives the relaxation: each target lowered to what it reaches.
         """
         started = time.monotonic()
-        limit, work = (
-            settings.relaxation_time_limit_seconds,
-            settings.relaxation_deterministic_limit,
-        )
+        limit = time_limit
         held = self._least_change(
             settings, seed, closest.picked, free=True, time_limit=limit / 2, work=work / 2
         )
@@ -1146,7 +1234,7 @@ class _Problem:
             else change
             for change in self._changes(plan)
         )
-        proven = closest.proven and held.status == whole.status == cp_model.OPTIMAL
+        proven = proven and held.status == whole.status == cp_model.OPTIMAL
         return Relaxation(changes=changes, policy_binds=policy_binds, proven=proven), plan
 
     def _least_change(

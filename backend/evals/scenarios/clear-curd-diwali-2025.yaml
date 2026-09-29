@@ -1,4 +1,6 @@
 # Overstock clearance: every 400g curd pack is overstocked at week 50; clear half of it.
+# No plan within the ₹2 lakh budget and the margin floor clears 50% of all three SKUs in both
+# regions (the solver proves it, ADR 0074), so the plan is declared infeasible with a relaxation.
 name: clear-curd-diwali-2025
 group: overstock_clearance
 brief: >-
@@ -16,7 +18,4 @@ labels:
     - {sku_id: SKU0059, sell_through: 0.5}
     - {sku_id: SKU0061, sell_through: 0.5}
 expect:
-  - declares_infeasible: false
-  - meets_clearance: SKU0057
-  - meets_clearance: SKU0059
-  - meets_clearance: SKU0061
+  - declares_infeasible: true

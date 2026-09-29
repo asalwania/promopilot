@@ -142,6 +142,32 @@ def test_an_empty_plan_says_nothing_paid_for_itself() -> None:
     assert "No promo option pays for itself" in explanations.summary
 
 
+def test_an_empty_plan_found_without_proof_says_no_plan_was_found_in_time() -> None:
+    empty = PlanRevision(number=1, solver_status=SolveStatus.FEASIBLE, objective=0.0)
+
+    summary = template_explanations(empty).summary
+
+    # Not proven best, so it cannot say that no option pays for itself (ADR 0074).
+    assert "No promo option pays for itself" not in summary
+    assert "No plan was found within the optimiser's work budget." in summary
+
+
+def test_an_unproven_infeasible_plan_does_not_claim_no_plan_reaches_the_targets() -> None:
+    planned = revision(412.4, 18_250.0, 61_874.6, 172_384.2)
+    assert planned.relaxation is not None
+    unproven = planned.model_copy(
+        update={"relaxation": planned.relaxation.model_copy(update={"proven": False})}
+    )
+
+    summary = template_explanations(unproven).summary
+
+    assert "no plan reaches every clearance target" not in summary
+    assert (
+        "Infeasible: no plan found within the optimiser's work budget reaches every clearance "
+        "target, so this is the closest plan found."
+    ) in summary
+
+
 @settings(max_examples=200, deadline=None)
 @given(
     units=st.floats(min_value=0, max_value=5_000_000, allow_nan=False),
