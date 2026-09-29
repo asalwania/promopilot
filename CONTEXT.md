@@ -236,7 +236,7 @@ The Monte Carlo runs of a promo plan: each run samples the demand model's terms 
 _Avoid_: forecast, scenario (which belongs to evals)
 
 **Competitor reaction**:
-A simulation's optional price-war stress test: in each run, the competitor matches each plan line's discount with a given match probability, drawn per line. A matched competitor cuts its price by the same share, so the competitor price index returns to where it was before the promotion, and undercut-sensitive SKUs (positive competitor sensitivity γ) lose the demand the discount won from the competitor (ADR 0045).
+A simulation's optional price-war stress test: in each run, the competitor matches each plan line's discount with a given match probability, drawn per line. A matched competitor cuts its price by the same share, so the competitor price index returns to where it was before the promotion, and undercut-sensitive SKUs (positive competitor sensitivity γ) lose the demand the discount won from the competitor (ADR 0045). A re-simulation with one replaces the stored simulation, which is then labelled a stress test until a plain re-simulation (ADR 0068).
 _Avoid_: price war (for the simulation setting), scenario (which belongs to evals)
 
 **Stock-out probability**:
@@ -262,7 +262,7 @@ An approval or a rejection of one named plan revision, with when it was made (an
 _Avoid_: vote, sign-off
 
 **Planner note**:
-A sentence the planner adds to a plan revision's explanation from tool outputs: how the plan answers each undercut KVI ("Competitor is 5.1% cheaper on SKU0002 in North; matching on 1 SKU"), and, when the default sequence planned it, why (ADR 0049).
+A sentence the planner adds to a plan revision's explanation from tool outputs: how the plan answers each undercut KVI ("Competitor is 5.1% cheaper on SKU0002 in North; matching on 1 SKU"), and, when the default sequence planned it, why (ADR 0049). The undercut sentences are also kept on the explanation as its competitor response, for the session page's competitor card (ADR 0068).
 _Avoid_: planner explanation, rationale (which is per plan line)
 
 **Default sequence**:
