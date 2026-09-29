@@ -2,7 +2,8 @@
 
 - **Extraction accuracy**: each labelled planning-request field against the final request,
   by field matching rules (sets as sets, money within a rupee, fractions within a hundredth of
-  a point, windows and counts exactly).
+  a point, windows and counts exactly). A relaxation the session accepted changes the labels
+  it touches first (ADR 0076).
 - **Clarification behaviour**: a vague or conflicting scenario's session asks about, or flags,
   a field the scenario names; an ask no other scenario expects is counted as unneeded.
 - **Infeasibility handling**: an infeasible scenario's final revision is `INFEASIBLE`, names
@@ -22,12 +23,16 @@ from typing import Any
 
 from promopilot.competitors import CompetitorData, read_competitor_gaps
 from promopilot.domain import (
+    ClearanceTarget,
     CompanyPolicy,
+    ConstraintKind,
     ExplanationSource,
     FallbackReason,
     PlanExplanation,
     PlanningRequest,
     PlanRevision,
+    Relaxation,
+    RelaxedConstraint,
     SessionUsage,
     SolveStatus,
     TokensUsed,
@@ -118,25 +123,77 @@ _RULES: dict[str, tuple[Callable[[PlanningRequest], Any], Callable[[Any, Any], b
 }
 
 
-def match_fields(labels: RequestLabels, request: PlanningRequest | None) -> tuple[FieldMatch, ...]:
+def match_fields(
+    labels: RequestLabels,
+    request: PlanningRequest | None,
+    *,
+    accepted: Sequence[Relaxation] = (),
+) -> tuple[FieldMatch, ...]:
     """Each labelled field, in field order, against the final planning request; with no
-    request every labelled field is wrong."""
+    request every labelled field is wrong.
+
+    The labels are what the scenario states. Each relaxation the session `accepted` replaces
+    the labelled values it changes with its own, as the request read after the accept should
+    hold them (ADR 0076); it never labels a field the scenario leaves out. A KVI tolerance it
+    turns off is expected off."""
     matches = []
-    for name in RequestLabels.model_fields:
-        label = getattr(labels, name)
-        if label is None:
-            continue
+    for name, label in _relaxed_labels(labels, accepted).items():
         read, same = _RULES[name]
         got = None if request is None else read(request)
+        matched = request is not None and (got is None if label is None else same(label, got))
         matches.append(
             FieldMatch(
                 field=name,
                 expected=_show(label),
                 got=None if request is None else _show(got),
-                matched=request is not None and same(label, got),
+                matched=matched,
             )
         )
     return tuple(matches)
+
+
+_RELAXES: dict[ConstraintKind, str] = {
+    ConstraintKind.MARKETING_BUDGET: "marketing_budget",
+    ConstraintKind.REGIONAL_BUDGET: "regional_budget_caps",
+    ConstraintKind.MINIMUM_MARGIN: "min_margin",
+    ConstraintKind.MAX_PROMOTED_SKUS: "max_promoted_skus_per_category_per_region",
+    ConstraintKind.KVI_PRICE_TOLERANCE: "kvi_price_tolerance",
+    ConstraintKind.CLEARANCE_TARGET: "clearance_targets",
+}
+"""The label each kind of relaxed constraint changes; company policy is never relaxed."""
+
+
+def _relaxed_labels(labels: RequestLabels, accepted: Sequence[Relaxation]) -> dict[str, Any]:
+    """The labelled fields, in field order, with each accepted change applied in turn."""
+    expected = {
+        name: getattr(labels, name)
+        for name in RequestLabels.model_fields
+        if getattr(labels, name) is not None
+    }
+    for change in (change for relaxation in accepted for change in relaxation.changes):
+        name = _RELAXES.get(change.kind)
+        if name is not None and name in expected:
+            expected[name] = _relax(expected[name], change)
+    return expected
+
+
+def _relax(label: Any, change: RelaxedConstraint) -> Any:
+    relaxed = change.relaxed
+    match change.kind:
+        case ConstraintKind.CLEARANCE_TARGET:
+            targets: tuple[ClearanceTarget, ...] = label
+            if relaxed is None:
+                return tuple(t for t in targets if t.sku_id != change.sku_id)
+            return tuple(
+                t.model_copy(update={"sell_through": relaxed}) if t.sku_id == change.sku_id else t
+                for t in targets
+            )
+        case ConstraintKind.REGIONAL_BUDGET:
+            return label if change.region is None else {**label, change.region: relaxed}
+        case ConstraintKind.MAX_PROMOTED_SKUS:
+            return None if relaxed is None else round(relaxed)
+        case _:
+            return relaxed
 
 
 def _show(value: Any) -> str:

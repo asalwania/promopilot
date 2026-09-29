@@ -333,7 +333,7 @@ _Avoid_: default explanation, canned text
 
 **Scenario**:
 A fully specified test case for evals: brief, optional amendments, as-of week, seed and expected properties.
-It also has its group, the answers the manager gives if asked, and the planning-request fields it states (labels). One YAML file each (ADR 0056).
+It also has its group, the answers the manager gives if asked, and the planning-request fields it states (labels). One YAML file each (ADR 0056). An amendment may accept the waiting revision's relaxation instead of stating a change (ADR 0076).
 
 **Expected property**:
 Something a scenario's outcome must show, from a closed vocabulary, such as "asks about the marketing budget" or "excludes West after the amendment". It is never an exact plan.

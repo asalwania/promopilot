@@ -8,8 +8,10 @@ from pydantic import ValidationError
 from promopilot.domain import PromoWindow, Region
 from promopilot.evals import (
     SCENARIO_DIR,
+    AcceptRelaxation,
     AsksClarification,
     DeclaresInfeasible,
+    DiffChanges,
     ExcludesRegion,
     MeetsClearance,
     NoStrongSubstitutesTogether,
@@ -112,6 +114,45 @@ def test_an_invalid_scenario_is_refused(
 
     with pytest.raises(ValidationError, match=problem):
         load_scenario(path)
+
+
+ACCEPTS = FULL.replace('  - "Drop West"\n', '  - "Drop West"\n  - accept_relaxation: true\n')
+
+
+def test_an_amendment_can_accept_the_latest_revisions_relaxation(tmp_path: Path) -> None:
+    scenario = load_scenario(write(tmp_path, "amend-drop-west", ACCEPTS))
+
+    assert scenario.amendments == ("Drop West", AcceptRelaxation(accept_relaxation=True))
+    assert scenario.stated_amendments == ("Drop West",)
+
+
+@pytest.mark.parametrize(
+    ("accept", "problem"),
+    [
+        ("  - accept_relaxation: false\n", "accept_relaxation"),
+        ("  - accept_relaxation: true\n    note: typo\n", "note"),
+        ("  - accept: true\n", "accept"),
+    ],
+)
+def test_an_amendment_accepts_a_relaxation_only_as_accept_relaxation_true(
+    tmp_path: Path, accept: str, problem: str
+) -> None:
+    text = FULL.replace('  - "Drop West"\n', f'  - "Drop West"\n{accept}')
+
+    with pytest.raises(ValidationError, match=problem):
+        load_scenario(write(tmp_path, "amend-drop-west", text))
+
+
+def test_the_demo_scenario_accepts_its_relaxation_and_expects_a_feasible_revision() -> None:
+    demo = load_scenario(SCENARIO_DIR / "demo-budget-cut-drop-west.yaml")
+
+    assert demo.amendments == (
+        "Budget cut to ₹6 lakh",
+        "Drop West",
+        AcceptRelaxation(accept_relaxation=True),
+    )
+    assert DeclaresInfeasible(declares_infeasible=False) in demo.expect
+    assert DiffChanges(diff_changes="clearance_targets") in demo.expect
 
 
 def test_the_strong_substitutes_property_loads(tmp_path: Path) -> None:

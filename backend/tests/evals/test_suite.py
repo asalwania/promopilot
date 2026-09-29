@@ -206,13 +206,14 @@ def test_every_heavy_cannibalisation_scope_holds_strong_substitute_pairs(
 
 async def read_by_rules(dataset: GeneratedDataset, scenario: Scenario) -> PlanningRequest | None:
     """The request the Context agent reads when the LLM is down (ADR 0053), after the
-    scenario's amendments: what an unrecorded replay plans on."""
+    scenario's stated amendments: what an unrecorded replay plans on. An accepted relaxation is
+    left out: its text comes from the plan, and the labels are what the scenario states."""
     reading = await read_context(
         scenario.brief,
         DownProvider(),
         InMemoryRetailData(dataset, as_of_week=scenario.as_of_week),
         policy=POLICY,
-        amendments=scenario.amendments,
+        amendments=scenario.stated_amendments,
         fallback=True,
     )
     return reading.request

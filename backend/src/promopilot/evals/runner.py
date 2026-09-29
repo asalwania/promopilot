@@ -6,8 +6,11 @@ service drives it with (`start_planning`, `resume_with_answers`, `resume_with_am
 `graph_state`), on an in-memory checkpointer, with the planning stack the API plans with
 (`planning_stack`) but on the eval's own world at the scenario's as-of week. The Context
 agent's questions are answered from the scenario when asked, and its amendments are made in
-order once a plan waits for approval. The final plan revision is then checked on its plan-time
-numbers by `validate_plan` and scored by the oracle on the true demand (ADR 0012).
+order once a plan waits for approval. An amendment that accepts the waiting revision's
+relaxation sends the relaxation's own text, as `POST /amend {accept_relaxation: true}` does,
+and fails the run when the revision has no relaxation to accept (ADR 0076). The final plan
+revision is then checked on its plan-time numbers by `validate_plan` and scored by the oracle
+on the true demand (ADR 0012).
 
 The session's trace is kept in memory: its token-usage events give the session's cost, and
 the agent's behaviour is scored from its outcome (#55, ADR 0062): the final request against
@@ -33,10 +36,12 @@ from promopilot.agents import (
     MemoryTrace,
     PlanningGraph,
     PlanningSettings,
+    acceptable_relaxation,
     build_graph,
     checkpoint_serializer,
     graph_state,
     planning_stack,
+    relaxation_amendment,
     resume_with_amendment,
     resume_with_answers,
     start_planning,
@@ -52,6 +57,7 @@ from promopilot.domain import (
     PlanningRequest,
     PlanRevision,
     PromoPlan,
+    Relaxation,
     Violation,
 )
 from promopilot.evals.behaviour import (
@@ -176,6 +182,8 @@ class _Session:
     route: list[str]
     asked: list[str]
     amendments: int = 0
+    accepted: list[Relaxation] = field(default_factory=list)
+    """The relaxations its amendments accepted, in order."""
     snapshot: GraphSnapshot | None = None
     explained: list[ExplainerRun] = field(default_factory=list)
     """The explanation each plan revision waited for approval with."""
@@ -287,10 +295,27 @@ async def _play(
             if session.amendments == len(scenario.amendments):
                 return RunOutcome.PLANNED
             amendment = scenario.amendments[session.amendments]
+            if not isinstance(amendment, str):
+                amendment = _accept(session, waiting)
             session.amendments += 1
             session.route += await resume_with_amendment(graph, thread, amendment)
         else:
             raise RuntimeError(f"the session stopped at {snapshot.paused_at or 'its end'}")
+
+
+def _accept(session: _Session, waiting: PlanRevision | None) -> str:
+    """The amendment that accepts the waiting revision's relaxation, as `POST /amend
+    {accept_relaxation: true}` writes it (ADR 0052 D7, ADR 0070 D2)."""
+    if waiting is None:
+        raise RuntimeError("the session awaits a decision without a plan revision")
+    relaxation = acceptable_relaxation(waiting)
+    if relaxation is None:
+        raise RuntimeError(
+            f"amendment {session.amendments + 1} accepts a relaxation, but plan revision "
+            f"{waiting.number} has no relaxation to accept"
+        )
+    session.accepted.append(relaxation)
+    return relaxation_amendment(relaxation)
 
 
 async def _snapshot(graph: PlanningGraph, thread: str) -> GraphSnapshot:
@@ -398,7 +423,11 @@ def _behaviour(scenario: Scenario, session: _Session, outcome: RunOutcome) -> di
     revision = state.plan if planned and state is not None else None
     flagged = _flagged(session)
     return {
-        "extraction": match_fields(scenario.labels, None if state is None else state.request),
+        "extraction": match_fields(
+            scenario.labels,
+            None if state is None else state.request,
+            accepted=session.accepted,
+        ),
         "flagged": flagged,
         "clarification": check_clarification(scenario, asked=session.asked, flagged=flagged),
         "unneeded_asks": unneeded_asks(scenario, session.asked),

@@ -1,6 +1,7 @@
 """`evals.run` plays tiny scenarios on the small generated world through the full agent graph,
 with scripted LLMs, and scores each final plan (E9 seam 1, ADR 0056)."""
 
+import re
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
@@ -8,7 +9,7 @@ from typing import Any
 import pytest
 from pydantic import BaseModel
 
-from promopilot.agents import BriefReading, LLMPricing, PlanningSettings
+from promopilot.agents import BriefReading, ClearanceAsk, LLMPricing, PlanningSettings
 from promopilot.config import ModelPrice, Settings
 from promopilot.datagen import GeneratedDataset
 from promopilot.domain import (
@@ -418,3 +419,112 @@ async def test_strong_substitutes_are_checked_against_the_pairs_in_the_final_req
     # The small world's Snacks hold one strong pair (SKU0003, SKU0004): it was handed over.
     assert "no strong substitute pair in scope" not in result.detail
     assert "SKU0003 and SKU0004" in result.detail or "none of the 1 strong" in result.detail
+
+
+# ---------------------------------------------------------------- accepting a relaxation
+
+CLEAR = "Crunchy Biscuits 250g"
+"""SKU0005, the small world's Snacks SKU with the most stock cover in North: all of it cannot
+sell in two weeks, so the first plan is infeasible with a proven relaxation (ADR 0044)."""
+OVERREACH = Scenario(
+    name="overreach",
+    group="mid_plan_amendments",
+    brief=(
+        f"Plan a promotion for Snacks in North for weeks {SMALL_AS_OF + 2}-{SMALL_AS_OF + 3} "
+        f"with a marketing budget of ₹20k. Clear 100% of {CLEAR} stock."
+    ),
+    as_of_week=SMALL_AS_OF,
+    seed=1,
+    amendments=({"accept_relaxation": True},),
+    labels={
+        "marketing_budget": 20_000,
+        "clearance_targets": [{"sku_id": "SKU0005", "sell_through": 1.0}],
+    },
+    expect=(
+        {"declares_infeasible": False},
+        {"meets_clearance": "SKU0005"},
+        {"diff_changes": "clearance_targets"},
+    ),
+)
+_ACCEPTED = re.compile(r"lower the clearance target for SKU0005 to ([\d.]+)% sell-through")
+
+
+class ReadsTheAccept:
+    """The Context agent's LLM reads only the amendment that accepts a relaxation, as the live
+    model would; every other call fails, so the rules read the brief (they cannot read an
+    accepted relaxation's text) and the planner and Explainer fall back."""
+
+    def __init__(self) -> None:
+        self.accepted: list[float] = []
+
+    async def complete_structured[T: BaseModel](
+        self, schema: type[T], messages: Sequence[Message]
+    ) -> T:
+        said = [found for m in messages for found in _ACCEPTED.findall(m.content)]
+        if schema is not BriefReading or not said:
+            raise LLMError("down but for the accepted relaxation")
+        sell_through = float(said[-1]) / 100
+        self.accepted.append(sell_through)
+        reading = BriefReading(
+            regions=[Region.NORTH],
+            categories=["Snacks"],
+            sku_ids=None,
+            promo_start_week=SMALL_AS_OF + 2,
+            promo_end_week=SMALL_AS_OF + 3,
+            marketing_budget=20_000.0,
+            min_margin=None,
+            clearance=[ClearanceAsk(products=CLEAR, sell_through=sell_through)],
+        )
+        return schema.model_validate(reading.model_dump())
+
+    async def complete_with_tools(
+        self, tools: Sequence[ToolSpec], messages: Sequence[Message]
+    ) -> ToolTurn:
+        raise LLMError("down")
+
+
+async def test_accepting_a_relaxation_re_plans_a_new_revision_with_the_relaxed_request(
+    world: EvalWorld,
+) -> None:
+    reads = ReadsTheAccept()
+
+    report = await evaluate(world, [OVERREACH], reads)
+
+    played = only_run(report, "overreach")
+    assert played.outcome is RunOutcome.PLANNED, played.error
+    assert played.amendments_applied == 1, "accepting a relaxation is an amendment (ADR 0052)"
+    assert played.revision is not None
+    assert played.revision.number == 2
+    assert played.revision.solver_status is not SolveStatus.INFEASIBLE
+    [relaxed] = reads.accepted
+    assert relaxed < 1.0
+    assert [(p.property, p.passed) for p in played.properties] == [
+        ("declares_infeasible: false", True),
+        ("meets_clearance: SKU0005", True),
+        ("diff_changes: clearance_targets", True),
+    ]
+    # The label states 95%; the accepted relaxation's value is what the request should hold.
+    assert [(m.field, m.expected, m.matched) for m in played.extraction] == [
+        ("marketing_budget", "20000", True),
+        ("clearance_targets", f"SKU0005 {relaxed}", True),
+    ]
+    assert played.explanations[-1].revision == 2
+
+
+async def test_accepting_a_relaxation_a_revision_does_not_have_fails_the_run(
+    world: EvalWorld,
+) -> None:
+    feasible = Scenario.model_validate(
+        {**PLAIN.model_dump(), "amendments": [{"accept_relaxation": True}]}
+    )
+
+    report = await evaluate(world, [feasible])
+
+    played = only_run(report, "plain")
+    assert played.outcome is RunOutcome.FAILED
+    assert played.error == (
+        "RuntimeError: amendment 1 accepts a relaxation, but plan revision 1 has no relaxation "
+        "to accept"
+    )
+    assert played.amendments_applied == 0
+    assert not report.scenarios[0].passed

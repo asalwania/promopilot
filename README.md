@@ -323,6 +323,7 @@ clarifications:                # answers by question id, given only if that ques
 amendments:                    # made in order, each once a plan waits for approval
   - "Budget cut to ₹6 lakh"
   - "Drop West"
+  - accept_relaxation: true    # accept the waiting revision's relaxation, as the API does
 labels:                        # the planning-request fields it states, for extraction accuracy
   regions: [North]
   marketing_budget: 600000
@@ -339,6 +340,8 @@ expect:                        # properties of the outcome, never an exact plan
 ```
 
 A `vague_or_conflicting` scenario must name at least one field with `asks_clarification` or `flags_assumption` (ADR 0062).
+
+An amendment is a text, or `accept_relaxation: true`. Accepting sends the waiting revision's relaxation as an amendment in its own words, exactly as `POST /amend {accept_relaxation: true}` does, and counts in the run's amendments. A revision with no relaxation to accept fails the run, as the API answers 409 (ADR 0076). The labels stay what the scenario states: an accepted relaxation's values replace the labelled values it changes before extraction is scored, and `meets_clearance` checks the target the final request holds, the relaxed one after an accept. The runner never approves; `declares_infeasible: false` says the final revision could be approved. The demo scenario amends twice, accepts revision 3's relaxation and expects a feasible revision 4 whose diff changes `clearance_targets`.
 
 A labelled promo window must start after the as-of week. `no_strong_substitutes_together` fails when the final plan promotes two strong substitutes in scope together, or when the scope has none to test. Two SKUs are strong substitutes when the ground truth makes them a substitute pair and the larger of their true cross-price effects θ is at least 0.5. They are promoted together when they share a region, a promo week and a target segment, and a BUNDLE's partner counts (ADR 0065).
 
@@ -480,6 +483,7 @@ docs/agents/ Agent workflow config (issue tracker, triage labels, domain docs)
 - [ADR 0069: CI replays five tagged smoke scenarios across four weeks and fails on a session with no plan, a broken check or any cassette miss; the API serves the latest report as it was written](docs/adr/0069-smoke-eval-in-ci-and-latest-report-api.md)
 - [ADR 0071: Every API error answers `{detail, code, reference_id}`; inputs are capped in the request types and the body; LLM attempts, tool calls and background graph runs time out from config](docs/adr/0071-one-error-schema-input-limits-and-timeouts.md)
 - [ADR 0072: The `/evals` dashboard shows the latest report as it was written: grouped metric cards with the report's own pass or fail, a sorted and clipped regret chart, and a scenario table whose "trace" is each run's detail in the report](docs/adr/0072-evals-dashboard.md)
+- [ADR 0076: An eval scenario's amendment can accept the waiting revision's relaxation, sent as the API sends it; the labels stay as stated and the accepted values replace them when scored](docs/adr/0076-eval-scenarios-accept-a-relaxation.md)
 
 The domain glossary is [CONTEXT.md](CONTEXT.md).
 
