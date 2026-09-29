@@ -37,6 +37,7 @@ from tests.unit.optimizer.test_solve import (
     CATALOGUE,
     PROPERTY,
     SEED,
+    STARVED,
     FakeFacts,
     Instance,
     Row,
@@ -265,31 +266,68 @@ def test_a_kvi_tolerance_the_brief_turned_on_is_turned_off() -> None:
     assert {c.kind for c in held.relaxation.changes} == {ConstraintKind.CLEARANCE_TARGET}
 
 
-def test_a_timeout_is_never_reported_infeasible() -> None:
-    rows = [
-        Row(line(sku_id, depth_pct=depth), float(depth), window_uplift=depth * 2.0)
-        for sku_id in "ABD"
-        for depth in (10, 20)
-    ]
-    tiny = SolverSettings(
-        time_limit_seconds=1e-9, binding_time_limit_seconds=0, relaxation_time_limit_seconds=1e-9
-    )
-
-    result = solve(
-        request(clearance_targets=target()),
-        options_of(rows, [D_NORTH]),
+def timed_out(
+    rows: list[Row], targets: list[dict[str, Any]], *, check: float = 10.0
+) -> OptimisationResult:
+    """Solve with a closest-plan search and a main solve starved of work, so the closest
+    phase ends unproven at the empty plan; `check` is the relaxation budget, half of which
+    the feasibility check with every target hard may take (ADR 0074)."""
+    return solve(
+        request(clearance_targets=targets),
+        options_of(rows, [empty(sku_id) for sku_id in "AD"]),
         FakeFacts(),
         CompanyPolicy(),
-        settings=tiny,
+        settings=SolverSettings(
+            deterministic_limit=STARVED,
+            binding_deterministic_limit=0,
+            relaxation_deterministic_limit=check,
+        ),
         seed=SEED,
     )
 
-    # D can reach at most 340 of its 500 units: infeasible, but maybe not proven in time.
-    assert result.status in (SolveStatus.INFEASIBLE, SolveStatus.FEASIBLE)
+
+LADDER = [
+    Row(line(sku_id, depth_pct=depth), float(depth), promo_cost=900.0, window_uplift=depth * 5.0)
+    for sku_id in "ABCD"
+    for depth in (10, 20, 30, 40)
+]
+"""A and D each sell at most 200 of their 1,000 units: a 50% target is out of reach, 10% is not."""
+
+
+def test_a_missed_target_the_closest_search_left_unsettled_is_proven_infeasible() -> None:
+    result = timed_out(LADDER, target(0.5, "A", "D"))
+
+    # The closest search timed out, but the check with every target hard proves no plan
+    # reaches them (ADR 0074): infeasible, with the relaxation.
+    assert result.status is SolveStatus.INFEASIBLE
+    assert missed(result) == {("A", Region.NORTH), ("D", Region.NORTH)}
     assert result.relaxation is not None
-    if result.status is SolveStatus.FEASIBLE:
-        assert not result.relaxation.proven
+    assert result.relaxation.proven
+    assert result.relaxation.changes
+    assert result.binding_constraints
+    assert all(c.evidence is BindingEvidence.INFEASIBLE for c in result.binding_constraints)
+
+
+def test_targets_the_closest_search_left_short_are_met_when_a_plan_reaches_them() -> None:
+    result = timed_out(LADDER, target(0.1, "A", "D"))
+
+    # The check finds a plan that reaches every target: the targets stay the brief's.
+    assert result.status is not SolveStatus.INFEASIBLE
+    assert result.clearance_shortfalls == ()
+    assert result.relaxation is None
+    assert {line.sku_id for line in result.plan.lines} >= {"A", "D"}
+
+
+def test_a_missed_target_neither_proven_nor_reached_in_time_is_infeasible_unproven() -> None:
+    result = timed_out(LADDER, target(0.5, "A", "D"), check=STARVED)
+
+    # A plan that misses a target is never FEASIBLE (ADR 0074): approval waits for the
+    # manager to accept the relaxation, which says it is not proven.
+    assert result.status is SolveStatus.INFEASIBLE
     assert result.clearance_shortfalls
+    assert result.relaxation is not None
+    assert not result.relaxation.proven
+    assert all(c.evidence is BindingEvidence.INFEASIBLE for c in result.binding_constraints)
 
 
 def test_a_work_budget_that_runs_out_ends_in_the_same_place_whatever_the_wall_clock_net() -> None:

@@ -18,6 +18,7 @@ from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
 
 from promopilot.domain import (
+    BindingEvidence,
     CompanyPolicy,
     Mechanism,
     PlanLine,
@@ -552,6 +553,54 @@ def test_the_plan_is_optimal_up_to_rounding_at_the_constraint_lines(instance: In
     assert best.tight is None or objective >= best.tight
 
 
+STARVED = 1e-9
+"""A work budget in which CP-SAT settles nothing on these instances, not even a first plan."""
+
+
+def starved(instance: Instance, check: float = STARVED) -> OptimisationResult:
+    """Every phase starved of work, but the feasibility check's share of the relaxation
+    budget: `check`."""
+    return solve(
+        instance.planning(),
+        options_of(instance.rows, instance.clearance),
+        instance.facts,
+        instance.policy,
+        settings=SolverSettings(
+            deterministic_limit=STARVED,
+            binding_deterministic_limit=0,
+            relaxation_deterministic_limit=check,
+        ),
+        seed=SEED,
+    )
+
+
+@PROPERTY
+@given(instances(), st.sampled_from([STARVED, 10.0]))
+def test_a_plan_the_solver_ran_out_of_work_on_still_keeps_every_hard_constraint(
+    instance: Instance, check: float
+) -> None:
+    result = starved(instance, check)
+
+    # A plan that misses a clearance target is never FEASIBLE, proven or not (ADR 0074).
+    missing = bool(result.clearance_shortfalls)
+    assert (result.status is SolveStatus.INFEASIBLE) == missing
+    assert (result.relaxation is not None) == missing
+    picked = list(result.selected)
+    violations = validate_plan(instance.facts_of(picked), instance.planning(), instance.policy)
+    assert all(v.code is ViolationCode.CLEARANCE_TARGET for v in violations)
+    assert {(v.sku_id, v.region) for v in violations} == {
+        (s.sku_id, s.region) for s in result.clearance_shortfalls
+    }
+    assert round(result.objective * 100) == objective_of(instance.rows, picked, instance.facts)
+    if instance.targets:
+        return
+    # Without targets a timed-out plan is empty only when the best plan is (ADR 0074): the
+    # best plan's line with the best margin keeps every constraint alone.
+    best = instance.solve()
+    assert bool(result.plan.lines) == bool(best.plan.lines)
+    assert 0 <= result.objective <= best.objective + 1e-9
+
+
 def never_worse(
     tighter: OptimisationResult, looser: OptimisationResult, instance: Instance
 ) -> None:
@@ -833,6 +882,30 @@ def test_the_same_input_gives_the_same_plan() -> None:
     assert first == again
     assert in_parallel.plan == first.plan
     assert first.objective == pytest.approx(300.0)
+
+
+def test_a_solve_that_finds_nothing_in_time_returns_the_greedy_plan() -> None:
+    a20 = Row(line("A", depth_pct=20), 300.0, promo_cost=600.0)
+    b20 = Row(line("B", depth_pct=20), 250.0, promo_cost=600.0)
+    a10 = Row(line("A", depth_pct=10), 200.0, promo_cost=100.0)
+    c20 = Row(line("C", depth_pct=20), 100.0, promo_cost=100.0)
+    rows = [a20, b20, a10, c20]
+    facts = FakeFacts(pairwise={frozenset((a20.line, c20.line)): 150.0})
+    instance = Instance(rows, facts, budget=1_000.0, min_margin=None, policy=CompanyPolicy())
+
+    result = starved(instance)
+
+    # Best value first (ADR 0074): A20 fits; B20 would break the budget; A10 would be a
+    # second A line; C20 loses more to A20 than it is worth.
+    assert result.status is SolveStatus.FEASIBLE
+    assert chosen(result) == [a20.line]
+    assert result.objective == pytest.approx(300.0)
+    assert result.pairs == 1
+    assert result.binding_constraints
+    assert all(c.evidence is BindingEvidence.UNPROVEN for c in result.binding_constraints)
+    assert validate_plan(instance.facts_of([0]), instance.planning(), instance.policy) == ()
+    # Given the work, the solver proves B20, A10 and C20 best.
+    assert instance.solve().objective == pytest.approx(550.0)
 
 
 def test_an_empty_candidate_set_gives_an_empty_optimal_plan() -> None:

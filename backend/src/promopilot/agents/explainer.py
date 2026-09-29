@@ -544,13 +544,21 @@ def _summary(
 ) -> str:
     parts = [f"Plan revision {revision.number}."]
     status = revision.solver_status
-    if status is SolveStatus.INFEASIBLE:
+    if status is SolveStatus.INFEASIBLE and revision.relaxation and not revision.relaxation.proven:
+        # Not proven: the solver's work ran out first (ADR 0074).
+        parts.append(
+            "Infeasible: no plan found within the optimiser's work budget reaches every "
+            "clearance target, so this is the closest plan found."
+        )
+    elif status is SolveStatus.INFEASIBLE:
         parts.append(
             "Infeasible: no plan reaches every clearance target within the brief's "
             "constraints, so this is the closest plan."
         )
-    elif not revision.lines:
+    elif not revision.lines and status is SolveStatus.OPTIMAL:
         parts.append("No promo option pays for itself within the brief's constraints.")
+    elif not revision.lines:
+        parts.append("No plan was found within the optimiser's work budget.")
     elif status is SolveStatus.OPTIMAL:
         parts.append("The optimiser proved this plan the most profitable within the constraints.")
     else:
