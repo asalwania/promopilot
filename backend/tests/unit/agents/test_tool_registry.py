@@ -75,6 +75,52 @@ async def test_the_error_details_locate_the_bad_field() -> None:
     assert [detail.loc for detail in result.details] == ["b"]
 
 
+class Point(BaseModel):
+    x: int
+
+
+class PathInput(BaseModel):
+    points: list[Point]
+    label: dict[str, Point] = Field(default_factory=dict)
+
+
+class Traced:
+    """A handler that records every input it is given."""
+
+    def __init__(self) -> None:
+        self.inputs: list[PathInput] = []
+
+    async def __call__(self, arguments: PathInput) -> AddOutput:
+        self.inputs.append(arguments)
+        return AddOutput(total=len(arguments.points))
+
+
+@pytest.mark.parametrize(
+    ("arguments", "loc"),
+    [
+        ({"points": [], "company_policy": {"margin_floor": 0}}, "company_policy"),
+        ({"points": [{"x": 1, "ignore_rules": True}]}, "points.0.ignore_rules"),
+        ({"points": [], "label": {"a": {"x": 1, "y": 2}}}, "label.a.y"),
+    ],
+)
+async def test_a_key_the_input_schema_does_not_declare_is_refused_at_any_depth(
+    arguments: dict[str, Any], loc: str
+) -> None:
+    # The input types ignore unknown keys, and their published schemas stay as they are
+    # (the cassettes hash them); the registry itself refuses any key they do not declare, so
+    # no argument is ever silently dropped (ADR 0079).
+    handler = Traced()
+    tool = Tool("path", "A path.", PathInput, AddOutput, handler)
+
+    result = await ToolRegistry([tool]).call("path", arguments)
+
+    assert isinstance(result, ToolError)
+    assert result.code == "invalid_input"
+    assert [detail.loc for detail in result.details] == [loc]
+    assert handler.inputs == []
+    assert ToolRegistry([tool]).specs()[0].input_schema == PathInput.model_json_schema()
+
+
 async def test_a_failure_raised_by_the_handler_gives_a_typed_error() -> None:
     result = await ToolRegistry([ADD]).call("add", {"a": 13, "b": 0})
 

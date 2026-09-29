@@ -7,9 +7,16 @@ tolerance wider than policy's), the policy value applies and the value is flagge
 rules from here, so they can never disagree.
 """
 
+from collections.abc import Iterable
 from dataclasses import dataclass
 
-from promopilot.domain import CompanyPolicy, ConstraintSource, PlanningRequest, PolicyFinding
+from promopilot.domain import (
+    CompanyPolicy,
+    ConstraintSource,
+    PlanLine,
+    PlanningRequest,
+    PolicyFinding,
+)
 
 
 @dataclass(frozen=True)
@@ -104,3 +111,22 @@ def _finding(field: str, requested: float, applied: float, reason: str) -> Polic
         applied=applied,
         message=f"{reason}; company policy is kept, since a brief may only tighten it",
     )
+
+
+def deeper_than_policy(lines: Iterable[PlanLine], policy: CompanyPolicy) -> str | None:
+    """Why a plan line an agent asks about is deeper than the company-policy maximum discount,
+    or None when none is (ADR 0079).
+
+    The what-if tools (`estimate_demand`, `simulate_plan`) refuse such a line, so no text can
+    make them price one. It reads each line's stated depth, which is its discount for every
+    mechanism but FIXED_PRICE, whose charm price may sit a few rupees deeper; a plan's own
+    lines are checked on their effective prices by `validate_plan`.
+    """
+    for line in lines:
+        if line.depth_pct > policy.max_discount_pct:
+            return (
+                f"{line.sku_id} in {line.region} is {line.depth_pct}% off, deeper than the "
+                f"company-policy maximum discount of {policy.max_discount_pct}%; company "
+                "policy binds every plan line"
+            )
+    return None

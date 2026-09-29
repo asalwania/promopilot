@@ -218,3 +218,22 @@ async def test_an_invalid_competitor_reaction_is_invalid_input(
     assert isinstance(result, ToolError)
     assert result.code == "invalid_input"
     assert [detail.loc for detail in result.details] == [loc]
+
+
+async def test_a_line_deeper_than_the_company_policy_maximum_is_invalid_input(
+    tools: ToolRegistry, skus: list[str]
+) -> None:
+    # Company policy binds the what-ifs too, whatever the LLM was told (ADR 0079).
+    at_most = await tools.call("simulate_plan", {"lines": [line(skus[0], depth_pct=50)]})
+    deeper = await tools.call(
+        "simulate_plan",
+        {"lines": [line(skus[0]), line(skus[1], depth_pct=95)]},
+    )
+
+    assert isinstance(at_most, ToolOk)
+    assert isinstance(deeper, ToolError)
+    assert deeper.code == "invalid_input"
+    assert deeper.message == (
+        f"{skus[1]} in North is 95% off, deeper than the company-policy maximum discount of "
+        "50%; company policy binds every plan line"
+    )

@@ -46,6 +46,12 @@ from promopilot.agents import (
     start_planning,
 )
 from promopilot.api.demo import DemoRecordings
+from promopilot.api.rate_limit import (
+    TOO_MANY_REQUESTS,
+    RateLimiter,
+    RateLimitGroup,
+    rate_limited,
+)
 from promopilot.api.schemas import (
     AmendRequest,
     ApproveRequest,
@@ -420,8 +426,11 @@ class SessionService:
         await self._store.mark_failed(session_id, reason)
 
 
-def sessions_router(sessions: SessionService) -> APIRouter:
+def sessions_router(sessions: SessionService, limiter: RateLimiter | None = None) -> APIRouter:
+    """The session routes; creating, clarifying and amending a session share the client's
+    planning budget when `limiter` is set (ADR 0079)."""
     router = APIRouter(prefix="/api/sessions", tags=["sessions"])
+    planning = rate_limited(limiter, RateLimitGroup.PLANNING)
     decision_responses: dict[int | str, dict[str, object]] = {
         status.HTTP_404_NOT_FOUND: {"description": "Unknown session"},
         status.HTTP_409_CONFLICT: {
@@ -434,7 +443,11 @@ def sessions_router(sessions: SessionService) -> APIRouter:
     @router.post(
         "",
         status_code=status.HTTP_202_ACCEPTED,
-        responses={status.HTTP_503_SERVICE_UNAVAILABLE: {"description": "Planning is unavailable"}},
+        responses={
+            status.HTTP_503_SERVICE_UNAVAILABLE: {"description": "Planning is unavailable"},
+            **TOO_MANY_REQUESTS,
+        },
+        dependencies=planning,
     )
     async def create_session(body: CreateSessionRequest) -> SessionCreated:
         try:
@@ -485,7 +498,9 @@ def sessions_router(sessions: SessionService) -> APIRouter:
             status.HTTP_404_NOT_FOUND: {"description": "Unknown session"},
             status.HTTP_409_CONFLICT: {"description": "The session is not awaiting clarification"},
             status.HTTP_503_SERVICE_UNAVAILABLE: {"description": "Planning is unavailable"},
+            **TOO_MANY_REQUESTS,
         },
+        dependencies=planning,
     )
     async def clarify_session(session_id: UUID, body: ClarifyRequest) -> SessionResponse:
         """Answer the open clarification questions; planning resumes in the background."""
@@ -510,7 +525,9 @@ def sessions_router(sessions: SessionService) -> APIRouter:
                 "(accept_relaxation) its latest revision has no relaxation"
             },
             status.HTTP_503_SERVICE_UNAVAILABLE: {"description": "Planning is unavailable"},
+            **TOO_MANY_REQUESTS,
         },
+        dependencies=planning,
     )
     async def amend_session(session_id: UUID, body: AmendRequest) -> SessionResponse:
         """Amend the planning request (AG-05); a new plan revision, with its diff from the

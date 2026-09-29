@@ -18,6 +18,7 @@ from promopilot.api.evals import EvalReportService, evals_router
 from promopilot.api.models import ModelService, models_router
 from promopilot.api.planning import build_planning
 from promopilot.api.plans import PlanService, plans_router
+from promopilot.api.rate_limit import RateLimiter
 from promopilot.api.relations import RelationsService, relations_router
 from promopilot.api.schemas import HealthChecks, HealthResponse, LLMStatus
 from promopilot.api.sessions import SessionService, sessions_router
@@ -51,6 +52,7 @@ def create_app(
     evals: EvalReportService | None = None,
     max_request_body_bytes: int = DEFAULT_MAX_REQUEST_BODY_BYTES,
     llm: LLMStatus | None = None,
+    rate_limiter: RateLimiter | None = None,
 ) -> FastAPI:
     llm_status = llm or LLMStatus(mode="replay", provider="replay", model=None)
 
@@ -74,7 +76,8 @@ def create_app(
     app = FastAPI(title="PromoPilot API", version=__version__, lifespan=lifespan)
     # One error schema for every error, and a request id on every response (ADR 0071).
     install_error_handling(app, max_request_body_bytes=max_request_body_bytes)
-    app.include_router(sessions_router(sessions))
+    # Per-client limits on starting and advancing planning, when set (ADR 0079).
+    app.include_router(sessions_router(sessions, rate_limiter))
     if models is not None:
         app.include_router(models_router(models))
     if competitors is not None:
@@ -84,7 +87,7 @@ def create_app(
     if catalog is not None:
         app.include_router(catalog_router(catalog))
     if plans is not None:
-        app.include_router(plans_router(plans))
+        app.include_router(plans_router(plans, rate_limiter))
     if evals is not None:
         app.include_router(evals_router(evals))
 
@@ -169,6 +172,7 @@ def build_app() -> FastAPI:
         sessions=sessions,
         max_request_body_bytes=settings.max_request_body_bytes,
         llm=LLMStatus.of(settings),
+        rate_limiter=RateLimiter.from_settings(settings),
         models=models,
         competitors=CompetitorService(data, policy=policy),
         relations=RelationsService(planning.relations_model, data),

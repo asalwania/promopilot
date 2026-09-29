@@ -60,6 +60,11 @@ class Settings(BaseSettings):
     session_timeout_seconds: float = Field(default=900.0, gt=0)
     # The largest request body the API reads (ADR 0071); a larger one is 413.
     max_request_body_bytes: int = Field(default=256 * 1024, ge=1024)
+    # Per-client rate limits (ADR 0079): requests a minute, in bursts of up to the limit. Creating,
+    # amending and clarifying a session share the planning budget; re-simulating a plan has its
+    # own. A request over the limit is 429 with Retry-After; 0 turns a limit off.
+    rate_limit_planning_per_minute: int = Field(default=20, ge=0)
+    rate_limit_simulations_per_minute: int = Field(default=30, ge=0)
 
     # The live trace (ADR 0047): how often an open SSE stream looks for new trace events, in
     # seconds, and whether logs are JSON lines (`json`) or readable text (`console`).

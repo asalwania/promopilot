@@ -204,3 +204,19 @@ async def test_the_model_is_resolved_on_every_call(
     source.loaded = (entry, model)
 
     assert isinstance(await tools.call("estimate_demand", {"options": [option(skus[0])]}), ToolOk)
+
+
+async def test_an_option_deeper_than_the_company_policy_maximum_is_invalid_input(
+    tools: ToolRegistry, skus: list[str]
+) -> None:
+    # Company policy binds the what-ifs too, whatever the LLM was told (ADR 0079).
+    result = await tools.call(
+        "estimate_demand", {"options": [option(skus[0]), option(skus[1], depth_pct=80)]}
+    )
+
+    assert isinstance(result, ToolError)
+    assert result.code == "invalid_input"
+    assert result.message == (
+        f"{skus[1]} in North is 80% off, deeper than the company-policy maximum discount of "
+        f"{POLICY.max_discount_pct}%; company policy binds every plan line"
+    )

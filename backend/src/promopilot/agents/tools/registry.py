@@ -5,9 +5,10 @@ a pydantic input and output model (their JSON schemas are what the LLM sees) and
 handler. Its dependencies are bound when the tool is built, never passed by the LLM.
 
 `ToolRegistry.call` never raises for a bad call: an unknown tool, arguments that break the
-input schema, a `ToolCallError` from the handler, or a handler still running when the
-registry's timeout (`TOOL_TIMEOUT_SECONDS`, ADR 0071) runs out all come back as a `ToolError`
-the planner can hand to the LLM (ADR 0025). A bug in a handler still raises.
+input schema (a key it does not declare included, at any depth: ADR 0079), a `ToolCallError`
+from the handler, or a handler still running when the registry's timeout
+(`TOOL_TIMEOUT_SECONDS`, ADR 0071) runs out all come back as a `ToolError` the planner can hand
+to the LLM (ADR 0025). A bug in a handler still raises.
 """
 
 import asyncio
@@ -121,7 +122,10 @@ class ToolRegistry:
                 message=f"no tool named {name}; known tools: {', '.join(self._tools)}",
             )
         try:
-            parsed = tool.input_type.model_validate(arguments)
+            # A key the input types do not declare is refused at any depth, not dropped: the
+            # published schemas stay as they are (cassettes hash them), so this is checked
+            # here (ADR 0079).
+            parsed = tool.input_type.model_validate(arguments, extra="forbid")
         except ValidationError as error:
             return ToolError(
                 code="invalid_input",
