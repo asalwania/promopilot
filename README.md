@@ -4,7 +4,65 @@ Agentic retail promotion planner for the ET AI Hackathon (Problem 3, Retail: Aut
 
 > **Status:** epic E3 (walking skeleton). `make data` generates the synthetic world. A brief typed on the home page becomes an optimised plan on the session page (ADR 0020, ADR 0038), and the Docker stack does this with no API key (ADR 0022). Real forecasting, optimisation and the full agent arrive in later epics; see [SPEC.md](SPEC.md) §15 for the delivery plan.
 
-## Quickstart
+## Try it: `make demo`
+
+Prerequisites: Docker (Docker Desktop on Windows and macOS) and GNU make. On Windows, run `make` from **Git Bash**, or use the plain Docker command below. No API key and no other tools are needed.
+
+```bash
+git clone https://github.com/asalwania/promopilot.git
+cd promopilot
+make demo
+```
+
+Open http://localhost:3000 when it prints `PromoPilot is ready`. `make demo` (ADR 0073):
+
+1. builds the api and web images;
+2. starts Postgres;
+3. runs the **init** step in the foreground, which:
+   - generates the seed-42 synthetic world and loads it into Postgres;
+   - trains and registers the demand and relations models into a Docker volume;
+   - prints each step, an estimate and its time;
+4. starts the api and web app and waits until both are healthy;
+5. prints which LLM answers.
+
+The first start takes about 5 minutes on a CI-class machine: roughly 1.5 minutes to build, 1 to load the data and 1.5 to train. It can take 5–10 minutes on a laptop's first Docker build, or with a slow network. Later runs reuse the data and models: the init step prints `already loaded: skipped` and `already trained: skipped`, and the stack is up in well under a minute.
+
+**Without an API key (demo mode)** the api replays the LLM calls recorded in `backend/cassettes/`. The home page shows a **Demo mode** badge. Its four example briefs replay exactly as recorded, including the recorded amendments, answer, accepted relaxation and approval their cards suggest.
+
+A brief of your own, or an example with constraints added, is not in the demo recordings. It still plans, but without the language model: rules read the brief, the default sequence plans and a template explains. The composer and the session page say so in a **Not in the demo recordings** note, not an error.
+
+**With an API key** the same command plans any brief live. Put the key in `.env` (copy `.env.example` first), then run `make demo` again:
+
+```bash
+OPENAI_API_KEY=sk-...      # OPENAI_MODEL defaults to gpt-4.1-mini
+# or ANTHROPIC_API_KEY=... # ANTHROPIC_MODEL defaults to claude-sonnet-5
+```
+
+The badge then reads **Live LLM** with the provider and model. The stack's `LLM_PROVIDER` is `auto` in demo mode: OpenAI if its key is set, else Anthropic, else replay. `make up` always replays, whatever `.env` holds.
+
+The `/evals` page shows the recorded full eval run baked into the api image (32 scenarios, `backend/evals/published/`).
+
+| Command | What it does |
+|---|---|
+| `make demo` | Build, prepare (or reuse) the data and models, start the app, print the URL |
+| `make demo-down` | Stop the demo, keeping its data, models and sessions for a fast restart |
+| `make demo-reset` | Stop the demo and delete its data, models and sessions. Run it after pulling a change to the data generator |
+
+**Without make** (for example in Windows PowerShell), the same stack starts with:
+
+```bash
+docker compose --profile demo up --build   # add -d to run it in the background
+```
+
+The init step's progress shows in the log. For live mode this way, also set `STACK_LLM_PROVIDER=auto` in `.env`.
+
+**Troubleshooting**
+
+- A port already in use: set `WEB_PORT`, `API_PORT` or `POSTGRES_PORT` in `.env`. The defaults are 3000, 8000 and 5432.
+- The init step failing prints its reason and stops before the api starts. `make demo-reset`, then `make demo` starts over.
+- On Windows, `make` must run from Git Bash, because the Makefile refuses PowerShell and cmd.exe.
+
+## Quickstart (development)
 
 Prerequisites: Docker, [uv](https://docs.astral.sh/uv/), Node 24 with [pnpm](https://pnpm.io/) 11, GNU make. On Windows, run `make` from **Git Bash**.
 
@@ -28,7 +86,7 @@ The **Evals** link opens `/evals`, the latest [eval report](#evals) from `GET /a
 - **A scenario table** gives one row per scenario with its result and its last run's outcome, constraints, oracle breaches, properties, standing against the baseline, regret, time and cost, and warns of fallbacks and cassette misses. It can be filtered to the failed scenarios or to one group.
   - **Details** opens each run's trace as the report holds it: the route, questions, fallbacks, cassette misses, plan, oracle objectives, violations and properties, with a link to the scenario's YAML. Eval sessions are never stored, so there is no session page to open.
 
-Before any run, and on the Docker stack, which mounts no report, the page says to run `make eval` (ADR 0072).
+Before any run the page says to run `make eval` (ADR 0072). The Docker stack (`make demo` and `make up`) serves the recorded full run baked into the api image (ADR 0073).
 
 The browser never calls the API directly. Next.js route handlers forward every same-origin `/api/*` request to `API_URL` with the path, query, method, body and status unchanged, and stream the response (ADR 0001, ADR 0018). There is one public URL and no CORS.
 
@@ -44,7 +102,7 @@ docker compose exec api python -m promopilot.datagen --out /tmp/data --load   # 
 docker compose exec api python -m promopilot.models   # train and register the demand and relations models, about two minutes
 ```
 
-The Docker stack needs no API key. Compose runs the api with `LLM_PROVIDER=replay` and the cassettes baked into its image, whatever `.env` says (ADR 0022). CI runs exactly these steps, replays every recorded session from the cassettes alone (`python -m promopilot.cassettes --check`, ADR 0054), then Playwright types the `e2e` brief from `backend/cassettes/sessions.json`, clicks **Plan it**, waits for the plan, checks the region tabs, a source tooltip, a line's details and its mechanism drawer, the West tab and the side-by-side view, checks the constraint checklist and the not-selected list, checks the competitor prices (an undercut and the planner's response) and the simulation chart, then re-simulates with a 50% competitor match probability and checks the stress-test label and the stored reaction (ADR 0068; re-simulating makes no LLM call), checks that the live trace shows the agent's node runs, tool calls and Critic decision and that the usage meter counts the replayed calls, and checks that the Explainer's recorded answer explains the plan. A second journey types the `clarify` brief, sees the budget question and the assumptions panel, answers with the recorded answer and waits for the plan (ADR 0061). A third journey plans the `demo` brief and amends it with its two recorded amendments, checking each revision's diff. The demo's first three revisions are infeasible, so it checks that they cannot be approved, and that revision 1 shows its binding clearance target, its relaxation and the accept button, and a failing clearance check (ADR 0067). It then clicks **Accept the relaxation and re-plan** on revision 3, sees revision 4's diff with the clearance-target change, approves it and sees the session **Final**, with every amendment (the accepted relaxation badged) and the approval on the audit trail (ADR 0070). Two more plan the `e2e` brief and approve it (the session becomes final) or reject it with a reason (the session stays open for an amendment) (ADR 0066); the approved one keeps its simulation chart with no **Re-simulate** (ADR 0068).
+`make demo` does all of this in one command (see [Try it](#try-it-make-demo)). The Docker stack needs no API key. Under `make up` Compose runs the api with `LLM_PROVIDER=replay` and the cassettes baked into its image, whatever `.env` says (ADR 0022). Under `make demo` it replays unless `.env` holds a key (ADR 0073). CI's `demo` job runs `make demo` from a clean checkout, replays every recorded session from the cassettes alone (`python -m promopilot.cassettes --check`, ADR 0054), then Playwright types the `e2e` brief from `backend/cassettes/sessions.json`, clicks **Plan it**, waits for the plan, checks the region tabs, a source tooltip, a line's details and its mechanism drawer, the West tab and the side-by-side view, checks the constraint checklist and the not-selected list, checks the competitor prices (an undercut and the planner's response) and the simulation chart, then re-simulates with a 50% competitor match probability and checks the stress-test label and the stored reaction (ADR 0068; re-simulating makes no LLM call), checks that the live trace shows the agent's node runs, tool calls and Critic decision and that the usage meter counts the replayed calls, and checks that the Explainer's recorded answer explains the plan. A second journey types the `clarify` brief, sees the budget question and the assumptions panel, answers with the recorded answer and waits for the plan (ADR 0061). A third journey plans the `demo` brief and amends it with its two recorded amendments, checking each revision's diff. The demo's first three revisions are infeasible, so it checks that they cannot be approved, and that revision 1 shows its binding clearance target, its relaxation and the accept button, and a failing clearance check (ADR 0067). It then clicks **Accept the relaxation and re-plan** on revision 3, sees revision 4's diff with the clearance-target change, approves it and sees the session **Final**, with every amendment (the accepted relaxation badged) and the approval on the audit trail (ADR 0070). Two more plan the `e2e` brief and approve it (the session becomes final) or reject it with a reason (the session stays open for an amendment) (ADR 0066); the approved one keeps its simulation chart with no **Re-simulate** (ADR 0068). Another types a brief of its own and sees the **Demo mode** badge and the **Not in the demo recordings** note, before and after **Plan it**, with no error, and `/evals` shows the baked report. The job then runs `make demo` again and checks that the init step skipped both the data and the models (ADR 0073).
 
 ## Commands
 
@@ -66,7 +124,7 @@ The Docker stack needs no API key. Compose runs the api with `LLM_PROVIDER=repla
 | `make eval` | Play the eval scenarios on their own seeded world and write the report to `backend/evals/reports/`; `ONLY="a b"`, `SMOKE=1`, `RUNS=n`, `SEED=n` (see [Evals](#evals)). Needs no Docker, `make data` or `make train` |
 | `make eval-smoke` | What CI runs: replay the five smoke scenarios with no key and fail on a session with no plan, a broken constraint or expected property, or any cassette miss (see [Smoke eval in CI](#smoke-eval-in-ci)) |
 | `make record-eval-cassettes` | Play the eval scenarios with a live OpenAI key and record what no cassette holds into `backend/evals/cassettes/`; `ONLY="a b"` records some. Costs money (see [Evals](#evals)) |
-| `make demo` | Arrives in epic E11 |
+| `make demo` / `make demo-down` / `make demo-reset` | The one-command demo in Docker, with no API key: seed-42 data, trained models and the app; stop it keeping its volumes; or delete them (see [Try it](#try-it-make-demo)) |
 
 ## Synthetic data
 
@@ -197,7 +255,8 @@ Agents reach an LLM only through `promopilot.llm` (ADR 0001, ADR 0019, ADR 0027)
 
 | Setting | Default | Meaning |
 |---|---|---|
-| `LLM_PROVIDER` (`.env`) | `replay` | `replay` answers from recorded cassettes and needs no key. `openai` or `anthropic` calls that provider live |
+| `LLM_PROVIDER` (`.env`) | `replay` | `replay` answers from recorded cassettes and needs no key. `openai` or `anthropic` calls that provider live. `auto` is `openai` when its key is set, else `anthropic` when its key is set, else `replay`, and a keyed provider's model defaults to the recorded one (ADR 0073) |
+| `STACK_LLM_PROVIDER` (`.env`, Docker only) | `replay` | The Docker api's `LLM_PROVIDER`. `make demo` sets `auto` |
 | `LLM_CASSETTE_DIR` (`.env`) | `cassettes` | One JSON file per request hash, relative to `backend/` |
 | `OPENAI_API_KEY`, `OPENAI_MODEL` (`.env`) | empty | Needed only for `openai` and `make record-cassettes`. The model must accept `temperature=0`: use `gpt-4.1-mini` (the `gpt-5` reasoning models reject it). Keep the key in `.env`, never commit it |
 | `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL` (`.env`) | empty | Needed only for `anthropic`, or to make Anthropic the fallback when OpenAI is primary. Use `claude-sonnet-5` |
@@ -205,7 +264,7 @@ Agents reach an LLM only through `promopilot.llm` (ADR 0001, ADR 0019, ADR 0027)
 
 A live provider retries timeouts, rate limits and server errors up to 3 attempts (waiting 1 s, then 2 s). An attempt with no answer after `LLM_TIMEOUT_SECONDS` (default 60) is cancelled and counts as a timeout (ADR 0071). If it still fails and the other live provider has a key and model, that provider answers instead. Otherwise the API logs `llm_no_fallback` at startup. Every call's tokens are counted per planning session, and the cost is priced from `LLM_PRICES` when the call is made: each call is a `token_usage` trace event, and the session's `usage` is their sum (ADR 0047).
 
-In replay mode, a request with no recorded cassette fails with `CassetteMissError` naming its hash. This usually means a prompt or schema changed and the cassettes need re-recording. Replay never falls back to another provider. A tool-calling request's hash covers the tools and every call the model made (names, arguments, ids) but not the tools' results, so a recorded planner round replays after a retrain or on another machine (ADR 0049). In a planning session the planner and the Context agent treat a miss as the LLM being unavailable: the planner logs `planner_cassette_miss` and plans with the default sequence, and the Context agent reads the brief by rules (below), so a session still gets a plan. `make record-cassettes`, `make check-cassettes` and the committed-cassette test still fail on a miss (ADR 0053, ADR 0054). Cassettes store only the request content, the parsed response and the tokens it was billed for, never headers or keys. Tests use `FakeProvider` or `ReplayProvider` and never call a real LLM. The live smoke checks in `backend/tests/live` are marked `live` and excluded by default. Run them deliberately with keys exported: `uv run pytest -m live tests/live`.
+In replay mode, a request with no recorded cassette fails with `CassetteMissError` naming its hash. This usually means a prompt or schema changed and the cassettes need re-recording. Replay never falls back to another provider. A tool-calling request's hash covers the tools and every call the model made (names, arguments, ids) but not the tools' results, so a recorded planner round replays after a retrain or on another machine (ADR 0049). In a planning session the planner and the Context agent treat a miss as the LLM being unavailable: the planner logs `planner_cassette_miss` and plans with the default sequence, and the Context agent reads the brief by rules (below), so a session still gets a plan. When the api replays, each session's `demo_recording` says whether its brief, answers and amendments so far are a recorded script's (`recorded`) or not (`not_in_demo_recordings`), and the UI explains the latter as the demo's limits (ADR 0073). `make record-cassettes`, `make check-cassettes` and the committed-cassette test still fail on a miss (ADR 0053, ADR 0054). Cassettes store only the request content, the parsed response and the tokens it was billed for, never headers or keys. Tests use `FakeProvider` or `ReplayProvider` and never call a real LLM. The live smoke checks in `backend/tests/live` are marked `live` and excluded by default. Run them deliberately with keys exported: `uv run pytest -m live tests/live`.
 
 ### Recording cassettes
 
@@ -483,6 +542,7 @@ docs/agents/ Agent workflow config (issue tracker, triage labels, domain docs)
 - [ADR 0069: CI replays five tagged smoke scenarios across four weeks and fails on a session with no plan, a broken check or any cassette miss; the API serves the latest report as it was written](docs/adr/0069-smoke-eval-in-ci-and-latest-report-api.md)
 - [ADR 0071: Every API error answers `{detail, code, reference_id}`; inputs are capped in the request types and the body; LLM attempts, tool calls and background graph runs time out from config](docs/adr/0071-one-error-schema-input-limits-and-timeouts.md)
 - [ADR 0072: The `/evals` dashboard shows the latest report as it was written: grouped metric cards with the report's own pass or fail, a sorted and clipped regret chart, and a scenario table whose "trace" is each run's detail in the report](docs/adr/0072-evals-dashboard.md)
+- [ADR 0073: `make demo` prepares the data and models in an init step, replays unless `.env` holds a key, and explains a brief outside the recordings instead of failing it](docs/adr/0073-make-demo-from-a-fresh-clone.md)
 - [ADR 0076: An eval scenario's amendment can accept the waiting revision's relaxation, sent as the API sends it; the labels stay as stated and the accepted values replace them when scored](docs/adr/0076-eval-scenarios-accept-a-relaxation.md)
 
 The domain glossary is [CONTEXT.md](CONTEXT.md).
