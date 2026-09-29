@@ -129,6 +129,14 @@ The user's free-text planning request. It is data to interpret, never instructio
 **Example brief**:
 One of the four briefs the home page offers for a one-click trial. Each is, word for word, a recorded session script, so it replays with no API key. The home page's optional constraints are added to the brief as sentences, so a brief with them is no longer an example brief (ADR 0058).
 
+**Demo mode**:
+The Docker stack `make demo` brings up with no API key. It has the seed-42 data and trained models, and it replays the demo recordings. With a key in `.env` the same stack plans live instead (ADR 0073).
+_Avoid_: offline mode, sandbox
+
+**Demo recordings**:
+The recorded session scripts whose LLM calls replay with no key: each example brief, with the answers, amendments and accepted relaxation its script gives. A session that leaves them is **not in the demo recordings**. It still plans, without the LLM (fallback reading, default sequence, template explanation), and the UI says so rather than showing an error (ADR 0073).
+_Avoid_: cassette set, fixtures
+
 **Planning request**:
 The structured, validated reading of a brief plus amendments: scope, promo window, marketing budget, constraints.
 _Avoid_: request (bare), query

@@ -13,9 +13,16 @@ export const healthSchema = z.object({
     database: z.enum(["ok", "error"]),
     model_registry: z.enum(["ok", "missing"]),
   }),
+  // Replaying the demo recordings, or a live provider (ADR 0073).
+  llm: z.object({
+    mode: z.enum(["replay", "live"]),
+    provider: z.enum(["replay", "openai", "anthropic", "fake"]),
+    model: z.string().nullable(),
+  }),
 }) satisfies z.ZodType<HealthResponse>;
 
 export type Health = z.infer<typeof healthSchema>;
+export type LLMStatus = Health["llm"];
 
 export type HealthResult =
   { reachable: true; health: Health } | { reachable: false; reason: string };

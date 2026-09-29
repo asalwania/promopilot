@@ -21,6 +21,8 @@ RUN mkdir models && chown app:app models
 COPY --from=builder --chown=app:app /app/.venv /app/.venv
 # Recorded LLM responses: the image plans briefs with LLM_PROVIDER=replay and no key (ADR 0019).
 COPY --chown=app:app cassettes ./cassettes
+# The recorded full eval run that GET /api/evals/latest serves in Docker (ADR 0073).
+COPY --chown=app:app evals/published ./evals/published
 ENV PATH="/app/.venv/bin:$PATH" PYTHONUNBUFFERED=1
 USER app
 EXPOSE 8000

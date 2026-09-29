@@ -15,6 +15,8 @@ from pydantic import (
 
 from promopilot.agents.tools.estimate_demand import ModelVersion
 from promopilot.agents.tools.get_relations import Complement, Substitute
+from promopilot.api.demo import DemoRecording
+from promopilot.config import Settings
 from promopilot.domain import (
     Amendment,
     Assumption,
@@ -77,10 +79,29 @@ class HealthChecks(BaseModel):
     model_registry: Literal["ok", "missing"]
 
 
+class LLMStatus(BaseModel):
+    """Which LLM answers the planning agents (ADR 0073): the committed cassettes (`replay`, the
+    no-key demo) or a live provider and its model."""
+
+    mode: Literal["replay", "live"]
+    provider: Literal["replay", "openai", "anthropic", "fake"]
+    model: str | None = Field(description="The live provider's model; null when replaying.")
+
+    @classmethod
+    def of(cls, settings: Settings) -> "LLMStatus":
+        provider = settings.llm_provider
+        if provider == "openai":
+            return cls(mode="live", provider=provider, model=settings.openai_model)
+        if provider == "anthropic":
+            return cls(mode="live", provider=provider, model=settings.anthropic_model)
+        return cls(mode="replay", provider=provider, model=None)
+
+
 class HealthResponse(BaseModel):
     status: Literal["ok", "degraded"]
     version: str
     checks: HealthChecks
+    llm: LLMStatus
 
 
 QUERY_MAX_CHARS = 64
@@ -133,9 +154,17 @@ class SessionResponse(BaseModel):
     amendments: list[Amendment] = Field(
         description="Every amendment to the planning request, oldest first (ADR 0052)."
     )
+    demo_recording: DemoRecording | None = Field(
+        default=None,
+        description="Replaying with no API key: `recorded` while the brief, answers and "
+        "amendments so far are a recorded session's, which replays; `not_in_demo_recordings` "
+        "once not, and it plans without the language model. Null with a live LLM (ADR 0073).",
+    )
 
     @classmethod
-    def of(cls, session: PlanningSession) -> "SessionResponse":
+    def of(
+        cls, session: PlanningSession, *, demo_recording: DemoRecording | None = None
+    ) -> "SessionResponse":
         return cls(
             session_id=session.id,
             status=session.status,
@@ -149,6 +178,7 @@ class SessionResponse(BaseModel):
             questions=list(session.questions),
             clarifications=list(session.clarifications),
             amendments=list(session.amendments),
+            demo_recording=demo_recording,
         )
 
 

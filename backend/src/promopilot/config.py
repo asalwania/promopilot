@@ -1,9 +1,9 @@
 """Runtime configuration, read from environment variables (see .env.example)."""
 
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, SecretStr
+from pydantic import BaseModel, ConfigDict, Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -34,6 +34,8 @@ class Settings(BaseSettings):
 
     # LLM layer (ADR 0001, ADR 0019, ADR 0027). `replay` needs no key; relative paths are from
     # backend/. The live provider not chosen by LLM_PROVIDER is the fallback, when configured.
+    # `auto` (the demo, ADR 0073) is resolved here, before anything reads it: openai when its
+    # key is set, else anthropic when its key is set, else replay.
     llm_provider: Literal["openai", "anthropic", "replay", "fake"] = "replay"
     llm_cassette_dir: Path = Path("cassettes")
     openai_api_key: SecretStr | None = None
@@ -96,3 +98,28 @@ class Settings(BaseSettings):
     critic_group_spend_share: float = Field(default=0.80, gt=0, le=1)
     critic_cannibalisation_share: float = Field(default=0.50, gt=0)
     critic_stockout_probability: float = Field(default=0.20, gt=0, le=1)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _resolve_auto_provider(cls, values: Any) -> Any:
+        if not isinstance(values, dict) or values.get("llm_provider") != "auto":
+            return values
+        resolved = dict(values)
+        keyed = [name for name in AUTO_MODELS if _secret_text(resolved.get(f"{name}_api_key"))]
+        # A key alone is enough: each keyed provider's model defaults, so the other one is
+        # still the fallback (ADR 0027).
+        for name in keyed:
+            if not resolved.get(f"{name}_model"):
+                resolved[f"{name}_model"] = AUTO_MODELS[name]
+        resolved["llm_provider"] = keyed[0] if keyed else "replay"
+        return resolved
+
+
+AUTO_MODELS = {"openai": "gpt-4.1-mini", "anthropic": "claude-sonnet-5"}
+"""The model `LLM_PROVIDER=auto` uses when only the key is set (ADR 0022, ADR 0027)."""
+
+
+def _secret_text(value: object) -> str:
+    if isinstance(value, SecretStr):
+        return value.get_secret_value()
+    return value if isinstance(value, str) else ""

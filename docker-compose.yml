@@ -17,15 +17,37 @@ services:
       timeout: 5s
       retries: 30
 
+  # `make demo` (the `demo` profile, ADR 0073): before the api starts, generate and load the
+  # seed-42 world and train the models into the volume, skipping what is already done.
+  init:
+    profiles: [demo]
+    build: ./backend
+    command: ["python", "-m", "promopilot.demo"]
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-promopilot}:${POSTGRES_PASSWORD:-promopilot}@postgres:5432/${POSTGRES_DB:-promopilot}
+      MODEL_DIR: models
+    volumes:
+      - model-artifacts:/app/models
+    depends_on:
+      postgres:
+        condition: service_healthy
+
   api:
     build: ./backend
     environment:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-promopilot}:${POSTGRES_PASSWORD:-promopilot}@postgres:5432/${POSTGRES_DB:-promopilot}
-      # Always the cassettes baked into the image: the stack never needs or reads an API key.
-      LLM_PROVIDER: replay
+      # `make up` always replays the cassettes baked into the image (ADR 0022). `make demo` sets
+      # STACK_LLM_PROVIDER=auto: live when .env holds a key, else replay (ADR 0073).
+      LLM_PROVIDER: ${STACK_LLM_PROVIDER:-replay}
       LLM_CASSETTE_DIR: cassettes
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-}
       # Trained model artifacts; train inside the container so the api sees them (ADR 0023).
       MODEL_DIR: models
+      # The recorded full eval run baked into the image, so /evals is never empty (ADR 0073).
+      EVAL_REPORT_DIR: evals/published
     volumes:
       - model-artifacts:/app/models
     ports:
@@ -33,6 +55,10 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      # Only in the demo profile; `make up` has no init step (ADR 0073).
+      init:
+        condition: service_completed_successfully
+        required: false
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 3s

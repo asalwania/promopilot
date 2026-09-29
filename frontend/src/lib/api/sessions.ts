@@ -438,6 +438,11 @@ export const sessionSchema = z.object({
   questions: z.array(clarificationQuestionSchema),
   clarifications: z.array(clarificationSchema),
   amendments: z.array(amendmentSchema),
+  // Replaying with no key: whether the session is a recorded one (ADR 0073).
+  demo_recording: z
+    .enum(["recorded", "not_in_demo_recordings"])
+    .nullable()
+    .optional(),
 }) satisfies z.ZodType<Schemas["SessionResponse"]>;
 
 export type Session = z.infer<typeof sessionSchema>;

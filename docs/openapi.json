@@ -730,6 +730,14 @@
         "title": "DecisionMade",
         "type": "object"
       },
+      "DemoRecording": {
+        "enum": [
+          "recorded",
+          "not_in_demo_recordings"
+        ],
+        "title": "DemoRecording",
+        "type": "string"
+      },
       "ErrorResponse": {
         "description": "What every API error answers (ADR 0071).",
         "properties": {
@@ -1000,6 +1008,9 @@
           "checks": {
             "$ref": "#/components/schemas/HealthChecks"
           },
+          "llm": {
+            "$ref": "#/components/schemas/LLMStatus"
+          },
           "status": {
             "enum": [
               "ok",
@@ -1016,7 +1027,8 @@
         "required": [
           "status",
           "version",
-          "checks"
+          "checks",
+          "llm"
         ],
         "title": "HealthResponse",
         "type": "object"
@@ -1151,6 +1163,48 @@
         "type": "object"
       },
       "JsonValue": {},
+      "LLMStatus": {
+        "description": "Which LLM answers the planning agents (ADR 0073): the committed cassettes (`replay`, the\nno-key demo) or a live provider and its model.",
+        "properties": {
+          "mode": {
+            "enum": [
+              "replay",
+              "live"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The live provider's model; null when replaying.",
+            "title": "Model"
+          },
+          "provider": {
+            "enum": [
+              "replay",
+              "openai",
+              "anthropic",
+              "fake"
+            ],
+            "title": "Provider",
+            "type": "string"
+          }
+        },
+        "required": [
+          "mode",
+          "provider",
+          "model"
+        ],
+        "title": "LLMStatus",
+        "type": "object"
+      },
       "LineChange": {
         "description": "A plan line whose SKU and region are in both revisions but whose decision changed.",
         "properties": {
@@ -3516,6 +3570,17 @@
             },
             "title": "Decisions",
             "type": "array"
+          },
+          "demo_recording": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DemoRecording"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Replaying with no API key: `recorded` while the brief, answers and amendments so far are a recorded session's, which replays; `not_in_demo_recordings` once not, and it plans without the language model. Null with a live LLM (ADR 0073)."
           },
           "error": {
             "anyOf": [

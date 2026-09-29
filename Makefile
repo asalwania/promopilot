@@ -19,6 +19,9 @@ API_PORT ?= 8000
 WEB_PORT ?= 3000
 DATA_DIR ?= ../data
 
+# Override to run a second, isolated stack, e.g. COMPOSE="docker compose -p pp-test".
+COMPOSE ?= docker compose
+
 BACKEND := cd backend &&
 FRONTEND := cd frontend &&
 
@@ -126,6 +129,24 @@ eval-smoke: ## What CI runs: replay the 5 smoke scenarios with no key, and fail 
 record-eval-cassettes: ## Play the eval scenarios live and record what no cassette holds into backend/evals/cassettes/ (OPENAI_API_KEY, OPENAI_MODEL; ONLY=name; costs money; no Docker)
 	$(BACKEND) LLM_PROVIDER=openai uv run python -m promopilot.evals --record $(foreach name,$(ONLY),--only $(name))
 
-.PHONY: demo
-demo: ## (E11) One-command demo, no API key
-	@echo "make demo arrives in epic E11 (SPEC.md §15)" >&2; exit 1
+.PHONY: demo demo-down demo-reset
+# The demo stack replays the committed cassettes, or goes live when .env holds a key (ADR 0073).
+DEMO := STACK_LLM_PROVIDER=auto $(COMPOSE) --profile demo
+
+demo: ## One-command demo in Docker: seed-42 data, trained models, the app; no API key needed
+	@echo "==> Building the images (the first build takes a few minutes)"
+	$(DEMO) build
+	@echo "==> Starting Postgres"
+	$(DEMO) up -d --wait postgres
+	@echo "==> Preparing the demo data and models (skipped when already done)"
+	$(DEMO) run --rm init
+	@echo "==> Starting the API and the web app"
+	$(DEMO) up -d --wait api web
+	@$(COMPOSE) exec -T api python -c "import json, urllib.request; llm = json.load(urllib.request.urlopen('http://localhost:8000/health'))['llm']; print('LLM: ' + ('replaying the recorded demo sessions (no API key)' if llm['mode'] == 'replay' else 'live, ' + llm['provider'] + ' ' + str(llm['model'])))"
+	@echo "PromoPilot is ready: http://localhost:$(WEB_PORT)  (stop: make demo-down; start over: make demo-reset)"
+
+demo-down: ## Stop the demo stack, keeping its data and models for a fast restart
+	$(DEMO) down
+
+demo-reset: ## Stop the demo stack and delete its data, models and sessions
+	$(DEMO) down -v

@@ -14,6 +14,7 @@ const healthyBody = {
   status: "ok",
   version: "0.1.0",
   checks: { database: "ok", model_registry: "ok" },
+  llm: { mode: "replay", provider: "replay", model: null },
 };
 
 describe("getHealth", () => {

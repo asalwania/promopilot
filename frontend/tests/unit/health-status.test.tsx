@@ -13,6 +13,7 @@ describe("HealthStatus", () => {
             status: "ok",
             version: "0.1.0",
             checks: { database: "ok", model_registry: "ok" },
+            llm: { mode: "replay", provider: "replay", model: null },
           },
         }}
       />,
@@ -33,6 +34,7 @@ describe("HealthStatus", () => {
             status: "degraded",
             version: "0.1.0",
             checks: { database: "error", model_registry: "missing" },
+            llm: { mode: "replay", provider: "replay", model: null },
           },
         }}
       />,

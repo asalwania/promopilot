@@ -12,13 +12,14 @@ from promopilot import __version__
 from promopilot.agents import GraphTools, LLMPricing, PostgresCheckpoints
 from promopilot.api.catalog import CatalogService, catalog_router
 from promopilot.api.competitors import CompetitorService, competitors_router
+from promopilot.api.demo import DemoRecordings
 from promopilot.api.errors import DEFAULT_MAX_REQUEST_BODY_BYTES, install_error_handling
 from promopilot.api.evals import EvalReportService, evals_router
 from promopilot.api.models import ModelService, models_router
 from promopilot.api.planning import build_planning
 from promopilot.api.plans import PlanService, plans_router
 from promopilot.api.relations import RelationsService, relations_router
-from promopilot.api.schemas import HealthChecks, HealthResponse
+from promopilot.api.schemas import HealthChecks, HealthResponse, LLMStatus
 from promopilot.api.sessions import SessionService, sessions_router
 from promopilot.config import Settings
 from promopilot.data import SessionStore, TraceStore, migrate
@@ -49,7 +50,10 @@ def create_app(
     plans: PlanService | None = None,
     evals: EvalReportService | None = None,
     max_request_body_bytes: int = DEFAULT_MAX_REQUEST_BODY_BYTES,
+    llm: LLMStatus | None = None,
 ) -> FastAPI:
+    llm_status = llm or LLMStatus(mode="replay", provider="replay", model=None)
+
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
         try:
@@ -103,6 +107,8 @@ def create_app(
                 database="ok" if database_ok else "error",
                 model_registry="ok" if model_loaded else "missing",
             ),
+            # Replay or live, so the UI can say it is the no-key demo (ADR 0073).
+            llm=llm_status,
         )
 
     return app
@@ -150,12 +156,19 @@ def build_app() -> FastAPI:
         trace_poll_interval_s=settings.trace_poll_interval_s,
         # A background run that has not paused by then fails the session (ADR 0071).
         session_timeout_s=settings.session_timeout_seconds,
+        # With no key, each session says whether it replays the demo recordings (ADR 0073).
+        recordings=(
+            DemoRecordings.read(settings.llm_cassette_dir)
+            if settings.llm_provider == "replay"
+            else None
+        ),
     )
     app = create_app(
         database_probe=probe,
         model_status=planning.demand_model,
         sessions=sessions,
         max_request_body_bytes=settings.max_request_body_bytes,
+        llm=LLMStatus.of(settings),
         models=models,
         competitors=CompetitorService(data, policy=policy),
         relations=RelationsService(planning.relations_model, data),

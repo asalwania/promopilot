@@ -85,3 +85,17 @@ def test_the_contract_serves_the_eval_report_and_documents_the_404(tmp_path: Pat
     ok = operation["responses"]["200"]["content"]["application/json"]["schema"]
     assert ok == {"$ref": "#/components/schemas/EvalReport"}
     assert "404" in operation["responses"]
+
+
+async def test_the_published_report_the_demo_image_serves_is_readable() -> None:
+    """The Docker stack serves `evals/published/` so /evals is never empty (ADR 0073). A change
+    to the report's shape must refresh it: copy a new `make eval` run's latest.json and .md."""
+    status, body = await get_latest(Path("evals/published"))
+
+    assert status == 200
+    assert body["world_seed"] == 42
+    assert len(body["scenarios"]) >= 30
+
+
+def test_the_published_report_keeps_its_markdown_beside_it() -> None:
+    assert Path("evals/published/latest.md").is_file()
