@@ -24,6 +24,7 @@ test("a brief that is not recorded shows the demo's limits, not an error", async
   const after = page.getByRole("note", { name: "Not in the demo recordings" });
   await expect(after).toBeVisible({ timeout: 30_000 });
   await expect(after).toContainText("OPENAI_API_KEY");
-  await expect(page.getByRole("alert")).toHaveCount(0);
+  // No error component in the page (Next.js's route announcer, outside <main>, is an alert too).
+  await expect(page.getByRole("main").getByRole("alert")).toHaveCount(0);
   await expect(page.getByText("Session not found")).toHaveCount(0);
 });
