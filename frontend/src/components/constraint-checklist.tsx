@@ -72,12 +72,14 @@ export function ConstraintChecklist({
                     {RESULT_BADGES[check.result].label}
                   </Badge>
                 </td>
-                <td className="flex flex-col gap-1 px-2 py-2">
-                  <CheckDetails
-                    check={check}
-                    revision={revision}
-                    request={request}
-                  />
+                <td className="px-2 py-2">
+                  <div className="flex flex-col gap-1">
+                    <CheckDetails
+                      check={check}
+                      revision={revision}
+                      request={request}
+                    />
+                  </div>
                 </td>
               </tr>
             ))}

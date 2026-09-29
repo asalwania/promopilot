@@ -145,9 +145,10 @@ export function SessionDetails({
               </p>
             )}
             {needsRelaxation(revision) && (
-              // Keyed so a new revision starts with no pending accept (ADR 0067).
+              // Keyed so a new revision starts with no pending accept (ADR 0067);
+              // the prefix keeps its key apart from the region tabs', a sibling.
               <InfeasibilityPanel
-                key={revision.number}
+                key={`relaxation-${revision.number}`}
                 revision={revision}
                 canAccept={reviewable}
                 onAcceptRelaxation={() => act.amend({ acceptRelaxation: true })}

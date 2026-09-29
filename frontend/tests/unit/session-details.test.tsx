@@ -185,6 +185,34 @@ describe("SessionDetails", () => {
     ).toHaveTextContent(text);
   });
 
+  it("shows one relaxation as the session moves on to a new infeasible revision", () => {
+    const planned = {
+      ...infeasibleSession,
+      plan_revision: { ...infeasibleSession.plan_revision!, lines: planLines },
+    };
+    const { rerender } = render(<SessionDetails session={planningSession} />);
+    rerender(<SessionDetails session={planned} />);
+    rerender(
+      <SessionDetails session={planned} competitorGaps={undercutGaps} />,
+    );
+    rerender(
+      <SessionDetails
+        session={{
+          ...planned,
+          plan_revision: { ...planned.plan_revision, number: 2 },
+        }}
+        competitorGaps={undercutGaps}
+      />,
+    );
+
+    expect(screen.getAllByRole("region", { name: /^Infeasible/ })).toHaveLength(
+      1,
+    );
+    expect(
+      screen.getAllByRole("table", { name: "Proposed relaxation" }),
+    ).toHaveLength(1);
+  });
+
   it("offers no relaxation to accept on a final plan", () => {
     render(
       <SessionDetails session={{ ...infeasibleSession, status: "approved" }} />,
