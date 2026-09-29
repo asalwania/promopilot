@@ -180,6 +180,18 @@ async def test_every_scored_plan_is_compared_with_the_rule_based_baseline_and_th
     assert plain.quality.best.objective is not None
     assert plain.quality.regret is not None
     assert plain.revision.sku_ids
+    # The default sequence's plan for the same request splits the regret by cause (ADR 0078).
+    assert plain.quality.default is not None
+    parts = plain.quality.breakdown
+    assert parts is not None
+    assert parts.model_error + parts.planner + parts.timeouts == pytest.approx(plain.quality.regret)
+    assert regret.breakdown.keys() == {
+        "best_infeasible",
+        "best_timed_out",
+        "largest_model_error",
+        "largest_planner",
+        "largest_timeouts",
+    }
     # Both plans are built on the final request: after "Drop South", North only.
     amend = only_run(report, "amend")
     assert amend.quality is not None

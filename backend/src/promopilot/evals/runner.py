@@ -482,10 +482,12 @@ async def _assess(
     final request (ADR 0063)."""
     state = None if session.snapshot is None else session.snapshot.values
     request = None if state is None else state.plan_request
-    if result.oracle is None or request is None:
+    if result.oracle is None or request is None or result.revision is None:
         return result
     objective = result.oracle.incremental_profit + result.oracle.clearance_value
-    quality = await benchmarks.assess(request, scenario.seed, objective)
+    quality = await benchmarks.assess(
+        request, scenario.seed, objective, result.revision.solver_status
+    )
     return result.model_copy(update={"quality": quality})
 
 

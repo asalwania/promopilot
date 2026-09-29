@@ -13,11 +13,13 @@ from promopilot.domain import (
     Violation,
     ViolationCode,
 )
+from promopilot.evals.quality import assess
 from promopilot.evals.report import (
     BestPlanSummary,
     Breach,
     ClarificationCheck,
     ConstraintCheck,
+    DefaultPlanSummary,
     EvalReport,
     ExplainerRun,
     FieldMatch,
@@ -34,6 +36,8 @@ from promopilot.evals.report import (
     render_markdown,
     write_report,
 )
+
+FEAS = SolveStatus.FEASIBLE
 
 FAILED_RUN = RunResult(
     run=1,
@@ -290,11 +294,69 @@ def test_the_markdown_compares_each_scored_plan_with_both_benchmarks(tmp_path: P
     markdown = write_report(report, tmp_path).markdown.read_text(encoding="utf-8")
 
     assert "## Plan quality" in markdown
+    # A report written before ADR 0078 has no default plan or breakdown.
     assert (
-        "| amend-drop-west | 1 | ₹90,000 | ₹-4,500 (1 of 2 sellers kept) | ₹100,000 (OPTIMAL, 5 "
-        "lines) | 10.0% | beats |"
+        "| amend-drop-west | 1 | ₹90,000 | ₹-4,500 (1 of 2 sellers kept) | — | ₹100,000 "
+        "(OPTIMAL, 5 lines) | 10.0% | — | — | — | beats |"
     ) in markdown
     assert "Consistency needs at least two runs per scenario" in markdown
+
+
+def _scored(quality: PlanQuality, run: int = 1) -> RunResult:
+    return FAILED_RUN.model_copy(update={"run": run, "quality": quality})
+
+
+def _quality(
+    ours: float, default: float, best: float, best_status: SolveStatus = SolveStatus.OPTIMAL
+) -> PlanQuality:
+    return assess(
+        objective=ours,
+        status=SolveStatus.OPTIMAL,
+        rule_based=RuleBasedSummary(
+            sku_ids=("SKU0001",),
+            dropped_sku_ids=(),
+            lines=1,
+            expected_promo_cost=1.0,
+            objective=0.0,
+        ),
+        best=BestPlanSummary(
+            solver_status=best_status, lines=5, sku_ids=("SKU0001",), objective=best
+        ),
+        default=DefaultPlanSummary(
+            solver_status=SolveStatus.OPTIMAL, lines=4, sku_ids=("SKU0001",), objective=default
+        ),
+    )
+
+
+def test_the_markdown_splits_each_regret_by_cause_and_flags_a_timed_out_best_plan(
+    tmp_path: Path,
+) -> None:
+    runs = (
+        _scored(_quality(ours=60_000.0, default=80_000.0, best=100_000.0)),
+        _scored(_quality(ours=90_000.0, default=95_000.0, best=100_000.0), run=2),
+        _scored(_quality(ours=97_000.0, default=97_000.0, best=10_000.0, best_status=FEAS), 3),
+    )
+    report = REPORT.model_copy(
+        update={"scenarios": (REPORT.scenarios[0].model_copy(update={"runs": runs}),)}
+    )
+
+    markdown = write_report(report, tmp_path).markdown.read_text(encoding="utf-8")
+
+    assert (
+        "| Scenario | Run | Ours | Rule-based | Default sequence | Best | Regret | Model error "
+        "| Planner | Timeouts | Against the baseline |"
+    ) in markdown
+    assert (
+        "| amend-drop-west | 1 | ₹60,000 | ₹0 (1 of 1 sellers kept) | ₹80,000 (OPTIMAL, 4 "
+        "lines) | ₹100,000 (OPTIMAL, 5 lines) | 40.0% | 20.0% | 20.0% | 0.0% | beats |"
+    ) in markdown
+    # Beating a best plan that timed out is not a win: flagged, and left out of the metric.
+    assert "| -870.0% (best timed out: not counted) | 0.0% | 0.0% | -870.0% |" in markdown
+    # Medians over the 2 counted runs, and each part's rupees.
+    assert (
+        "Regret by cause over the 2 counted runs (median, then ₹ in all): model error 12.5% "
+        "(₹25,000), planner 12.5% (₹25,000), timeouts 0.0% (₹0)."
+    ) in markdown
 
 
 def test_each_run_writes_whether_it_passed_so_the_dashboard_never_re_derives_it(

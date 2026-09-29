@@ -731,6 +731,37 @@
         "title": "DecisionMade",
         "type": "object"
       },
+      "DefaultPlanSummary": {
+        "description": "The default sequence's plan for the same final request (ADR 0078): our optimiser on\nthe scenario's fitted models, as the best plan is on the true parameters.",
+        "properties": {
+          "lines": {
+            "title": "Lines",
+            "type": "integer"
+          },
+          "objective": {
+            "title": "Objective",
+            "type": "number"
+          },
+          "sku_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Sku Ids",
+            "type": "array"
+          },
+          "solver_status": {
+            "$ref": "#/components/schemas/SolveStatus"
+          }
+        },
+        "required": [
+          "solver_status",
+          "lines",
+          "sku_ids",
+          "objective"
+        ],
+        "title": "DefaultPlanSummary",
+        "type": "object"
+      },
       "DemoRecording": {
         "enum": [
           "recorded",
@@ -2021,10 +2052,30 @@
         "type": "object"
       },
       "PlanQuality": {
-        "description": "A scored final plan against the rule-based baseline and the best plan (ADR 0063).",
+        "description": "A scored final plan against the rule-based baseline and the best plan (ADR 0063), and\nits regret by cause against the default sequence's plan (ADR 0078).",
         "properties": {
           "best": {
             "$ref": "#/components/schemas/BestPlanSummary"
+          },
+          "breakdown": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RegretBreakdown"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "default": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DefaultPlanSummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "objective": {
             "title": "Objective",
@@ -2054,6 +2105,19 @@
           },
           "rule_based": {
             "$ref": "#/components/schemas/RuleBasedSummary"
+          },
+          "timed_out": {
+            "default": [],
+            "items": {
+              "enum": [
+                "best",
+                "default",
+                "ours"
+              ],
+              "type": "string"
+            },
+            "title": "Timed Out",
+            "type": "array"
           },
           "versus_rule_based": {
             "enum": [
@@ -2682,6 +2746,30 @@
           "stores"
         ],
         "title": "RegionStores",
+        "type": "object"
+      },
+      "RegretBreakdown": {
+        "description": "A run's regret by cause, each a signed share of the best plan's oracle objective; the\nthree sum to the regret (ADR 0078).",
+        "properties": {
+          "model_error": {
+            "title": "Model Error",
+            "type": "number"
+          },
+          "planner": {
+            "title": "Planner",
+            "type": "number"
+          },
+          "timeouts": {
+            "title": "Timeouts",
+            "type": "number"
+          }
+        },
+        "required": [
+          "model_error",
+          "planner",
+          "timeouts"
+        ],
+        "title": "RegretBreakdown",
         "type": "object"
       },
       "RejectRequest": {

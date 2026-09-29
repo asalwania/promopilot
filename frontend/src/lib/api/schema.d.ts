@@ -722,6 +722,20 @@ export interface components {
             summary: string;
         };
         /**
+         * DefaultPlanSummary
+         * @description The default sequence's plan for the same final request (ADR 0078): our optimiser on
+         *     the scenario's fitted models, as the best plan is on the true parameters.
+         */
+        DefaultPlanSummary: {
+            /** Lines */
+            lines: number;
+            /** Objective */
+            objective: number;
+            /** Sku Ids */
+            sku_ids: string[];
+            solver_status: components["schemas"]["SolveStatus"];
+        };
+        /**
          * DemoRecording
          * @enum {string}
          */
@@ -1278,10 +1292,13 @@ export interface components {
         };
         /**
          * PlanQuality
-         * @description A scored final plan against the rule-based baseline and the best plan (ADR 0063).
+         * @description A scored final plan against the rule-based baseline and the best plan (ADR 0063), and
+         *     its regret by cause against the default sequence's plan (ADR 0078).
          */
         PlanQuality: {
             best: components["schemas"]["BestPlanSummary"];
+            breakdown?: components["schemas"]["RegretBreakdown"] | null;
+            default?: components["schemas"]["DefaultPlanSummary"] | null;
             /** Objective */
             objective: number;
             /** Regret */
@@ -1289,6 +1306,11 @@ export interface components {
             /** Regret Rupees */
             regret_rupees: number | null;
             rule_based: components["schemas"]["RuleBasedSummary"];
+            /**
+             * Timed Out
+             * @default []
+             */
+            timed_out: ("best" | "default" | "ours")[];
             /**
              * Versus Rule Based
              * @enum {string}
@@ -1534,6 +1556,19 @@ export interface components {
             region: components["schemas"]["Region"];
             /** Stores */
             stores: components["schemas"]["Store"][];
+        };
+        /**
+         * RegretBreakdown
+         * @description A run's regret by cause, each a signed share of the best plan's oracle objective; the
+         *     three sum to the regret (ADR 0078).
+         */
+        RegretBreakdown: {
+            /** Model Error */
+            model_error: number;
+            /** Planner */
+            planner: number;
+            /** Timeouts */
+            timeouts: number;
         };
         /**
          * RejectRequest
