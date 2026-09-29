@@ -231,7 +231,11 @@ class RunResult(_Frozen):
     explanations: tuple[ExplainerRun, ...] = ()
     """Every Explainer run, in order: one per plan revision that waited for approval."""
     session_s: float = 0.0
-    """The session's wall-clock time, from the brief to its end, without fitting models."""
+    """The session's wall-clock time, from the brief to its end, without fitting models or
+    scoring its plan (ADR 0077)."""
+    llm_s: float = 0.0
+    """The part of `session_s` spent waiting on the LLM: the rest is PromoPilot's own work
+    (ADR 0077). Near 0 under replay."""
     usage: SessionUsage = SessionUsage()
     """The sum of the session's token-usage trace events (ADR 0047)."""
     cassette_misses: tuple[str, ...] = ()
@@ -308,6 +312,7 @@ class EvalReport(_Frozen):
             for run in scenario["runs"]:
                 run.pop("duration_s")
                 run.pop("session_s")
+                run.pop("llm_s")
         return dumped
 
 
@@ -439,7 +444,7 @@ def _behaviour(run: RunResult) -> str:
             ", ".join(run.questions_asked) or "—",
             ", ".join(run.flagged) or "—",
             explained or "—",
-            f"{run.session_s:.1f} s",
+            f"{run.session_s:.1f} s (LLM {run.llm_s:.1f} s)",
             cost,
         )
     )

@@ -566,11 +566,11 @@ def test_a_sessions_usage_is_the_sum_of_its_token_usage_events() -> None:
 
 def test_latency_is_the_median_session_time_of_the_runs_that_did_not_fail() -> None:
     runs = [
-        run(session_s=1.0),
-        run(session_s=3.0),
-        run(session_s=2.0),
-        run(session_s=10.0),
-        run(outcome=RunOutcome.FAILED, session_s=99.0),
+        run(session_s=1.0, llm_s=0.5),
+        run(session_s=3.0, llm_s=2.0),
+        run(session_s=2.0, llm_s=1.5),
+        run(session_s=10.0, llm_s=6.0),
+        run(outcome=RunOutcome.FAILED, session_s=99.0, llm_s=90.0),
     ]
 
     metric = session_latency(runs)
@@ -583,7 +583,8 @@ def test_latency_is_the_median_session_time_of_the_runs_that_did_not_fail() -> N
         5,
     )
     assert (metric.target, metric.passed) == (None, None)
-    assert metric.breakdown == {"max_s": 10}
+    # The median time waiting on the LLM, whole seconds: the rest is PromoPilot's own work.
+    assert metric.breakdown == {"max_s": 10, "llm_p50_s": 2}
     assert session_latency([run(outcome=RunOutcome.FAILED)]).value is None
 
 

@@ -183,6 +183,7 @@ BEHAVED_RUN = FAILED_RUN.model_copy(
             ),
         ),
         "session_s": 12.34,
+        "llm_s": 3.21,
         "usage": SessionUsage(calls=5, input_tokens=9_000, output_tokens=800, cost_inr=4.5),
     }
 )
@@ -225,7 +226,7 @@ def test_the_markdown_has_an_agent_behaviour_row_per_run_and_its_failures() -> N
     assert "## Agent behaviour" in markdown
     assert (
         "| amend-drop-west | 1 | 1/2 | promo_window | objective | llm, template (ungrounded) "
-        "| 12.3 s | ₹4.50, 5 calls |"
+        "| 12.3 s (LLM 3.2 s) | ₹4.50, 5 calls |"
     ) in markdown
     where = "- **amend-drop-west** run 1:"
     assert f"{where} read `marketing_budget` as 150000, labelled 200000" in markdown
@@ -246,7 +247,9 @@ def test_session_time_and_the_latency_value_are_left_out_of_the_comparable_repor
             ),
             "scenarios": (
                 BEHAVED.scenarios[0].model_copy(
-                    update={"runs": (BEHAVED_RUN.model_copy(update={"session_s": 99.0}),)}
+                    update={
+                        "runs": (BEHAVED_RUN.model_copy(update={"session_s": 99.0, "llm_s": 9.0}),)
+                    }
                 ),
             ),
         }

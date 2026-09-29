@@ -217,7 +217,7 @@ Who a promotion is offered to: either one segment, as a segment-exclusive offer 
 _Avoid_: target audience, targeting
 
 **Promo option**:
-One fully specified possibility (SKU, region, mechanism, depth, duration, start week, target segment) together with its predicted outcomes. A planning request's promo options are enumerated in full and pruned when they are deeper than the maximum discount, below unit cost without overstock, a repeated charm price, or when their P90 units exceed available stock (ADR 0035). The set that survives is a **candidate set**, which the optimiser selects plan lines from.
+One fully specified possibility (SKU, region, mechanism, depth, duration, start week, target segment) together with its predicted outcomes. A planning request's promo options are enumerated in full and pruned when they are deeper than the maximum discount, below unit cost without overstock, a repeated charm price, or when their P90 units exceed available stock (ADR 0035). The set that survives is a **candidate set**, which the optimiser selects plan lines from. A candidate set narrowed by SKUs, mechanisms or target segments is the matching rows of the same request's unnarrowed set, so a loop-back that narrows it predicts nothing again (ADR 0077).
 _Avoid_: candidate, option (bare)
 
 **P90 units**:

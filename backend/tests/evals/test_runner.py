@@ -1,6 +1,7 @@
 """`evals.run` plays tiny scenarios on the small generated world through the full agent graph,
 with scripted LLMs, and scores each final plan (E9 seam 1, ADR 0056)."""
 
+import asyncio
 import re
 from collections.abc import Sequence
 from pathlib import Path
@@ -20,7 +21,7 @@ from promopilot.domain import (
     Region,
     SolveStatus,
 )
-from promopilot.evals import EvalWorld, FittedModels, Scenario, run
+from promopilot.evals import EvalWorld, FittedModels, Scenario, run, runner
 from promopilot.evals.report import (
     ConstraintCheck,
     EvalReport,
@@ -207,7 +208,7 @@ async def test_the_run_is_deterministic_for_a_seed(world: EvalWorld) -> None:
     second = await evaluate(world, [AMEND])
 
     one, two = first.scenarios[0].runs
-    timing = {"run", "duration_s", "session_s"}
+    timing = {"run", "duration_s", "session_s", "llm_s"}
     assert one.model_dump(exclude=timing) == two.model_dump(exclude=timing)
     assert (
         second.comparable()["scenarios"][0]["runs"][0]
@@ -528,3 +529,46 @@ async def test_accepting_a_relaxation_a_revision_does_not_have_fails_the_run(
     )
     assert played.amendments_applied == 0
     assert not report.scenarios[0].passed
+
+
+class SlowProvider:
+    """DownProvider that takes `delay` seconds to fail each call."""
+
+    def __init__(self, delay: float) -> None:
+        self.delay = delay
+        self.down = DownProvider()
+
+    async def complete_structured[T: BaseModel](
+        self, schema: type[T], messages: Sequence[Message]
+    ) -> T:
+        await asyncio.sleep(self.delay)
+        return await self.down.complete_structured(schema, messages)
+
+    async def complete_with_tools(
+        self, tools: Sequence[ToolSpec], messages: Sequence[Message]
+    ) -> ToolTurn:
+        await asyncio.sleep(self.delay)
+        return await self.down.complete_with_tools(tools, messages)
+
+
+async def test_session_time_ends_with_the_session_and_its_llm_time_is_the_wait_on_the_llm(
+    world: EvalWorld, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    scoring = runner._score
+
+    async def slow_scoring(*args: Any, **kwargs: Any) -> Any:
+        await asyncio.sleep(1.0)
+        return await scoring(*args, **kwargs)
+
+    monkeypatch.setattr(runner, "_score", slow_scoring)
+    slow = SlowProvider(delay=0.05)
+
+    report = await evaluate(world, [PLAIN], slow)
+
+    plain = only_run(report, "plain")
+    # Scoring the plan after the session is not session time (ADR 0062, ADR 0077).
+    assert plain.duration_s - plain.session_s >= 1.0
+    assert slow.down.calls > 0
+    assert 0.05 * slow.down.calls <= plain.llm_s <= plain.session_s
+    latency = metric(report, "session_latency_p50")
+    assert latency.breakdown["llm_p50_s"] == round(plain.llm_s)

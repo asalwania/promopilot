@@ -383,15 +383,24 @@ def session_usage(events: Iterable[TraceEvent]) -> SessionUsage:
 
 def session_latency(runs: Sequence[RunResult]) -> Metric:
     """The median wall-clock session time of the runs that did not fail, without fitting
-    models; reported, with no target (SPEC §12.2)."""
-    timed = [run.session_s for run in runs if run.outcome is not RunOutcome.FAILED]
+    models; reported, with no target (SPEC §12.2). The breakdown has the slowest session and
+    the median time waiting on the LLM, in whole seconds (ADR 0077)."""
+    played = [run for run in runs if run.outcome is not RunOutcome.FAILED]
+    timed = [run.session_s for run in played]
     return Metric(
         name="session_latency_p50",
         label="P50 session time",
         value=statistics.median(timed) if timed else None,
         count=len(timed),
         of=len(runs),
-        breakdown={"max_s": round(max(timed))} if timed else {},
+        breakdown=(
+            {
+                "max_s": round(max(timed)),
+                "llm_p50_s": round(statistics.median(run.llm_s for run in played)),
+            }
+            if timed
+            else {}
+        ),
         unit="seconds",
     )
 
