@@ -128,3 +128,52 @@ def test_a_live_provider_times_out_each_attempt_after_the_configured_seconds(
 
     assert isinstance(llm, RetryingProvider)
     assert llm.timeout_s == 12.5
+
+
+# ---------------------------------------------------------------- LLM_PROVIDER=auto (ADR 0073)
+
+
+def test_auto_replays_when_no_key_is_set(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("LLM_PROVIDER", "auto")
+    monkeypatch.setenv("OPENAI_API_KEY", "")
+
+    assert Settings().llm_provider == "replay"
+
+
+def test_auto_goes_live_on_openai_when_its_key_is_set_with_the_recorded_model_by_default(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("LLM_PROVIDER", "auto")
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
+
+    settings = Settings()
+
+    assert (settings.llm_provider, settings.openai_model) == ("openai", "gpt-4.1-mini")
+    assert isinstance(build_provider(settings), FallbackProvider)
+
+
+def test_auto_keeps_a_configured_model(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("LLM_PROVIDER", "auto")
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
+    monkeypatch.setenv("OPENAI_MODEL", "gpt-4.1")
+
+    assert Settings().openai_model == "gpt-4.1"
+
+
+def test_auto_goes_live_on_anthropic_when_only_its_key_is_set(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("LLM_PROVIDER", "auto")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
+
+    settings = Settings()
+
+    assert (settings.llm_provider, settings.anthropic_model) == ("anthropic", "claude-sonnet-5")
+    assert isinstance(build_provider(settings), RetryingProvider)
+
+
+def test_auto_is_resolved_from_keyword_arguments_too() -> None:
+    settings = Settings(llm_provider="auto", **OPENAI)  # type: ignore[arg-type]
+
+    assert settings.llm_provider == "openai"

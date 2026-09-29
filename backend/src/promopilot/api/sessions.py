@@ -45,6 +45,7 @@ from promopilot.agents import (
     resume_with_decision,
     start_planning,
 )
+from promopilot.api.demo import DemoRecordings
 from promopilot.api.schemas import (
     AmendRequest,
     ApproveRequest,
@@ -60,6 +61,7 @@ from promopilot.domain import (
     Clarification,
     DecisionKind,
     DecisionMade,
+    PlanningSession,
     SessionStatus,
     TraceEvent,
 )
@@ -100,6 +102,7 @@ class SessionService:
         trace: TraceReader,
         trace_poll_interval_s: float = 0.5,
         session_timeout_s: float = 900.0,
+        recordings: DemoRecordings | None = None,
     ) -> None:
         if session_timeout_s <= 0:
             raise ValueError("session_timeout_s must be positive")
@@ -110,6 +113,8 @@ class SessionService:
         self._trace = trace
         self._poll_interval_s = trace_poll_interval_s
         self._timeout_s = session_timeout_s
+        # Replaying: whether each session stays on the demo recordings (ADR 0073).
+        self._recordings = recordings
         self._graph: PlanningGraph | None = None
         self._tasks: set[asyncio.Task[None]] = set()
         # One decision at a time per session, so two requests cannot both resume one interrupt.
@@ -131,7 +136,7 @@ class SessionService:
 
     async def get(self, session_id: UUID) -> SessionResponse | None:
         session = await self._store.get(session_id)
-        return None if session is None else SessionResponse.of(session)
+        return None if session is None else self._response(session)
 
     async def exists(self, session_id: UUID) -> bool:
         return await self._trace.read(session_id, after=0) is not None
@@ -223,7 +228,7 @@ class SessionService:
                 resumed = await self._store.get(session_id)
         if resumed is None:
             raise SessionNotFoundError(str(session_id))
-        return SessionResponse.of(resumed)
+        return self._response(resumed)
 
     async def amend(
         self, session_id: UUID, text: str | None, *, accept_relaxation: bool = False
@@ -276,7 +281,7 @@ class SessionService:
                 amended = await self._store.get(session_id)
         if amended is None:
             raise SessionNotFoundError(str(session_id))
-        return SessionResponse.of(amended)
+        return self._response(amended)
 
     async def recover_interrupted(self) -> None:
         """At startup: sessions left `planning` by a previous process can never finish.
@@ -304,6 +309,12 @@ class SessionService:
             return True
         ended = await graph_state(self._graph, read.thread_id)
         return ended is None or ended.paused_at == ()
+
+    def _response(self, session: PlanningSession) -> SessionResponse:
+        recordings = self._recordings
+        return SessionResponse.of(
+            session, demo_recording=None if recordings is None else recordings.of(session)
+        )
 
     def _require_graph(self) -> PlanningGraph:
         if self._graph is None:
@@ -361,7 +372,7 @@ class SessionService:
             decided = await self._store.get(session_id)
         if decided is None:
             raise SessionNotFoundError(str(session_id))
-        return SessionResponse.of(decided)
+        return self._response(decided)
 
     def _spawn(self, run: Awaitable[None]) -> None:
         task = asyncio.ensure_future(run)

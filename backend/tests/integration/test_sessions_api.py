@@ -18,6 +18,7 @@ from testcontainers.community.postgres import PostgresContainer
 
 from promopilot.agents import (
     BriefReading,
+    CassetteManifest,
     GraphTools,
     LLMPricing,
     MemoryCheckpoints,
@@ -25,10 +26,13 @@ from promopilot.agents import (
     PlannedRevision,
     Planner,
     PostgresCheckpoints,
+    RecordedSession,
+    SessionScript,
     build_graph,
     graph_state,
 )
 from promopilot.agents.tools.inventory_status import pooled_stock
+from promopilot.api.demo import DemoRecordings
 from promopilot.api.main import create_app
 from promopilot.api.plans import PlanService
 from promopilot.api.sessions import SessionService
@@ -184,6 +188,7 @@ async def api_app(
     trace_poll_interval_s: float = 0.05,
     risk_thresholds: RiskThresholds = QUIET,
     session_timeout_s: float = 900.0,
+    recordings: DemoRecordings | None = None,
 ) -> AsyncIterator[FastAPI]:
     """The app of one API process, started up; it shuts down on leaving."""
     engine = create_async_engine(url)
@@ -217,6 +222,7 @@ async def api_app(
         trace=trace,
         trace_poll_interval_s=trace_poll_interval_s,
         session_timeout_s=session_timeout_s,
+        recordings=recordings,
     )
     plans = PlanService(
         revisions=store, demand_models=demand, data=data, policy=FREE, defaults=simulation
@@ -893,6 +899,38 @@ async def test_deciding_while_planning_is_409(postgres_url: str, running_api: Ap
     assert reject.status_code == 409
     assert done["status"] == "awaiting_approval"
     assert done["decisions"] == []
+
+
+async def test_a_replayed_session_says_whether_it_is_in_the_demo_recordings(
+    postgres_url: str, small_models: tuple[DemandModel, Relations]
+) -> None:
+    script = SessionScript(name="e2e", brief=BRIEF)
+    recordings = DemoRecordings(
+        CassetteManifest(
+            planning_settings={},
+            sessions={"e2e": RecordedSession(script=script, route=(), cassettes=(), revisions=())},
+        )
+    )
+    llm = GatedProvider(FakeProvider([READING, explainer_down()]))
+    async with api_app(postgres_url, llm, small_models, recordings=recordings) as app:
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            recorded = (await client.post("/api/sessions", json={"brief": BRIEF})).json()
+            other = (await client.post("/api/sessions", json={"brief": "Plan Holi"})).json()
+            recorded_body = (await client.get(f"/api/sessions/{recorded['session_id']}")).json()
+            other_body = (await client.get(f"/api/sessions/{other['session_id']}")).json()
+
+    assert recorded_body["demo_recording"] == "recorded"
+    assert other_body["demo_recording"] == "not_in_demo_recordings"
+
+
+async def test_a_live_session_has_no_demo_recording(postgres_url: str, running_api: Api) -> None:
+    llm = GatedProvider(FakeProvider([READING, explainer_down()]))
+    async with running_api(postgres_url, llm) as client:
+        created = (await client.post("/api/sessions", json={"brief": BRIEF})).json()
+        body = (await client.get(f"/api/sessions/{created['session_id']}")).json()
+
+    assert body["demo_recording"] is None
 
 
 async def test_deciding_on_a_revision_that_is_not_the_latest_is_409(

@@ -1,6 +1,9 @@
+import pytest
 from httpx import ASGITransport, AsyncClient
 
 from promopilot.api.main import create_app
+from promopilot.api.schemas import LLMStatus
+from promopilot.config import Settings
 from tests.offline import offline_sessions
 
 
@@ -41,6 +44,7 @@ async def test_health_reports_ok_when_database_is_reachable() -> None:
         "status": "ok",
         "version": "0.1.0",
         "checks": {"database": "ok", "model_registry": "ok"},
+        "llm": {"mode": "replay", "provider": "replay", "model": None},
     }
 
 
@@ -108,3 +112,36 @@ async def test_health_reports_the_model_missing_when_the_registry_check_raises()
         response = await client.get("/health")
 
     assert response.json()["checks"]["model_registry"] == "missing"
+
+
+# ---------------------------------------------------------------- the LLM mode (ADR 0073)
+
+
+async def test_health_says_which_llm_answers_so_the_ui_can_show_demo_mode() -> None:
+    app = create_app(
+        database_probe=FakeDatabaseProbe(healthy=True),
+        model_status=FakeModelStatus(loaded=True),
+        sessions=offline_sessions(),
+        llm=LLMStatus(mode="live", provider="openai", model="gpt-4.1-mini"),
+    )
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.get("/api/health")
+
+    assert response.json()["llm"] == {"mode": "live", "provider": "openai", "model": "gpt-4.1-mini"}
+
+
+def test_the_llm_status_of_replay_names_no_model() -> None:
+    status = LLMStatus.of(Settings(llm_provider="replay", openai_model="gpt-4.1-mini"))
+
+    assert status == LLMStatus(mode="replay", provider="replay", model=None)
+
+
+@pytest.mark.parametrize(
+    ("provider", "model"), [("openai", "gpt-4.1-mini"), ("anthropic", "claude-sonnet-5")]
+)
+def test_the_llm_status_of_a_live_provider_names_its_model(provider: str, model: str) -> None:
+    settings = Settings(
+        llm_provider=provider, openai_model="gpt-4.1-mini", anthropic_model="claude-sonnet-5"
+    )
+
+    assert LLMStatus.of(settings) == LLMStatus(mode="live", provider=provider, model=model)
