@@ -32,11 +32,10 @@ const COLUMNS = [
   "Constraints",
   "Oracle breaches",
   "Properties",
-  "Against the baseline",
+  "vs baseline",
   "Regret",
-  "Session time",
+  "Time",
   "Cost",
-  "Warnings",
   "",
 ];
 
@@ -104,7 +103,7 @@ export function EvalScenarioTable({
                 <th
                   key={index}
                   scope="col"
-                  className="text-muted-foreground px-2 py-2 text-left font-medium whitespace-nowrap"
+                  className="text-muted-foreground px-1.5 py-2 text-left align-bottom font-medium"
                 >
                   {column}
                 </th>
@@ -157,18 +156,32 @@ function ScenarioRow({
   onToggle: () => void;
 }) {
   const run = scenario.runs.at(-1);
-  const cell = "px-2 py-2 whitespace-nowrap";
+  const cell = "px-1.5 py-2 whitespace-nowrap";
   return (
     <tr className="border-b align-top">
-      <th scope="row" className={cn(cell, "text-left font-mono font-normal")}>
+      <th
+        scope="row"
+        className="min-w-36 px-1.5 py-2 text-left font-mono text-xs font-normal break-words"
+      >
         {scenario.name}
       </th>
-      <td className={cell}>{scenarioGroupLabel(scenario.group)}</td>
+      <td className="px-1.5 py-2">{scenarioGroupLabel(scenario.group)}</td>
       <td className={cell}>{formatWeek(scenario.as_of_week)}</td>
-      <td className={cell}>
-        <PassBadge passed={scenario.passed} short />
+      <td className="px-1.5 py-2">
+        <div className="flex flex-col items-start gap-1">
+          <PassBadge passed={scenario.passed} short />
+          {run &&
+            runWarnings(run).map((warning) => (
+              <Badge
+                key={warning}
+                className="bg-amber-500/10 text-amber-700 dark:text-amber-400"
+              >
+                {warning}
+              </Badge>
+            ))}
+        </div>
       </td>
-      {run ? <RunCells run={run} /> : <td colSpan={9} className={cell} />}
+      {run ? <RunCells run={run} /> : <td colSpan={8} className={cell} />}
       <td className={cell}>
         <Button
           variant="outline"
@@ -186,20 +199,14 @@ function ScenarioRow({
 }
 
 function RunCells({ run }: { run: EvalRun }) {
-  const cell = "px-2 py-2 whitespace-nowrap";
+  const cell = "px-1.5 py-2 whitespace-nowrap";
   const passedProperties = run.properties.filter((p) => p.passed).length;
   const regret = run.quality?.regret;
-  const warnings = [
-    run.fallbacks.length > 0 &&
-      plural(run.fallbacks.length, "fallback", "fallbacks"),
-    run.cassette_misses.length > 0 &&
-      plural(run.cassette_misses.length, "cassette miss", "cassette misses"),
-  ].filter((warning): warning is string => Boolean(warning));
   return (
     <>
       <td className={cell}>{humanise(run.outcome)}</td>
       <td className={cell}>{humanise(run.constraints)}</td>
-      <td className="px-2 py-2">
+      <td className="px-1.5 py-2">
         {run.oracle
           ? run.oracle.breaches.map(humanise).join(", ") || "none"
           : "—"}
@@ -238,20 +245,18 @@ function RunCells({ run }: { run: EvalRun }) {
           detail={`${run.usage.calls} LLM calls`}
         />
       </td>
-      <td className="px-2 py-2">
-        <div className="flex flex-wrap gap-1">
-          {warnings.map((warning) => (
-            <Badge
-              key={warning}
-              className="bg-amber-500/10 text-amber-700 dark:text-amber-400"
-            >
-              {warning}
-            </Badge>
-          ))}
-        </div>
-      </td>
     </>
   );
+}
+
+// What the run did without the LLM, or could not replay (ADR 0069 D4).
+function runWarnings(run: EvalRun): string[] {
+  return [
+    run.fallbacks.length > 0 &&
+      plural(run.fallbacks.length, "fallback", "fallbacks"),
+    run.cassette_misses.length > 0 &&
+      plural(run.cassette_misses.length, "cassette miss", "cassette misses"),
+  ].filter((warning): warning is string => Boolean(warning));
 }
 
 function ScenarioDetails({ scenario }: { scenario: EvalScenario }) {

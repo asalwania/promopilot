@@ -41,14 +41,24 @@ describe("getLatestEvalReport", () => {
     });
   });
 
-  it("throws with the reason on any other failure", async () => {
+  it("throws with the reason and the reference id on any other failure", async () => {
     const { fetchImpl } = recordingFetch(() =>
-      Response.json({ detail: "API unreachable" }, { status: 502 }),
+      Response.json(
+        {
+          detail: "The API failed.",
+          code: "internal_error",
+          reference_id: "req-42",
+        },
+        { status: 500 },
+      ),
     );
 
-    await expect(getLatestEvalReport(fetchImpl)).rejects.toEqual(
-      new EvalsRequestError("API unreachable"),
+    const failure = getLatestEvalReport(fetchImpl);
+
+    await expect(failure).rejects.toEqual(
+      new EvalsRequestError("The API failed.", "req-42"),
     );
+    await expect(failure).rejects.toHaveProperty("referenceId", "req-42");
   });
 
   it("throws on a body that is not an eval report", async () => {

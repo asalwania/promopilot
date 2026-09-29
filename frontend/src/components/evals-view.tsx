@@ -2,6 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 
+import { ErrorMessage } from "@/components/error-message";
 import { EvalMetricCards } from "@/components/eval-metric-cards";
 import { EvalScenarioTable } from "@/components/eval-scenario-table";
 import { RegretChart } from "@/components/regret-chart";
@@ -12,6 +13,7 @@ import {
   getLatestEvalReport,
   type EvalReport,
 } from "@/lib/api/evals";
+import { referenceIdOf } from "@/lib/api/reason";
 import { formatDateTime } from "@/lib/format";
 
 const MAX_RETRIES = 2;
@@ -29,7 +31,10 @@ export function EvalsView() {
     return (
       <Notice title="Couldn't load the eval report">
         <CardContent className="flex items-center justify-between gap-4">
-          <p className="text-muted-foreground text-sm">{query.error.message}</p>
+          <ErrorMessage
+            message={query.error.message}
+            referenceId={referenceIdOf(query.error)}
+          />
           <Button
             variant="outline"
             disabled={query.isFetching}

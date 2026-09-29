@@ -12,6 +12,9 @@ import {
 } from "@/lib/eval-metrics";
 import { cn } from "@/lib/utils";
 
+// Breakdown counts, grouped the Indian way, e.g. 27,35,938 input tokens.
+const countFormat = new Intl.NumberFormat("en-IN");
+
 const STATUS: Record<MetricStatus, { label: string; className: string }> = {
   pass: {
     label: "Pass",
@@ -94,7 +97,7 @@ function MetricCard({ metric }: { metric: EvalMetric }) {
         >
           {breakdown.map(([key, count]) => (
             <li key={key} className="bg-muted rounded px-1.5 py-0.5">
-              {humanise(key)} {count}
+              {humanise(key)} {countFormat.format(count)}
             </li>
           ))}
         </ul>

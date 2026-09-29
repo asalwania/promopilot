@@ -29,6 +29,12 @@ const CLIPPED = "var(--color-chart-4)";
 const MEDIAN = "var(--color-foreground)";
 const TARGET = "var(--color-muted-foreground)";
 
+// A tick label short enough to stay on the chart; the tooltip and the values
+// table carry the full name.
+function shortLabel(label: string): string {
+  return label.length > 24 ? `${label.slice(0, 23)}…` : label;
+}
+
 type Point = { label: string; regret: number; shown: number; clipped: boolean };
 
 // One bar per scored run, lowest regret first, with the report's median and
@@ -120,7 +126,7 @@ export function RegretChart({
           >
             <BarChart
               data={points}
-              margin={{ top: 8, right: 16, bottom: 8, left: 8 }}
+              margin={{ top: 8, right: 16, bottom: 8, left: 48 }}
             >
               <CartesianGrid strokeDasharray="3 3" vertical={false} />
               <XAxis
@@ -129,6 +135,7 @@ export function RegretChart({
                 angle={-30}
                 textAnchor="end"
                 height={96}
+                tickFormatter={shortLabel}
                 tick={{ fontSize: 11 }}
               />
               <YAxis

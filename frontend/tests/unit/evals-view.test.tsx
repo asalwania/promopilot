@@ -31,7 +31,10 @@ const noReport = () =>
     { status: 404 },
   );
 const unreachable = () =>
-  Response.json({ detail: "API unreachable" }, { status: 502 });
+  Response.json(
+    { detail: "API unreachable", code: "upstream_unreachable" },
+    { status: 502, headers: { "x-request-id": "req-7" } },
+  );
 
 beforeEach(() => {
   vi.useFakeTimers({ shouldAdvanceTime: true });
@@ -95,7 +98,8 @@ describe("EvalsView", () => {
     expect(screen.getByRole("status")).toHaveTextContent(
       "Couldn't load the eval report",
     );
-    expect(screen.getByText("API unreachable")).toBeVisible();
+    expect(screen.getByRole("alert")).toHaveTextContent("API unreachable");
+    expect(screen.getByRole("alert")).toHaveTextContent("Reference: req-7");
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));
     expect(
       await screen.findByRole("table", { name: "Scenarios" }),

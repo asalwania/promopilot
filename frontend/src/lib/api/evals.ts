@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { responseReason } from "@/lib/api/reason";
+import { apiError, ApiRequestError } from "@/lib/api/reason";
 import type { components } from "@/lib/api/schema";
 
 type Schemas = components["schemas"];
@@ -147,9 +147,9 @@ export type LatestEvalReport =
 // TanStack Query key for the latest report.
 export const EVAL_REPORT_QUERY_KEY = ["evals", "latest"];
 
-export class EvalsRequestError extends Error {
-  constructor(message: string) {
-    super(message);
+export class EvalsRequestError extends ApiRequestError {
+  constructor(message: string, referenceId?: string) {
+    super(message, referenceId);
     this.name = "EvalsRequestError";
   }
 }
@@ -161,9 +161,12 @@ export async function getLatestEvalReport(
 ): Promise<LatestEvalReport> {
   const response = await fetchImpl("/api/evals/latest", { cache: "no-store" });
   if (response.status === 404) {
-    return { kind: "none", detail: await responseReason(response) };
+    return { kind: "none", detail: (await apiError(response)).message };
   }
-  if (!response.ok) throw new EvalsRequestError(await responseReason(response));
+  if (!response.ok) {
+    const failure = await apiError(response);
+    throw new EvalsRequestError(failure.message, failure.referenceId);
+  }
   const parsed = evalReportSchema.safeParse(await response.json());
   if (!parsed.success) throw new EvalsRequestError("unexpected eval report");
   return { kind: "report", report: parsed.data };
