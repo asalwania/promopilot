@@ -119,6 +119,7 @@ def test_the_critics_risk_thresholds_come_from_the_environment(
     monkeypatch.setenv("CRITIC_GROUP_SPEND_SHARE", "0.9")
     monkeypatch.setenv("CRITIC_CANNIBALISATION_SHARE", "0.6")
     monkeypatch.setenv("CRITIC_STOCKOUT_PROBABILITY", "0.1")
+    monkeypatch.setenv("CRITIC_OBJECTIVE_TOLERANCE", "0.1")
     engine = create_async_engine("postgresql+asyncpg://unused@127.0.0.1:1/unused")
 
     planning = build_planning(Settings(), engine)
@@ -128,9 +129,14 @@ def test_the_critics_risk_thresholds_come_from_the_environment(
         group_spend_share=0.9,
         cannibalisation_share=0.6,
         stockout_probability=0.1,
+        objective_tolerance=0.1,
     )
     with monkeypatch.context() as patched:
         patched.setenv("CRITIC_STOCKOUT_PROBABILITY", "1.5")
+        with pytest.raises(ValidationError):
+            Settings()
+    with monkeypatch.context() as patched:
+        patched.setenv("CRITIC_OBJECTIVE_TOLERANCE", "-0.1")
         with pytest.raises(ValidationError):
             Settings()
 
@@ -141,6 +147,7 @@ def test_the_critics_risk_thresholds_default_to_adr_0051(monkeypatch: pytest.Mon
         "CRITIC_GROUP_SPEND_SHARE",
         "CRITIC_CANNIBALISATION_SHARE",
         "CRITIC_STOCKOUT_PROBABILITY",
+        "CRITIC_OBJECTIVE_TOLERANCE",
     ):
         monkeypatch.delenv(name, raising=False)
     engine = create_async_engine("postgresql+asyncpg://unused@127.0.0.1:1/unused")
@@ -198,6 +205,7 @@ def test_the_planning_settings_a_recording_depends_on_come_from_the_environment(
         "critic_group_spend_share": 0.8,
         "critic_cannibalisation_share": 0.5,
         "critic_stockout_probability": 0.1,
+        "critic_objective_tolerance": 0.05,
     }
     recorded = planning.recorded()
     assert recorded.settings == planning.recorded_settings
@@ -222,6 +230,8 @@ RECORDED = (
     "critic_group_spend_share",
     "critic_cannibalisation_share",
     "critic_stockout_probability",
+    # The Critic's choice of the best attempt (ADR 0078).
+    "critic_objective_tolerance",
 )
 
 

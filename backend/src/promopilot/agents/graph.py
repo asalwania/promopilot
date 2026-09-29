@@ -265,7 +265,7 @@ def build_graph(
         if route is None:
             await decide("loop_back", route_summary(None, attempts))
             return {"attempts": attempts, "critic_findings": findings}
-        best = best_attempt(attempts)
+        best = best_attempt(attempts, objective_tolerance=tools.risk_thresholds.objective_tolerance)
         await decide(route.value, route_summary(route, attempts, chosen=best))
         revision = _next_revision(best.plan, state.plan, state.plan_request, request)
         await tools.sessions.save_revision(state.session_id, request, revision)

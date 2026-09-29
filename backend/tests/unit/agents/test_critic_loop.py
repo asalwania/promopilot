@@ -358,6 +358,65 @@ async def test_the_best_attempt_has_fewest_violations_then_findings_then_highest
     assert [issue.code for issue in issues] == [ViolationCode.BUDGET]
 
 
+async def test_a_risk_free_attempt_that_gives_up_more_than_5pct_of_the_objective_loses(
+    data: InMemoryRetailData, request_read: PlanningRequest
+) -> None:
+    # #157: leaving a risky SKU out cost up to 64% of the plan-time objective in the eval.
+    attempts = [plan(objective=10_000.0, stockout_probability=0.45), plan(objective=9_400.0)]
+    script = [*attempt_turns(request_read), _critic(), *attempt_turns(request_read)]
+
+    run = await run_graph(data, script, attempts=attempts)
+
+    assert run.route == loops(1)
+    assert run.state.plan == attempts[0].revision
+    [(_, issues)] = run.saved.open_issues
+    assert [issue.code for issue in issues] == [RiskCode.STOCKOUT_RISK]
+
+
+async def test_a_risk_free_attempt_within_5pct_of_the_best_objective_wins(
+    data: InMemoryRetailData, request_read: PlanningRequest
+) -> None:
+    attempts = [plan(objective=10_000.0, stockout_probability=0.45), plan(objective=9_500.0)]
+    script = [*attempt_turns(request_read), _critic(), *attempt_turns(request_read)]
+
+    run = await run_graph(data, script, attempts=attempts)
+
+    assert run.state.plan == attempts[1].revision
+    assert run.saved.open_issues == [(1, ())]
+
+
+async def test_the_objective_tolerance_is_the_critics_setting(
+    data: InMemoryRetailData, request_read: PlanningRequest
+) -> None:
+    attempts = [plan(objective=10_000.0, stockout_probability=0.45), plan(objective=5_000.0)]
+    script = [*attempt_turns(request_read), _critic(), *attempt_turns(request_read)]
+
+    run = await run_graph(
+        data,
+        script,
+        attempts=attempts,
+        risk_thresholds=RiskThresholds(objective_tolerance=0.5),
+    )
+
+    assert run.state.plan == attempts[1].revision
+
+
+async def test_fewer_violations_still_win_whatever_the_objective(
+    data: InMemoryRetailData, request_read: PlanningRequest
+) -> None:
+    attempts = [over_budget(1_000.0, objective=50_000.0), plan(objective=1_000.0)]
+
+    run = await run_graph(data, _turns(request_read, 2), attempts=attempts)
+
+    assert run.state.plan == attempts[1].revision
+
+
+def _critic() -> CriticFeedback:
+    return CriticFeedback(
+        feedback=[FindingFeedback(finding=1, feedback="SKU0001 runs out in 45% of runs.")]
+    )
+
+
 # Risk findings.
 
 
@@ -764,4 +823,7 @@ async def test_a_finding_goes_away_when_the_next_attempt_leaves_its_sku_out(
     assert fixed.findings == ()
     assert "SKU0004" in {line.line.sku_id for line in flagged.plan.lines}
     assert "SKU0004" not in {line.line.sku_id for line in fixed.plan.lines}
-    assert snapshot.values.plan == fixed.plan
+    # Leaving SKU0004 out gives up 5.2% of the plan-time objective (₹2,737.60 against
+    # ₹2,887.82), more than the Critic's 5% tolerance: the flagged plan goes on (ADR 0078).
+    assert (flagged.plan.objective, fixed.plan.objective) == (2_887.82, 2_737.6)
+    assert snapshot.values.plan == flagged.plan

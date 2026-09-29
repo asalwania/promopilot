@@ -48,6 +48,7 @@ RECORDED_SETTINGS = {
     "critic_group_spend_share",
     "critic_cannibalisation_share",
     "critic_stockout_probability",
+    "critic_objective_tolerance",
 }
 """What a plan, and so every Critic and Explainer request, depends on besides the data and the
 models (ADR 0054): the optimiser's work budgets decide it (ADR 0055), and its wall-clock nets
@@ -91,6 +92,7 @@ class PlanningSettings:
                 group_spend_share=settings.critic_group_spend_share,
                 cannibalisation_share=settings.critic_cannibalisation_share,
                 stockout_probability=settings.critic_stockout_probability,
+                objective_tolerance=settings.critic_objective_tolerance,
             ),
             recorded=settings.model_dump(include=RECORDED_SETTINGS),
         )

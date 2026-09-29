@@ -54,6 +54,9 @@ class RiskThresholds(BaseModel):
     """Cannibalisation at or above this share of a line's incremental profit is heavy."""
     stockout_probability: float = Field(default=0.20, gt=0, le=1)
     """A line that runs out in at least this share of the simulated runs is a stock-out risk."""
+    objective_tolerance: float = Field(default=0.05, ge=0, le=1)
+    """The Critic's best attempt has fewer risk findings only when it keeps its plan-time
+    objective within this share of the best objective among the attempts (ADR 0078)."""
 
 
 def review_risks(
