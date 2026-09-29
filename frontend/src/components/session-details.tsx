@@ -7,6 +7,10 @@ import {
   ClarificationForm,
   type SubmitAnswers,
 } from "@/components/clarification-form";
+import {
+  CompetitorPanel,
+  type CompetitorPrices,
+} from "@/components/competitor-panel";
 import { ConstraintChecklist } from "@/components/constraint-checklist";
 import {
   InfeasibilityPanel,
@@ -21,6 +25,7 @@ import {
   type Reject,
 } from "@/components/review-panel";
 import { RevisionDiffView } from "@/components/revision-diff";
+import { SimulationPanel, type Simulate } from "@/components/simulation-panel";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { UsageMeter } from "@/components/usage-meter";
@@ -43,6 +48,7 @@ export type SessionActions = {
   amend: SubmitAmendment;
   approve: Approve;
   reject: Reject;
+  simulate: Simulate;
 };
 
 const cannot = (what: string) => async () => ({
@@ -55,17 +61,21 @@ const NO_ACTIONS: SessionActions = {
   amend: cannot("amendments"),
   approve: cannot("approvals"),
   reject: cannot("rejections"),
+  simulate: cannot("re-simulations"),
 };
 
 export function SessionDetails({
   session,
   actions = NO_ACTIONS,
   competitorGaps,
+  competitorPrices,
 }: {
   session: Session;
   actions?: Partial<SessionActions>;
   // The KVI gaps at the request's as-of week, for the plan's undercut callouts.
   competitorGaps?: CompetitorGap[];
+  // The same gaps with their loading state, for the competitor panel (ADR 0068).
+  competitorPrices?: CompetitorPrices;
 }) {
   const decision = latestDecision(session);
   const act = { ...NO_ACTIONS, ...actions };
@@ -193,6 +203,23 @@ export function SessionDetails({
         />
       )}
       {revision && <NotSelectedList options={revision.not_selected} />}
+      {/* Competitor handling and risk (F-08, F-09); only a plan awaiting a decision
+          can be re-simulated (ADR 0066, ADR 0068). */}
+      {revision && session.planning_request && competitorPrices && (
+        <CompetitorPanel
+          prices={competitorPrices}
+          request={session.planning_request}
+          revision={revision}
+        />
+      )}
+      {revision && (
+        <SimulationPanel
+          key={revision.number}
+          revisionNumber={revision.number}
+          simulation={revision.simulation}
+          onSimulate={reviewable ? act.simulate : undefined}
+        />
+      )}
       <AuditTrail
         amendments={session.amendments}
         decisions={session.decisions}

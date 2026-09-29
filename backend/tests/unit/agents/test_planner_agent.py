@@ -368,6 +368,8 @@ async def test_an_undercut_kvi_is_explained_with_its_gap_and_the_plans_response(
     assert state.explanations is not None
     for note in state.planner_notes:
         assert note in state.explanations.summary
+    # The panel's copy of the response, kept apart from the summary (ADR 0068).
+    assert state.explanations.competitor_response == state.planner_notes
     assert tools.calls[-1] == (
         "get_competitor_gaps",
         {"regions": ["North"], "categories": ["Snacks"], "kvi_only": True},
@@ -388,6 +390,8 @@ async def test_no_undercut_kvi_adds_no_planner_note(
     state, _ = await plan(data, [generate(request_read), run(), finish()], tools)
 
     assert state.planner_notes == ()
+    assert state.explanations is not None
+    assert state.explanations.competitor_response == ()
 
 
 # LLM down: the default sequence plans the degraded plan, with template explanations (SF-03).
@@ -414,6 +418,8 @@ async def test_an_llm_down_at_the_first_step_gives_the_degraded_default_plan(
     assert state.explanations is not None
     assert state.explanations.summary.startswith("Plan revision 1.")
     assert state.planner_notes[0] in state.explanations.summary
+    # Only the undercut response is the competitor's; the degraded note is not (ADR 0068).
+    assert state.explanations.competitor_response == state.planner_notes[1:]
     assert len(state.explanations.rationales) == 1
     assert tools.called() == ["get_competitor_gaps"]
 

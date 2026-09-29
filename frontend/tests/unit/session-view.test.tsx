@@ -110,7 +110,8 @@ function answerQuestions() {
   );
 }
 
-describe("SessionView", () => {
+// The plan's simulation chart pays for loading Recharts on the first render.
+describe("SessionView", { timeout: 15_000 }, () => {
   it("polls while planning, shows the plan once ready, then stops polling", async () => {
     const requested = stubSessionApi([
       answer(planningSession),
@@ -456,13 +457,114 @@ describe("SessionView", () => {
       "Couldn't approve plan revision 1: plan revision 1 is not the session's latest plan revision",
     );
   });
+  it("re-simulates with the competitor reaction and shows the stress test in place", async () => {
+    const revision = awaitingApprovalSession.plan_revision!;
+    const stressed = {
+      ...revision.simulation!,
+      competitor_reaction: { match_probability: 0.5 },
+      regions: [
+        { region: "North", stockout_probability: 0.2 },
+        { region: "West", stockout_probability: 0.04 },
+      ],
+    };
+    const posted = stubActionApi([awaitingApprovalSession], {
+      simulate: () =>
+        Response.json({
+          session_id: SESSION_ID,
+          revision_number: 1,
+          demand_model: {
+            model_id: "0b8f7e7c-3f3a-4d7e-8f0e-5d3c2b1a0f9e",
+            version: 2,
+            as_of_week: 104,
+          },
+          as_of_week: 104,
+          simulation: stressed,
+        }),
+    });
+
+    renderSessionView();
+    fireEvent.click(await screen.findByRole("button", { name: "Re-simulate" }));
+
+    expect(
+      await screen.findByText(
+        "Stress test: the competitor matches each plan line's discount with probability 50%",
+      ),
+    ).toBeInTheDocument();
+    // The plan's own ranges are the stored simulation's too.
+    expect(screen.getByText(/^Stock-out risk in North:/)).toHaveTextContent(
+      "20%",
+    );
+    expect(posted).toEqual([
+      {
+        action: "simulate",
+        body: { competitor_reaction: { match_probability: 0.5 } },
+      },
+    ]);
+  });
+
+  it("says why a re-simulation conflicted and reloads the session", async () => {
+    stubActionApi([awaitingApprovalSession, approvedSession], {
+      simulate: () =>
+        Response.json(
+          { detail: "plan revision 1 is approved and final" },
+          { status: 409 },
+        ),
+    });
+
+    renderSessionView();
+    fireEvent.click(await screen.findByRole("button", { name: "Re-simulate" }));
+
+    // Reloaded, the plan is final: nothing to re-simulate.
+    expect(await screen.findByText("Final")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Re-simulate" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows the competitor prices from the plan's shared gaps query", async () => {
+    const fetched: string[] = [];
+    stubSessionApi([answer(awaitingApprovalSession)], () => {
+      fetched.push("gaps");
+      return Response.json({
+        as_of_week: 104,
+        undercut_threshold: 0.05,
+        kvi_price_tolerance: 0.05,
+        gaps: undercutGaps,
+      });
+    });
+
+    renderSessionView();
+
+    const table = await screen.findByRole("table", {
+      name: "Competitor gaps",
+    });
+    expect(within(table).getByText("Undercut")).toBeInTheDocument();
+    expect(fetched).toHaveLength(1);
+  });
+
+  it("says when the competitor prices cannot be read", async () => {
+    stubSessionApi(
+      [answer(awaitingApprovalSession)],
+      () => new Response("down", { status: 502 }),
+    );
+
+    renderSessionView();
+    await screen.findByRole("table", { name: "Plan lines in North" });
+    await advance(10_000);
+
+    expect(
+      await screen.findByText(/^Couldn't load competitor prices: /),
+    ).toBeInTheDocument();
+  });
 });
 
 // Reads take the next session in turn (the last repeats); a POST to an action takes
 // that action's answer. Returns what was posted, in order.
 function stubActionApi(
   reads: Session[],
-  actions: Partial<Record<"amend" | "approve" | "reject", () => Response>>,
+  actions: Partial<
+    Record<"amend" | "approve" | "reject" | "simulate", () => Response>
+  >,
 ) {
   const posted: Array<{ action: string; body: unknown }> = [];
   let read = 0;

@@ -37,6 +37,11 @@ test("approving the plan makes the session final and read-only", async ({
   await expect(
     page.getByRole("list", { name: "Audit trail" }).getByRole("listitem"),
   ).toHaveText([/Approved plan revision 1$/]);
+  // A final plan keeps its simulation but can't be re-simulated (ADR 0066, ADR 0068).
+  await expect(
+    page.getByRole("figure", { name: "Simulated gross profit by plan line" }),
+  ).toBeVisible();
+  await expect(page.getByRole("button", { name: "Re-simulate" })).toBeHidden();
 
   const session = await readSession<Session>(page);
   expect(session.status).toBe("approved");

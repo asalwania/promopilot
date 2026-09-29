@@ -51,6 +51,7 @@ class PlanAttempt(BaseModel):
     plan: PlanRevision
     facts: PlanFacts
     notes: tuple[str, ...] = ()
+    competitor_response: tuple[str, ...] = ()
     degraded: DegradedReason | None = None
     findings: tuple[OpenIssue, ...] = ()
     """The Critic's violations and risk findings; empty until it has reviewed the attempt."""
@@ -94,6 +95,9 @@ class PlanningState(BaseModel):
     """The Planner's explanation of the plan it chose, which the Explainer puts in every summary
     verbatim: why the default sequence planned it, and how it answers undercut KVIs (ADR 0049).
     Written from tool outputs only."""
+    competitor_response: tuple[str, ...] = ()
+    """The planner notes that answer undercut KVIs, which the explanation keeps for the
+    competitor panel (ADR 0068)."""
     planner_degraded: DegradedReason | None = None
     """Why the default sequence planned the latest plan; None when the planner agent did."""
     explanations: PlanExplanation | None = None

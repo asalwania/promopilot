@@ -1390,6 +1390,14 @@
             ],
             "title": "Changes"
           },
+          "competitor_response": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Competitor Response",
+            "type": "array"
+          },
           "fallback_reason": {
             "anyOf": [
               {

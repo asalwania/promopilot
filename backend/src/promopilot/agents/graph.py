@@ -243,6 +243,7 @@ def build_graph(
             plan=planned.revision,
             facts=planned.facts,
             notes=planned.notes,
+            competitor_response=planned.competitor_response,
             degraded=planned.degraded,
         )
         return {"attempts": (*state.attempts, attempt), "iteration": state.iteration + 1}
@@ -276,6 +277,7 @@ def build_graph(
             "plan_facts": best.facts,
             "critic_findings": best.findings,
             "planner_notes": best.notes,
+            "competitor_response": best.competitor_response,
             "planner_degraded": best.degraded,
         }
 
@@ -293,6 +295,10 @@ def build_graph(
             facts=state.plan_facts,
             open_issues=state.critic_findings,
             notes=state.planner_notes,
+        )
+        # The panel's copy of the planner's undercut response; the LLM never sees it (ADR 0068).
+        explanation = explanation.model_copy(
+            update={"competitor_response": state.competitor_response}
         )
         if explanation.fallback_reason is not None:
             log.warning(
@@ -331,6 +337,7 @@ def build_graph(
                 "attempts": (),
                 "critic_findings": (),
                 "planner_notes": (),
+                "competitor_response": (),
                 "planner_degraded": None,
                 "explanations": None,
                 "approval": None,

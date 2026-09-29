@@ -8,6 +8,7 @@ import {
   getSession,
   rejectSession,
   SessionLoadError,
+  simulatePlan,
 } from "@/lib/api/sessions";
 
 import {
@@ -507,5 +508,111 @@ describe("rejectSession", () => {
       conflict: false,
       reason: "unexpected session response",
     });
+  });
+});
+
+describe("simulatePlan", () => {
+  const simulation = {
+    ...awaitingApprovalSession.plan_revision!.simulation!,
+    competitor_reaction: { match_probability: 0.5 },
+  };
+  const simulated = {
+    session_id: SESSION_ID,
+    revision_number: 1,
+    demand_model: {
+      model_id: "0b8f7e7c-3f3a-4d7e-8f0e-5d3c2b1a0f9e",
+      version: 2,
+      as_of_week: 104,
+    },
+    as_of_week: 104,
+    simulation,
+  };
+
+  it("re-simulates the latest revision with the competitor-reaction setting", async () => {
+    const { calls, fetchImpl } = recordingFetch(() => Response.json(simulated));
+
+    const result = await simulatePlan(SESSION_ID, 0.5, fetchImpl);
+
+    expect(result).toEqual({ ok: true, revisionNumber: 1, simulation });
+    expect(calls[0].url).toBe(`/api/plans/${SESSION_ID}/simulate`);
+    expect(calls[0].init?.method).toBe("POST");
+    expect(JSON.parse(String(calls[0].init?.body))).toEqual({
+      competitor_reaction: { match_probability: 0.5 },
+    });
+  });
+
+  it("re-simulates with no competitor reaction", async () => {
+    const { calls, fetchImpl } = recordingFetch(() => Response.json(simulated));
+
+    await simulatePlan(SESSION_ID, null, fetchImpl);
+
+    expect(JSON.parse(String(calls[0].init?.body))).toEqual({
+      competitor_reaction: null,
+    });
+  });
+
+  it("reports an approved plan as a conflict with the API's reason", async () => {
+    const { fetchImpl } = recordingFetch(() =>
+      Response.json(
+        { detail: "plan revision 1 is approved and final" },
+        { status: 409 },
+      ),
+    );
+
+    const result = await simulatePlan(SESSION_ID, 0.5, fetchImpl);
+
+    expect(result).toEqual({
+      ok: false,
+      conflict: true,
+      reason: "plan revision 1 is approved and final",
+    });
+  });
+
+  it("reports the network error when the request cannot be sent", async () => {
+    const fetchImpl: typeof fetch = async () => {
+      throw new TypeError("Failed to fetch");
+    };
+
+    const result = await simulatePlan(SESSION_ID, 0.5, fetchImpl);
+
+    expect(result).toEqual({
+      ok: false,
+      conflict: false,
+      reason: "Failed to fetch",
+    });
+  });
+
+  it("fails plainly when the simulation breaks the contract", async () => {
+    const { fetchImpl } = recordingFetch(() => Response.json({ n_runs: 1 }));
+
+    const result = await simulatePlan(SESSION_ID, null, fetchImpl);
+
+    expect(result).toEqual({
+      ok: false,
+      conflict: false,
+      reason: "unexpected simulation response",
+    });
+  });
+});
+
+describe("the session's explanation", () => {
+  it("reads one stored before the competitor response with none", async () => {
+    const stored: Record<string, unknown> = {
+      ...awaitingApprovalSession.plan_revision!.explanation,
+    };
+    delete stored.competitor_response;
+    const { fetchImpl } = recordingFetch(() =>
+      Response.json({
+        ...awaitingApprovalSession,
+        plan_revision: {
+          ...awaitingApprovalSession.plan_revision,
+          explanation: stored,
+        },
+      }),
+    );
+
+    const session = await getSession(SESSION_ID, fetchImpl);
+
+    expect(session.plan_revision?.explanation?.competitor_response).toEqual([]);
   });
 });
