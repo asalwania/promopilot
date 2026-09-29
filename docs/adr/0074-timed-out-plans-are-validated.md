@@ -49,6 +49,7 @@ We chose these with the owner (D1–D8 on #156; every recommended option).
   - diwali-2025-home-personal-care's best plan becomes the greedy plan.
   - tight-offseason-beverages's best plan is unchanged (OPTIMAL).
 - **D6. `clear-curd-diwali-2025` now expects `declares_infeasible: true`** and no longer expects `meets_clearance`. Its brief and labels are unchanged, and so is its group (`overstock_clearance`).
+  - So the suite's rules (ADR 0065) now allow an `overstock_clearance` scenario to expect `declares_infeasible: true`. Such a scenario expects no `meets_clearance`, since its targets are out of reach. Every other rule is unchanged.
   - We rejected loosening the brief (for example one SKU or a 40% target), which changes the Context request and so the whole recording.
 - **D7. The wall-clock net finding is recorded here and followed up in #166.**
   - On these large scopes, CP-SAT's own wall time for 10 deterministic seconds was 52–105 s on a shared development machine. ADR 0055 assumed about 13 s. That is at or over the main solve's 60 s net, so on big scopes the net, not the work budget, can decide where the search stops.
@@ -63,6 +64,7 @@ We chose these with the owner (D1–D8 on #156; every recommended option).
 - **ADR 0044:** "A timeout is never reported infeasible" is replaced by D1 and D2. A plan that misses a target is `INFEASIBLE`: proven by phase 1 or by the check, and otherwise with `proven: false`. "Without clearance targets, a solve that finds nothing in time still returns the empty plan as `FEASIBLE`" is replaced by D4.
 - **ADR 0036:** a solve that finds no plan in time returns the greedy plan, not the empty plan.
 - **ADR 0055:** the relaxation budget now also pays for the check (D3). The wall-clock net can be reached on large scopes (D7).
+- **ADR 0065:** only the `infeasible_constraints` group could expect a declared infeasibility, and every `overstock_clearance` scenario expected `meets_clearance` for each target. A clearance scenario whose targets no plan reaches now expects `declares_infeasible: true` instead (D6).
 
 ## Consequences
 

@@ -102,11 +102,18 @@ def test_the_briefs_cover_each_season(season: str) -> None:
 # ---------------------------------------------------------------- what each group expects
 
 
-def test_only_the_infeasible_group_expects_a_declared_infeasibility() -> None:
+def declared_infeasible(scenario: Scenario) -> bool:
+    return True in {prop.declares_infeasible for prop in expects(scenario, DeclaresInfeasible)}
+
+
+def test_only_infeasible_scenarios_expect_a_declared_infeasibility() -> None:
     for scenario in SUITE:
         declared = {prop.declares_infeasible for prop in expects(scenario, DeclaresInfeasible)}
         if scenario.group is G.INFEASIBLE_CONSTRAINTS:
             assert declared == {True}, scenario.name
+        elif scenario.group is G.OVERSTOCK_CLEARANCE and declared == {True}:
+            # A clearance brief no plan can meet is declared infeasible, not cleared (ADR 0074).
+            assert not expects(scenario, MeetsClearance), scenario.name
         else:
             assert True not in declared, scenario.name
 
@@ -115,6 +122,9 @@ def test_each_group_expects_the_properties_it_tests() -> None:
     for scenario in of(G.OVERSTOCK_CLEARANCE):
         cleared = {prop.meets_clearance for prop in expects(scenario, MeetsClearance)}
         targets = scenario.labels.clearance_targets or ()
+        if declared_infeasible(scenario):
+            assert targets, scenario.name
+            continue
         assert cleared, scenario.name
         assert cleared == {target.sku_id for target in targets}, scenario.name
     for scenario in of(G.COMPETITOR_PRICE_WAR):
