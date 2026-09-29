@@ -11,6 +11,7 @@ from promopilot.domain import (
     PlanLine,
     PlanningRequest,
     Region,
+    TargetSegment,
     Violation,
     ViolationCode,
 )
@@ -77,6 +78,17 @@ class ClearanceFacts(BaseModel):
     0040)."""
 
 
+class SubstituteFacts(BaseModel):
+    """Two SKUs the relations model detects as substitutes, with its estimated cross-price
+    effect θ (one symmetric θ per pair, ADR 0029)."""
+
+    model_config = ConfigDict(frozen=True)
+
+    sku_id: str
+    other_sku_id: str
+    theta: float
+
+
 class PlanFacts(BaseModel):
     """A plan under validation. Unlike `PromoPlan` it may hold two lines for one SKU in one
     region, so that validation can report it instead of failing to build the plan."""
@@ -86,6 +98,23 @@ class PlanFacts(BaseModel):
     lines: tuple[LineFacts, ...]
     clearance: tuple[ClearanceFacts, ...] = ()
     """One per SKU with a clearance target and region with available stock."""
+    substitutes: tuple[SubstituteFacts, ...] = ()
+    """The detected substitute pairs among the plan's SKUs (ADR 0075)."""
+
+
+def run_together(line: PlanLine, other: PlanLine) -> bool:
+    """Whether two plan lines run together: in one region, with a promo week and a target
+    segment in common. All customers shares every segment (ADR 0033, ADR 0075)."""
+    if line.region is not other.region:
+        return False
+    if line.start_week + line.duration_weeks <= other.start_week:
+        return False
+    if other.start_week + other.duration_weeks <= line.start_week:
+        return False
+    everyone = TargetSegment.ALL_CUSTOMERS
+    return everyone in (line.target_segment, other.target_segment) or (
+        line.target_segment is other.target_segment
+    )
 
 
 def validate_plan(
@@ -94,8 +123,9 @@ def validate_plan(
     """Every hard-constraint violation of a plan on its own plan-time numbers; () if none.
 
     Plan-level violations (budget, regional caps, margins) come first, then per-line ones in
-    line order, then max promoted SKUs, duplicate lines and clearance targets. The brief may
-    only tighten company policy (`plan_limits`, ADR 0007).
+    line order, then max promoted SKUs, duplicate lines, clearance targets and strong
+    substitutes promoted together. The brief may only tighten company policy (`plan_limits`,
+    ADR 0007).
     """
     limits = plan_limits(request, policy)
     cleared = {target.sku_id for target in request.clearance_targets}
@@ -112,6 +142,7 @@ def validate_plan(
     violations += _max_skus(plan, limits.max_promoted_skus)
     violations += _duplicates(plan)
     violations += _clearance(plan, request)
+    violations += _strong_substitutes(plan, policy)
     return tuple(violations)
 
 
@@ -360,6 +391,47 @@ def _clearance(plan: PlanFacts, request: PlanningRequest) -> list[Violation]:
                 region=fact.region,
                 actual=sell_through,
                 limit=target,
+            )
+        )
+    return violations
+
+
+def _strong_substitutes(plan: PlanFacts, policy: CompanyPolicy) -> list[Violation]:
+    """Each pair of strong substitutes promoted together, once per region: by two lines that
+    run together, or by one BUNDLE (ADR 0075)."""
+    least = policy.strong_substitute_min_theta
+    strong = {
+        frozenset((pair.sku_id, pair.other_sku_id)): pair.theta
+        for pair in plan.substitutes
+        if pair.theta >= least - _EPSILON
+    }
+    found: dict[tuple[frozenset[str], Region], None] = {}
+    lines = [fact.line for fact in plan.lines]
+    for n, line in enumerate(lines):
+        for other in lines[n:]:
+            if other is not line and not run_together(line, other):
+                continue
+            for sku_id in line.skus:
+                for other_sku_id in other.skus:
+                    pair = frozenset((sku_id, other_sku_id))
+                    if pair in strong:
+                        found[(pair, line.region)] = None
+    violations = []
+    for pair, region in found:
+        first, second = sorted(pair)
+        theta = strong[pair]
+        violations.append(
+            Violation(
+                code=ViolationCode.STRONG_SUBSTITUTES,
+                message=(
+                    f"{first} and {second} are strong substitutes (estimated θ {theta:.2f}, "
+                    f"at least {least:.2f}) promoted together in {region}: promote one of "
+                    "them, or run them in different weeks or segments"
+                ),
+                sku_id=first,
+                region=region,
+                actual=theta,
+                limit=least,
             )
         )
     return violations

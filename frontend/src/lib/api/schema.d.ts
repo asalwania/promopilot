@@ -686,7 +686,7 @@ export interface components {
          * @description A plan-level constraint the optimiser enforces (ADR 0036, ADR 0038).
          * @enum {string}
          */
-        ConstraintKind: "marketing_budget" | "minimum_margin" | "margin_floor" | "max_promoted_skus" | "regional_budget" | "clearance_target" | "kvi_price_tolerance";
+        ConstraintKind: "marketing_budget" | "minimum_margin" | "margin_floor" | "max_promoted_skus" | "regional_budget" | "clearance_target" | "kvi_price_tolerance" | "strong_substitutes";
         /**
          * ConstraintSource
          * @description Who set a constraint: only the brief's constraints may be relaxed (ADR 0007).
@@ -1186,7 +1186,7 @@ export interface components {
          * @description Why a promo option is not in the plan: a rule it breaks alone or added to the plan.
          * @enum {string}
          */
-        NotSelectedReason: "low_uplift" | "out_of_stock" | "breaks_policy" | "over_budget" | "over_regional_budget" | "breaks_margin" | "max_promoted_skus" | "misses_clearance_target" | "breaks_kvi_tolerance" | "cannibalises" | "time_limit";
+        NotSelectedReason: "low_uplift" | "out_of_stock" | "breaks_policy" | "over_budget" | "over_regional_budget" | "breaks_margin" | "max_promoted_skus" | "misses_clearance_target" | "breaks_kvi_tolerance" | "strong_substitute" | "cannibalises" | "time_limit";
         OpenIssue: components["schemas"]["Violation"] | components["schemas"]["RiskFinding"];
         /**
          * OracleScore
@@ -2172,7 +2172,7 @@ export interface components {
          * ViolationCode
          * @enum {string}
          */
-        ViolationCode: "BUDGET" | "REGIONAL_BUDGET" | "MIN_MARGIN" | "MARGIN_FLOOR" | "STOCK" | "MAX_DISCOUNT" | "BELOW_COST" | "WINDOW" | "MAX_SKUS" | "DUPLICATE_LINE" | "CLEARANCE_TARGET" | "KVI_TOLERANCE";
+        ViolationCode: "BUDGET" | "REGIONAL_BUDGET" | "MIN_MARGIN" | "MARGIN_FLOOR" | "STOCK" | "MAX_DISCOUNT" | "BELOW_COST" | "WINDOW" | "MAX_SKUS" | "DUPLICATE_LINE" | "CLEARANCE_TARGET" | "KVI_TOLERANCE" | "STRONG_SUBSTITUTES";
         /**
          * WhyChosen
          * @description Why a plan line was chosen: the positive parts of its value, what it is worth alone,

@@ -30,6 +30,9 @@ class CompanyPolicy(BaseModel):
     write_off_rate: float = Field(default=0.30, ge=0, le=1)
     fixed_cost_per_line_week: dict[Mechanism, float] = Field(default_factory=_default_fixed_costs)
     max_promoted_skus_per_category_per_region: int = Field(default=10, ge=1)
+    strong_substitute_min_theta: float = Field(default=0.35, gt=0)
+    """Two SKUs the relations model detects as substitutes, with an estimated cross-price
+    effect θ at least this, are strong substitutes: never promoted together (ADR 0075)."""
 
 
 class PolicyFinding(BaseModel):

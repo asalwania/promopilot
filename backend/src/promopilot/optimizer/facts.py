@@ -11,7 +11,8 @@ from promopilot.optimizer.solver import OptionFacts
 def plan_facts(options: PromoOptions, rows: Sequence[int], facts: OptionFacts) -> PlanFacts:
     """The options at `rows` as plan validation reads them: each line with its option's own
     numbers and its SKUs' facts, and each clearance target's expected units over the promo
-    window (its baseline plus the window uplift of every line that sells the SKU there)."""
+    window (its baseline plus the window uplift of every line that sells the SKU there), and
+    the relations model's detected substitute pairs among the plan's SKUs (ADR 0075)."""
     table = options.table
     lines = []
     for row in rows:
@@ -49,4 +50,9 @@ def plan_facts(options: PromoOptions, rows: Sequence[int], facts: OptionFacts) -
                 expected_units=sold,
             )
         )
-    return PlanFacts(lines=tuple(lines), clearance=tuple(clearance))
+    sku_ids = sorted({sku_id for fact in lines for sku_id in fact.line.skus})
+    return PlanFacts(
+        lines=tuple(lines),
+        clearance=tuple(clearance),
+        substitutes=tuple(facts.substitutes(sku_ids)) if sku_ids else (),
+    )

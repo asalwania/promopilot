@@ -19,6 +19,7 @@ from promopilot.guardrails import (
     LineFacts,
     PlanFacts,
     SkuFacts,
+    SubstituteFacts,
     Violation,
     ViolationCode,
     validate_plan,
@@ -450,3 +451,85 @@ def test_a_brief_value_that_would_loosen_policy_is_ignored() -> None:
     looser = brief(max_promoted_skus_per_category_per_region=5, marketing_budget=1_000_000.0)
 
     assert codes(validate_plan(plan, looser, policy)) == [ViolationCode.MAX_SKUS]
+
+
+# --- strong substitutes (ADR 0075) ------------------------------------------------------
+
+
+def substitutes(theta: float = 0.6, *pairs: tuple[str, str]) -> tuple[SubstituteFacts, ...]:
+    return tuple(
+        SubstituteFacts(sku_id=a, other_sku_id=b, theta=theta) for a, b in pairs or [("S1", "S2")]
+    )
+
+
+def in_segment(line_facts: LineFacts, segment: TargetSegment) -> LineFacts:
+    line = line_facts.line.model_copy(update={"target_segment": segment})
+    return line_facts.model_copy(update={"line": line})
+
+
+def test_two_strong_substitutes_promoted_together_are_flagged() -> None:
+    plan = PlanFacts(lines=(fact("S1"), fact("S2", start_week=102)), substitutes=substitutes(0.6))
+
+    (violation,) = validate_plan(plan, request(), POLICY)
+
+    assert violation.code is ViolationCode.STRONG_SUBSTITUTES
+    assert (violation.sku_id, violation.region) == ("S1", Region.NORTH)
+    assert violation.actual == pytest.approx(0.6)
+    assert violation.limit == pytest.approx(POLICY.strong_substitute_min_theta)
+    assert "S1 and S2" in violation.message
+    assert "0.60" in violation.message
+
+
+def test_strong_substitutes_apart_in_weeks_region_or_segment_pass() -> None:
+    apart = [
+        (fact("S1"), fact("S2", start_week=103)),
+        (fact("S1"), fact("S2", Region.WEST)),
+        (
+            in_segment(fact("S1"), TargetSegment.FAMILIES),
+            in_segment(fact("S2"), TargetSegment.PREMIUM),
+        ),
+    ]
+    for lines in apart:
+        plan = PlanFacts(lines=lines, substitutes=substitutes(0.6))
+        assert validate_plan(plan, request(), POLICY) == ()
+
+
+def test_all_customers_overlaps_every_segment() -> None:
+    plan = PlanFacts(
+        lines=(fact("S1"), in_segment(fact("S2"), TargetSegment.PREMIUM)),
+        substitutes=substitutes(0.6),
+    )
+
+    assert codes(validate_plan(plan, request(), POLICY)) == [ViolationCode.STRONG_SUBSTITUTES]
+
+
+def test_a_substitute_below_the_policy_threshold_is_not_strong() -> None:
+    plan = PlanFacts(lines=(fact("S1"), fact("S2")), substitutes=substitutes(0.34))
+
+    assert validate_plan(plan, request(), POLICY) == ()
+    stricter = CompanyPolicy(strong_substitute_min_theta=0.3)
+    assert codes(validate_plan(plan, request(), stricter)) == [ViolationCode.STRONG_SUBSTITUTES]
+
+
+def test_a_bundle_partner_counts_as_promoted() -> None:
+    bundle = fact(
+        "S3",
+        mechanism=Mechanism.BUNDLE,
+        partner_sku_id="S1",
+        partner=sku(base_price=50.0, unit_cost=30.0),
+    )
+    together = PlanFacts(lines=(bundle, fact("S2")), substitutes=substitutes(0.6))
+    own_pair = PlanFacts(
+        lines=(
+            fact(
+                "S2",
+                mechanism=Mechanism.BUNDLE,
+                partner_sku_id="S1",
+                partner=sku(base_price=50.0, unit_cost=30.0),
+            ),
+        ),
+        substitutes=substitutes(0.6),
+    )
+
+    assert codes(validate_plan(together, request(), POLICY)) == [ViolationCode.STRONG_SUBSTITUTES]
+    assert codes(validate_plan(own_pair, request(), POLICY)) == [ViolationCode.STRONG_SUBSTITUTES]

@@ -14,6 +14,7 @@ from promopilot.agents.tools.option_context import load_option_context
 from promopilot.config import Settings
 from promopilot.datagen import GeneratedDataset
 from promopilot.domain import (
+    BindingEvidence,
     CompanyPolicy,
     Mechanism,
     PlanLine,
@@ -412,7 +413,8 @@ async def test_the_best_plan_is_our_optimiser_on_true_parameter_predictions(
     assert {line.region for line in result.plan.lines} == {Region.NORTH}
     # Planned on the true demand, the optimiser's own objective is what the oracle scores.
     assert result.objective == pytest.approx(true.objective, rel=0.01)
-    assert result.binding_constraints == ()  # no binding analysis
+    # No binding analysis: any constraint that could bind is left unproven.
+    assert all(b.evidence is BindingEvidence.UNPROVEN for b in result.binding_constraints)
 
 
 async def test_the_best_plan_beats_the_plan_the_fitted_models_choose(world: EvalWorld) -> None:

@@ -179,6 +179,32 @@ describe("InfeasibilityPanel", () => {
     ).toBeEnabled();
   });
 
+  it("names the strong-substitute rule with its θ threshold", () => {
+    render(
+      <InfeasibilityPanel
+        revision={{
+          ...infeasibleRevision,
+          binding_constraints: [
+            {
+              kind: "strong_substitutes",
+              source: "company_policy",
+              limit: 0.35,
+              evidence: "infeasible",
+              objective_gain: null,
+            },
+          ],
+        }}
+        canAccept={false}
+        onAcceptRelaxation={noAccept}
+      />,
+    );
+
+    const binding = screen.getByRole("list", { name: "Binding constraints" });
+    expect(within(binding).getByRole("listitem")).toHaveTextContent(
+      "Strong substitutes kept apart: θ ≥ 0.35 (company policy)",
+    );
+  });
+
   it("offers no button when the session can't be amended", () => {
     render(
       <InfeasibilityPanel

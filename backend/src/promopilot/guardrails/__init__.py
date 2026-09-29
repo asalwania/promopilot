@@ -22,6 +22,8 @@ from promopilot.guardrails.validation import (
     LineFacts,
     PlanFacts,
     SkuFacts,
+    SubstituteFacts,
+    run_together,
     validate_plan,
 )
 
@@ -35,6 +37,7 @@ __all__ = [
     "SkuFacts",
     "StatedKind",
     "StatedNumber",
+    "SubstituteFacts",
     "Violation",
     "ViolationCode",
     "check_numeric_grounding",
@@ -46,5 +49,6 @@ __all__ = [
     "read_stated_numbers",
     "request_changes",
     "review_risks",
+    "run_together",
     "validate_plan",
 ]

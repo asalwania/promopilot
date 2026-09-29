@@ -44,7 +44,9 @@ def test_a_work_budget_that_runs_out_ends_the_demo_search_in_the_same_place(
     # then the main solve, then the binding analysis, each on a budget too small to finish.
     options = generate_options(CONSTRAINED, demo_context)
     facts = FittedOptionFacts(demo_context)
-    tight = SolverSettings(deterministic_limit=0.5, binding_deterministic_limit=0.5)
+    # Small enough to run out even with the strong-substitute groups, which make the demo
+    # solve prove optimality in about 0.1 deterministic seconds (ADR 0075).
+    tight = SolverSettings(deterministic_limit=0.05, binding_deterministic_limit=0.05)
 
     def solved(settings: SolverSettings) -> OptimisationResult:
         return solve(CONSTRAINED, options, facts, demo_context.policy, settings=settings, seed=0)

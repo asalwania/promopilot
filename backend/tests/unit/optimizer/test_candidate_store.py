@@ -7,7 +7,7 @@ import pandas as pd
 import pytest
 
 from promopilot.domain import PlanLine, PlanningRequest, PromoPlan, PromoWindow, Region, Scope
-from promopilot.guardrails import SkuFacts
+from promopilot.guardrails import SkuFacts, SubstituteFacts
 from promopilot.optimizer import (
     TABLE_COLUMNS,
     CandidateStore,
@@ -42,6 +42,9 @@ class Facts:
         self, pairs: Sequence[tuple[PlanLine, PlanLine]]
     ) -> Sequence[float]:
         return [0.0] * len(pairs)
+
+    def substitutes(self, sku_ids: Sequence[str]) -> Sequence[SubstituteFacts]:
+        return []
 
 
 FACTS = Facts()
