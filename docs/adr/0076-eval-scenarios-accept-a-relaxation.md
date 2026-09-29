@@ -50,13 +50,24 @@ We chose these with the owner (D1–D8 on #160; every recommended option).
 - **D7. The demo scenario should replay the app's committed cassettes, with no eval recording.**
   - #149 recorded the demo's accept round into `backend/cassettes/`. The app's manifest lists the accept text "Accept the smallest relaxation: lower the clearance target for SKU0006 to 59.86% sell-through."
   - Rounds 1–3 already replay whole on the eval's world (ADR 0056, ADR 0065). So revision 3 carries the same relaxation, the runner writes the same text, and the accept round asks the same requests. The layered replay reads the eval's folder and then the app's.
-  - It was checked offline (replay, no key) with `make eval ONLY=demo-budget-cut-drop-west`. The result is in the pull request.
+  - It was checked offline (see below).
   - If #156 or #158 change the demo's plans, the app's and the eval's cassettes are both re-recorded then, whatever this change does. Record mode reads the app's folder first, so the demo costs nothing there when the app's cassettes are current.
 - **D8. Tests.**
   - **Scenario tests:** the step parses, and `false` or unknown keys are refused. The demo carries the step and its expectations.
   - **Label matching:** `match_fields` applies each kind of change.
   - **Runner, on the small world:** an unreachable clearance target is accepted and re-planned into revision 2, which is not infeasible, meets its relaxed target and has a clearance-target diff. Its extraction is scored against the relaxed value. A scenario that accepts when there is no relaxation fails the run with the refusal.
   - The Context agent's rules cannot read an accepted relaxation's text: they ask which SKU it means. So the runner test's scripted LLM reads only that amendment, and everything else falls back.
+
+## Offline check
+
+`LLM_PROVIDER=replay python -m promopilot.evals --only demo-budget-cut-drop-west --check` ran on the seed-42 world with no key and recorded nothing. It passed.
+
+- There were no cassette misses and nothing fell back. All four revisions were explained by the LLM.
+- Revision 4 is `OPTIMAL`: 20 lines, North only, objective ₹73,844.49. Its constraints pass.
+- All five expected properties hold.
+- The session took 338 s and replayed 47 calls.
+
+**A finding for the target review.** Extraction flags `clearance_targets`. The recorded Context reading of "lower the clearance target for SKU0006 to 59.86% sell-through" lowered SKU0002's target to 0.5986 as well. ADR 0070 needed SKU0002's 60% kept. This comes from the app's committed demo recording, not from this change. A field mismatch never fails a run (ADR 0062), so the scenario still passes, but extraction accuracy counts the misread. D5 exists to catch this kind of misread.
 
 ## Consequences
 
