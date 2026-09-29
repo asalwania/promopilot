@@ -301,6 +301,14 @@ _Avoid_: snapshot, save point
 One numbered step of a planning session's agent graph: a node starting or finishing, a tool call, a decision, a clarification, a finding, or the tokens one LLM call used and cost. A session's trace events are kept in order and stream live to the session page; its token usage is their sum.
 _Avoid_: log line, message, activity
 
+**Session timeout**:
+The longest one background run of a planning session's agent graph may take before it pauses (`SESSION_TIMEOUT_SECONDS`). A run past it is stopped, and the session fails with the reason after a `session_timed_out` decision in its trace (ADR 0071).
+_Avoid_: request timeout, deadline
+
+**Reference id**:
+The id the API gives every request, sent back as `X-Request-ID` and in every error body. A promotions manager quotes it to report a failure; the logs find the request by it (ADR 0071).
+_Avoid_: request number, error id, trace id
+
 **Violation**:
 One hard constraint a plan breaks on its own plan-time numbers (e.g. total promo cost over the marketing budget, a plan line below unit cost), found by plan validation and sent back to the planner.
 _Avoid_: error, failure, issue (which the critic's risk review raises)

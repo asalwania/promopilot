@@ -183,6 +183,7 @@ async def api_app(
     *,
     trace_poll_interval_s: float = 0.05,
     risk_thresholds: RiskThresholds = QUIET,
+    session_timeout_s: float = 900.0,
 ) -> AsyncIterator[FastAPI]:
     """The app of one API process, started up; it shuts down on leaving."""
     engine = create_async_engine(url)
@@ -215,6 +216,7 @@ async def api_app(
         checkpoints=PostgresCheckpoints(url),
         trace=trace,
         trace_poll_interval_s=trace_poll_interval_s,
+        session_timeout_s=session_timeout_s,
     )
     plans = PlanService(
         revisions=store, demand_models=demand, data=data, policy=FREE, defaults=simulation

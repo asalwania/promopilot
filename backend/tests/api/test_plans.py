@@ -1,6 +1,7 @@
 """`POST /api/plans/{id}/simulate`: re-simulate a session's latest plan revision (ADR 0043),
 optionally with a competitor reaction (ADR 0045)."""
 
+import asyncio
 from typing import Any
 from uuid import UUID, uuid4
 
@@ -305,3 +306,39 @@ async def test_no_inventory_snapshot_for_the_as_of_week_is_503(
         response = await simulate(client, session.id, {"n_runs": 200})
 
     assert response.status_code == 503
+
+
+class HangingDemand:
+    """A demand model source that never answers, like a stalled model load."""
+
+    async def get(self) -> Any:
+        await asyncio.Event().wait()
+
+
+async def test_a_simulation_that_takes_too_long_is_504_and_stores_nothing(
+    small_dataset: GeneratedDataset, revision: PlanRevision
+) -> None:
+    session = session_with(revision)
+    revisions = InMemoryRevisions(session)
+    plans = PlanService(
+        revisions=revisions,
+        demand_models=HangingDemand(),
+        data=InMemoryRetailData(small_dataset),
+        policy=CompanyPolicy(),
+        defaults=DEFAULTS,
+        timeout_s=0.01,
+    )
+    app = create_app(
+        database_probe=HealthyProbe(),
+        model_status=NoModel(),
+        sessions=offline_sessions(),
+        plans=plans,
+    )
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await simulate(client, session.id, {"n_runs": 200})
+
+    assert response.status_code == 504
+    body = response.json()
+    assert body["code"] == "timeout"
+    assert body["detail"] == "The simulation took longer than 0.01 s and was stopped."
+    assert revisions.sessions[session.id] == session

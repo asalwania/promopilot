@@ -7,6 +7,7 @@ from typing import Annotated, Protocol
 
 from fastapi import APIRouter, HTTPException, Query, status
 
+from promopilot.api.schemas import QUERY_MAX_CHARS
 from promopilot.competitors import CompetitorData, CompetitorGaps, read_competitor_gaps
 from promopilot.domain import CompanyPolicy, Region
 
@@ -31,7 +32,7 @@ class CompetitorService:
         *,
         as_of_week: int | None = None,
         region: Region | None = None,
-        category: str | None = None,
+        category: Annotated[str | None, Query(max_length=QUERY_MAX_CHARS)] = None,
         kvi_only: bool = False,
     ) -> CompetitorGaps:
         """Raises `NoDataError` without data, `ValueError` for an unknown category."""
@@ -62,7 +63,7 @@ def competitors_router(competitors: CompetitorService) -> APIRouter:
             int | None, Query(ge=0, description="Defaults to the data's default as-of week.")
         ] = None,
         region: Region | None = None,
-        category: str | None = None,
+        category: Annotated[str | None, Query(max_length=QUERY_MAX_CHARS)] = None,
         kvi_only: bool = False,
     ) -> CompetitorGaps:
         """Competitor price index, gap and KVI undercut per SKU x region, widest gap first.

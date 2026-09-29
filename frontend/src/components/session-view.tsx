@@ -7,6 +7,7 @@ import {
   type SessionActions,
 } from "@/components/session-details";
 import type { CompetitorPrices } from "@/components/competitor-panel";
+import { ReferenceId } from "@/components/error-message";
 import { TraceTimeline } from "@/components/trace-timeline";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -21,6 +22,7 @@ import {
   type Session,
   type SessionActionResult,
 } from "@/lib/api/sessions";
+import { referenceIdOf } from "@/lib/api/reason";
 import { useCompetitorGaps } from "@/lib/competitor-gaps";
 import { useTraceStream } from "@/lib/trace-stream";
 
@@ -98,7 +100,10 @@ export function SessionView({ sessionId }: { sessionId: string }) {
     main = (
       <Notice title="Couldn't load the session">
         <CardContent className="flex items-center justify-between gap-4">
-          <p className="text-muted-foreground text-sm">{query.error.message}</p>
+          <p className="text-muted-foreground text-sm">
+            {query.error.message}
+            <ReferenceId referenceId={referenceIdOf(query.error)} />
+          </p>
           <Button
             variant="outline"
             disabled={query.isFetching}
@@ -149,6 +154,7 @@ function competitorPrices(
     return {
       status: "error",
       reason: gaps.error.message,
+      referenceId: referenceIdOf(gaps.error),
       retry: () => void gaps.refetch(),
     };
   }

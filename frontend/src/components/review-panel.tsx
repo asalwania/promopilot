@@ -7,6 +7,7 @@ import {
   type ActionOutcome,
   type SubmitAmendment,
 } from "@/components/amend-box";
+import { ErrorMessage, type ShownError } from "@/components/error-message";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -18,9 +19,7 @@ import {
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import type { PlanRevision } from "@/lib/api/sessions";
-
-// Mirrors the API's reason limit (ADR 0046 D7); the API still validates.
-const REASON_MAX_CHARS = 2000;
+import { REASON_MAX_CHARS } from "@/lib/input-limits";
 
 export type Approve = (revisionNumber: number) => Promise<ActionOutcome>;
 export type Reject = (
@@ -50,7 +49,7 @@ export function ReviewPanel({
   const [step, setStep] = useState<Step>("choose");
   const [busy, setBusy] = useState(false);
   const [reason, setReason] = useState("");
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<ShownError | null>(null);
   const shown = `plan revision ${revision.number}`;
   const infeasible = revision.solver_status === "INFEASIBLE";
 
@@ -62,7 +61,12 @@ export function ReviewPanel({
     setError(null);
     const result = await action();
     setBusy(false);
-    if (!result.ok) setError(`${failed}: ${result.reason}`);
+    if (!result.ok) {
+      setError({
+        message: `${failed}: ${result.reason}`,
+        referenceId: result.referenceId,
+      });
+    }
     return result;
   }
 
@@ -157,9 +161,10 @@ export function ReviewPanel({
           />
         )}
         {error && (
-          <p role="alert" className="text-destructive text-sm">
-            {error}
-          </p>
+          <ErrorMessage
+            message={error.message}
+            referenceId={error.referenceId}
+          />
         )}
         <AmendBox onAmend={amend} disabled={busy} />
       </CardContent>

@@ -5,7 +5,7 @@ ends once the session is final, and its token-usage events add up to the session
 import asyncio
 import json
 import socket
-from collections.abc import AsyncIterator, Iterator
+from collections.abc import AsyncIterator, Callable, Iterator
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
@@ -13,11 +13,13 @@ from typing import Any
 import pytest
 import uvicorn
 from fastapi import FastAPI
-from httpx import AsyncClient
+from httpx import ASGITransport, AsyncClient
 from testcontainers.community.postgres import PostgresContainer
 
+from promopilot.agents import PlannedRevision, Planner
 from promopilot.data import load_dataset
 from promopilot.datagen import GeneratedDataset, write
+from promopilot.domain import PlanningRequest
 from promopilot.llm import FakeProvider, Usage
 from promopilot.models.demand import DemandModel
 from promopilot.models.relations import Relations
@@ -259,3 +261,42 @@ async def _data_lines(lines: AsyncIterator[str], count: int | None) -> AsyncIter
             taken += 1
             if count is not None and taken == count:
                 return
+
+
+class HangingPlanner:
+    """A planner whose tools never answer, like a stalled solve."""
+
+    async def plan(self, request: PlanningRequest) -> PlannedRevision:
+        await asyncio.Event().wait()
+        raise AssertionError("unreachable")
+
+
+@pytest.mark.parametrize("stalled", ["llm", "tool"])
+async def test_a_graph_run_that_takes_too_long_fails_the_session_with_a_reason_and_an_event(
+    postgres_url: str, small_models: tuple[DemandModel, Relations], stalled: str
+) -> None:
+    # The LLM's first call never answers, or the brief is read and the planner never answers.
+    llm = GatedProvider(FakeProvider([])) if stalled == "llm" else FakeProvider([READING])
+    hang: Callable[[Planner], Planner] | None = None
+    if stalled == "tool":
+        hang = lambda _: HangingPlanner()  # noqa: E731
+    async with (
+        api_app(postgres_url, llm, small_models, hang, session_timeout_s=0.5) as app,
+        AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client,
+    ):
+        session_id = (await client.post("/api/sessions", json={"brief": BRIEF})).json()[
+            "session_id"
+        ]
+        failed = await settled(client, session_id)
+        events = sse((await client.get(f"/api/sessions/{session_id}/events")).text)
+
+    assert failed["status"] == "failed"
+    assert failed["error"] == "Planning took longer than 0.5 s and was stopped."
+    last = trace_of(events)[-1]
+    assert last["node"] is None
+    assert last["payload"] == {
+        "kind": "decision",
+        "decision": "session_timed_out",
+        "summary": "Planning took longer than 0.5 s and was stopped.",
+    }
+    assert json.loads(events[-1]["data"])["status"] == "failed"

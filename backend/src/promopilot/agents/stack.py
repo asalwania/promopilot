@@ -145,10 +145,12 @@ def planning_stack(
     simulation: SimulationSettings,
     seed: int,
     as_of_week: AsOfWeekSource,
+    tool_timeout_s: float | None = None,
 ) -> PlanningStack:
     """The tools and the default sequence, planning on `data` with the models the sources give
     on each call, the optimiser's `seed` and the simulation's settings. The data tools read at
-    `as_of_week` (ADR 0032)."""
+    `as_of_week` (ADR 0032). A tool call still running after `tool_timeout_s` is a `timeout`
+    tool error (the API's `TOOL_TIMEOUT_SECONDS`, ADR 0071)."""
     candidates = CandidateStore()
     tools = ToolRegistry(
         [
@@ -165,7 +167,8 @@ def planning_stack(
             relax_constraints_tool(candidates, policy=policy, settings=solver, seed=seed),
             compare_mechanisms_tool(demand_model, relations_model, data, as_of_week, policy=policy),
             simulate_plan_tool(demand_model, data, as_of_week, policy=policy, defaults=simulation),
-        ]
+        ],
+        timeout_s=tool_timeout_s,
     )
     planner = OptimisingPlanner(
         demand_model,

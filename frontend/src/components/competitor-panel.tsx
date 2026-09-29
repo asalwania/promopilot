@@ -1,3 +1,4 @@
+import { ReferenceId } from "@/components/error-message";
 import { SourcedNumber } from "@/components/sourced-number";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -16,7 +17,7 @@ import { SOURCES } from "@/lib/sources";
 // (ADR 0060 D10).
 export type CompetitorPrices =
   | { status: "loading" }
-  | { status: "error"; reason: string; retry: () => void }
+  | { status: "error"; reason: string; referenceId?: string; retry: () => void }
   | { status: "ready"; gaps: CompetitorGap[] };
 
 // Competitor awareness (F-08, SPEC §11): the KVI prices the planner saw, which are
@@ -49,6 +50,7 @@ export function CompetitorPanel({
           <div className="flex items-center justify-between gap-4">
             <p role="alert" className="text-destructive text-sm">
               Couldn&apos;t load competitor prices: {prices.reason}
+              <ReferenceId referenceId={prices.referenceId} />
             </p>
             <Button variant="outline" size="sm" onClick={prices.retry}>
               Retry

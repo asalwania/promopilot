@@ -8,6 +8,7 @@ import {
   InventoryTable,
   ProductsTable,
 } from "@/components/data-tables";
+import { ReferenceId } from "@/components/error-message";
 import { UndercutCallout } from "@/components/undercut-callout";
 import { Button } from "@/components/ui/button";
 import {
@@ -23,6 +24,7 @@ import {
   listProducts,
   listRegions,
 } from "@/lib/api/catalog";
+import { referenceIdOf } from "@/lib/api/reason";
 import { formatWeek } from "@/lib/format";
 
 const MAX_RETRIES = 2;
@@ -254,6 +256,7 @@ function Panel<T>({
             <div className="text-sm">
               <p className="font-medium">Couldn&apos;t load {noun}</p>
               <p className="text-muted-foreground">{query.error.message}</p>
+              <ReferenceId referenceId={referenceIdOf(query.error)} />
             </div>
             <Button
               variant="outline"

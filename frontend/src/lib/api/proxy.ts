@@ -1,3 +1,5 @@
+import type { components } from "@/lib/api/schema";
+
 // Forwards a same-origin `/api/*` request to the API (ADR 0001) so the browser
 // never needs CORS or a second public URL. Bodies stream both ways, so the same
 // proxy carries a session's SSE trace stream (ADR 0047): the browser's
@@ -30,7 +32,17 @@ export async function proxyToApi(
       ...(hasBody ? { duplex: "half" } : {}),
     } as RequestInit);
   } catch {
-    return Response.json({ detail: "API unreachable" }, { status: 502 });
+    // The API's error schema (ADR 0071), with a reference id of the proxy's own.
+    const referenceId = crypto.randomUUID();
+    return Response.json(
+      {
+        detail: "API unreachable",
+        code: "api_unreachable",
+        reference_id: referenceId,
+        errors: null,
+      } satisfies components["schemas"]["ErrorResponse"],
+      { status: 502, headers: { "x-request-id": referenceId } },
+    );
   }
 
   const responseHeaders = new Headers(upstream.headers);

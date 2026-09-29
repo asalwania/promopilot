@@ -193,6 +193,13 @@ describe("proxyToApi", () => {
     );
 
     expect(response.status).toBe(502);
-    expect(await response.json()).toEqual({ detail: "API unreachable" });
+    const body = await response.json();
+    expect(body).toEqual({
+      detail: "API unreachable",
+      code: "api_unreachable",
+      reference_id: expect.any(String),
+      errors: null,
+    });
+    expect(response.headers.get("x-request-id")).toBe(body.reference_id);
   });
 });

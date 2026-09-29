@@ -32,13 +32,13 @@ describe("listModels", () => {
     expect(calls[0].init?.cache).toBe("no-store");
   });
 
-  it("throws with the status when the read fails", async () => {
+  it("throws with the API's reason when the read fails", async () => {
     const { fetchImpl } = recordingFetch(() =>
       Response.json({ detail: "API unreachable" }, { status: 502 }),
     );
 
     await expect(listModels(fetchImpl)).rejects.toEqual(
-      new ModelsRequestError("HTTP 502"),
+      new ModelsRequestError("API unreachable"),
     );
   });
 

@@ -14,6 +14,9 @@ from the previous one (ADR 0052).
 Every step the graph takes is a trace event in Postgres (ADR 0047). `GET /events` streams them
 over SSE: it replays the events after `Last-Event-ID`, then polls for new ones until the
 session is final, and ends with an `end` event.
+
+A background run that has not paused within `SESSION_TIMEOUT_SECONDS` is cancelled: the
+session fails with the reason, after a `session_timed_out` decision in its trace (ADR 0071).
 """
 
 import asyncio
@@ -54,6 +57,7 @@ from promopilot.data import AMENDABLE, SessionConflictError, SessionStore, Trace
 from promopilot.domain import (
     Clarification,
     DecisionKind,
+    DecisionMade,
     SessionStatus,
     SolveStatus,
     TraceEvent,
@@ -94,13 +98,17 @@ class SessionService:
         checkpoints: Checkpoints,
         trace: TraceReader,
         trace_poll_interval_s: float = 0.5,
+        session_timeout_s: float = 900.0,
     ) -> None:
+        if session_timeout_s <= 0:
+            raise ValueError("session_timeout_s must be positive")
         self._store = store
         self._tools = tools
         self._llm = llm
         self._checkpoints = checkpoints
         self._trace = trace
         self._poll_interval_s = trace_poll_interval_s
+        self._timeout_s = session_timeout_s
         self._graph: PlanningGraph | None = None
         self._tasks: set[asyncio.Task[None]] = set()
         # One decision at a time per session, so two requests cannot both resume one interrupt.
@@ -367,8 +375,10 @@ class SessionService:
         """Run the graph until it pauses or fails, then record where it paused."""
         # The run is its own task, so the session id stays on every log line it writes.
         structlog.contextvars.bind_contextvars(session_id=str(session_id))
+        deadline = asyncio.timeout(self._timeout_s)
         try:
-            await run()
+            async with deadline:
+                await run()
             # Only once an interrupt is checkpointed can anyone answer it.
             paused = await graph_state(graph, str(session_id))
             if paused is not None and paused.awaits_decision:
@@ -381,9 +391,23 @@ class SessionService:
             await self._store.mark_failed(session_id, f"Planning is not possible yet: {error}")
         except LLMError as error:
             await self._store.mark_failed(session_id, f"The language model failed: {error}")
+        except TimeoutError:
+            if not deadline.expired():
+                log.exception("sessions.planning_failed", session_id=str(session_id))
+                await self._store.mark_failed(session_id, "Planning failed unexpectedly.")
+                return
+            await self._time_out(session_id)
         except Exception:
             log.exception("sessions.planning_failed", session_id=str(session_id))
             await self._store.mark_failed(session_id, "Planning failed unexpectedly.")
+
+    async def _time_out(self, session_id: UUID) -> None:
+        reason = f"Planning took longer than {self._timeout_s:g} s and was stopped."
+        log.warning("sessions.timed_out", timeout_s=self._timeout_s)
+        await self._tools.trace.append(
+            session_id, None, DecisionMade(decision="session_timed_out", summary=reason)
+        )
+        await self._store.mark_failed(session_id, reason)
 
 
 def sessions_router(sessions: SessionService) -> APIRouter:

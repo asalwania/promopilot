@@ -25,6 +25,7 @@ from promopilot.agents.tools.inventory_status import (
     get_inventory_status_tool,
 )
 from promopilot.agents.tools.scope_data import GetScopeDataInput, get_scope_data_tool
+from promopilot.api.schemas import QUERY_MAX_CHARS
 from promopilot.domain import CompanyPolicy, Region, Segment
 
 
@@ -141,7 +142,7 @@ class CatalogService:
         *,
         as_of_week: int | None = None,
         region: Region | None = None,
-        category: str | None = None,
+        category: Annotated[str | None, Query(max_length=QUERY_MAX_CHARS)] = None,
         overstocked_only: bool = False,
     ) -> InventoryReport:
         """Raises `NoDataError` without data at the week, `ValueError` for an unknown filter."""
@@ -190,7 +191,10 @@ def catalog_router(catalog: CatalogService) -> APIRouter:
     router = APIRouter(prefix="/api", tags=["catalog"])
 
     @router.get("/catalog/products")
-    async def list_products(category: str | None = None, kvi_only: bool = False) -> ProductList:
+    async def list_products(
+        category: Annotated[str | None, Query(max_length=QUERY_MAX_CHARS)] = None,
+        kvi_only: bool = False,
+    ) -> ProductList:
         """Every product in SKU order; an unknown category is 422."""
         try:
             return await catalog.products(category=category, kvi_only=kvi_only)
@@ -211,7 +215,7 @@ def catalog_router(catalog: CatalogService) -> APIRouter:
             int | None, Query(ge=0, description="Defaults to the data's default as-of week.")
         ] = None,
         region: Region | None = None,
-        category: str | None = None,
+        category: Annotated[str | None, Query(max_length=QUERY_MAX_CHARS)] = None,
         overstocked_only: bool = False,
     ) -> InventoryReport:
         """Stock per SKU x region pooled over the region's stores, with overstock flags.

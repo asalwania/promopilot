@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useRef, useState, type FormEvent } from "react";
 
 import { ConstraintForm } from "@/components/constraint-form";
+import { ErrorMessage, type ShownError } from "@/components/error-message";
 import { ExampleBriefs } from "@/components/example-briefs";
 import { Button } from "@/components/ui/button";
 import { createSession } from "@/lib/api/sessions";
@@ -15,9 +16,7 @@ import {
   type ConstraintValues,
 } from "@/lib/brief-constraints";
 import { EXAMPLE_BRIEFS, type ExampleBrief } from "@/lib/example-briefs";
-
-// Mirrors the API's brief limits (ADR 0020); the API still validates.
-const BRIEF_MAX_CHARS = 2000;
+import { BRIEF_MAX_CHARS } from "@/lib/input-limits";
 
 export function BriefComposer() {
   const router = useRouter();
@@ -29,7 +28,7 @@ export function BriefComposer() {
     {},
   );
   const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<ShownError | null>(null);
 
   // What is sent: the brief plus a sentence per valid constraint (ADR 0058). While a
   // field is invalid, the preview and the count fall back to the brief alone.
@@ -73,7 +72,10 @@ export function BriefComposer() {
       router.push(`/sessions/${result.sessionId}`);
       return;
     }
-    setError(`Couldn't start planning: ${result.reason}`);
+    setError({
+      message: `Couldn't start planning: ${result.reason}`,
+      referenceId: result.referenceId,
+    });
     setSubmitting(false);
   }
 
@@ -132,9 +134,10 @@ export function BriefComposer() {
             </Button>
           </div>
           {error && (
-            <p role="alert" className="text-destructive text-sm">
-              {error}
-            </p>
+            <ErrorMessage
+              message={error.message}
+              referenceId={error.referenceId}
+            />
           )}
         </div>
       </div>

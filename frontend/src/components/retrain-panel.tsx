@@ -4,8 +4,10 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { LoaderCircle } from "lucide-react";
 import { useEffect, useState } from "react";
 
+import { ErrorMessage } from "@/components/error-message";
 import { Button } from "@/components/ui/button";
 import { MODELS_QUERY_KEY, retrainModels } from "@/lib/api/models";
+import { referenceIdOf } from "@/lib/api/reason";
 
 // The API holds the request until the new model is live (ADR 0026) and reports
 // no progress, so the panel shows elapsed time, not a percentage (ADR 0030).
@@ -54,9 +56,10 @@ export function RetrainPanel() {
         </p>
       )}
       {retrain.isError && (
-        <p role="alert" className="text-destructive text-sm">
-          Couldn&apos;t retrain: {retrain.error.message}
-        </p>
+        <ErrorMessage
+          message={`Couldn't retrain: ${retrain.error.message}`}
+          referenceId={referenceIdOf(retrain.error)}
+        />
       )}
     </div>
   );

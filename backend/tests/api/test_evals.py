@@ -52,7 +52,8 @@ async def test_before_any_run_it_is_404_saying_to_run_make_eval(tmp_path: Path) 
         status, body = await get_latest(directory)
 
         assert status == 404
-        assert body == {"detail": "No eval report yet: run `make eval`."}
+        assert body["detail"] == "No eval report yet: run `make eval`."
+        assert body["code"] == "not_found"
 
 
 async def test_a_report_this_version_cannot_read_is_404_saying_to_run_make_eval_again(
@@ -64,10 +65,11 @@ async def test_a_report_this_version_cannot_read_is_404_saying_to_run_make_eval_
         status, body = await get_latest(tmp_path)
 
         assert status == 404
-        assert body == {
-            "detail": "The latest eval report was written by another version of PromoPilot: "
+        assert body["detail"] == (
+            "The latest eval report was written by another version of PromoPilot: "
             "run `make eval` again."
-        }
+        )
+        assert body["code"] == "not_found"
 
 
 def test_the_contract_serves_the_eval_report_and_documents_the_404(tmp_path: Path) -> None:

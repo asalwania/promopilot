@@ -5,10 +5,12 @@ a pydantic input and output model (their JSON schemas are what the LLM sees) and
 handler. Its dependencies are bound when the tool is built, never passed by the LLM.
 
 `ToolRegistry.call` never raises for a bad call: an unknown tool, arguments that break the
-input schema, or a `ToolCallError` from the handler all come back as a `ToolError` the planner
-can hand to the LLM (ADR 0025). A bug in a handler still raises.
+input schema, a `ToolCallError` from the handler, or a handler still running when the
+registry's timeout (`TOOL_TIMEOUT_SECONDS`, ADR 0071) runs out all come back as a `ToolError`
+the planner can hand to the LLM (ADR 0025). A bug in a handler still raises.
 """
 
+import asyncio
 from collections.abc import Awaitable, Callable, Iterable, Mapping
 from dataclasses import dataclass
 from typing import Any, Literal
@@ -16,9 +18,15 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, SerializeAsAny, ValidationError
 
 ToolErrorCode = Literal[
-    "unknown_tool", "invalid_input", "model_unavailable", "data_unavailable", "tool_failed"
+    "unknown_tool",
+    "invalid_input",
+    "model_unavailable",
+    "data_unavailable",
+    "tool_failed",
+    "timeout",
 ]
-"""`tool_failed` is the planner's, for a tool that kept raising after its retries (ADR 0049)."""
+"""`tool_failed` is the planner's, for a tool that kept raising after its retries (ADR 0049).
+`timeout` is a call still running when the registry's timeout runs out (ADR 0071)."""
 
 
 @dataclass(frozen=True)
@@ -79,12 +87,20 @@ class ToolCallError(Exception):
 
 
 class ToolRegistry:
-    def __init__(self, tools: Iterable[Tool[Any, Any]]) -> None:
+    def __init__(self, tools: Iterable[Tool[Any, Any]], *, timeout_s: float | None = None) -> None:
+        if timeout_s is not None and timeout_s <= 0:
+            raise ValueError("timeout_s must be positive")
+        self._timeout_s = timeout_s
         self._tools: dict[str, Tool[Any, Any]] = {}
         for tool in tools:
             if tool.name in self._tools:
                 raise ValueError(f"two tools are named {tool.name}")
             self._tools[tool.name] = tool
+
+    @property
+    def timeout_s(self) -> float | None:
+        """How long one call may run, in seconds; None for no limit."""
+        return self._timeout_s
 
     def specs(self) -> list[ToolSpec]:
         return [
@@ -116,6 +132,16 @@ class ToolRegistry:
                 ),
             )
         try:
-            return ToolOk(output=await tool.handler(parsed))
+            async with asyncio.timeout(self._timeout_s) as deadline:
+                return ToolOk(output=await tool.handler(parsed))
         except ToolCallError as failure:
             return failure.error
+        except TimeoutError:
+            if not deadline.expired():
+                raise
+            # A handler's worker thread cannot be cancelled, only abandoned; the optimiser's
+            # own wall-clock nets still stop its solve (ADR 0055).
+            return ToolError(
+                code="timeout",
+                message=f"{name} took longer than {self._timeout_s:g} s and was stopped",
+            )

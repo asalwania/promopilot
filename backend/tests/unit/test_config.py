@@ -233,3 +233,51 @@ def test_the_api_serves_the_eval_report_make_eval_writes_by_default(
 
     monkeypatch.setenv("EVAL_REPORT_DIR", "/srv/reports")
     assert Settings().eval_report_dir == Path("/srv/reports")
+
+
+def test_timeouts_and_the_body_limit_have_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
+    for name in (
+        "LLM_TIMEOUT_SECONDS",
+        "TOOL_TIMEOUT_SECONDS",
+        "SESSION_TIMEOUT_SECONDS",
+        "MAX_REQUEST_BODY_BYTES",
+    ):
+        monkeypatch.delenv(name, raising=False)
+
+    settings = Settings()
+
+    # ADR 0071: per LLM attempt, per tool call, per background graph run.
+    assert settings.llm_timeout_seconds == 60.0
+    assert settings.tool_timeout_seconds == 120.0
+    assert settings.session_timeout_seconds == 900.0
+    assert settings.max_request_body_bytes == 256 * 1024
+
+
+def test_timeouts_and_the_body_limit_come_from_the_environment(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("LLM_TIMEOUT_SECONDS", "5")
+    monkeypatch.setenv("TOOL_TIMEOUT_SECONDS", "7.5")
+    monkeypatch.setenv("SESSION_TIMEOUT_SECONDS", "30")
+    monkeypatch.setenv("MAX_REQUEST_BODY_BYTES", "4096")
+
+    settings = Settings()
+
+    assert settings.llm_timeout_seconds == 5.0
+    assert settings.tool_timeout_seconds == 7.5
+    assert settings.session_timeout_seconds == 30.0
+    assert settings.max_request_body_bytes == 4096
+    for name in ("LLM_TIMEOUT_SECONDS", "TOOL_TIMEOUT_SECONDS", "SESSION_TIMEOUT_SECONDS"):
+        with monkeypatch.context() as patched:
+            patched.setenv(name, "0")
+            with pytest.raises(ValueError, match=name.lower()):
+                Settings()
+
+
+def test_the_api_tools_run_under_the_tool_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("TOOL_TIMEOUT_SECONDS", "42")
+    engine = create_async_engine("postgresql+asyncpg://unused@127.0.0.1:1/unused")
+
+    planning = build_planning(Settings(), engine)
+
+    assert planning.tools.timeout_s == 42.0

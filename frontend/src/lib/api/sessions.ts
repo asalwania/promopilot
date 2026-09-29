@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { apiError, ApiRequestError, type ApiFailure } from "@/lib/api/reason";
 import type { components } from "@/lib/api/schema";
 
 type Schemas = components["schemas"];
@@ -458,8 +459,18 @@ export type Amendment = z.infer<typeof amendmentSchema>;
 export type RevisionDiff = z.infer<typeof revisionDiffSchema>;
 export type LineChange = RevisionDiff["changed"][number];
 
+// A failed request's message, and the reference id to quote when the API gave
+// one (ADR 0071).
+export type Failed = { reason: string; referenceId?: string };
+
 export type CreateSessionResult =
-  { ok: true; sessionId: string } | { ok: false; reason: string };
+  { ok: true; sessionId: string } | ({ ok: false } & Failed);
+
+function failed(failure: ApiFailure): Failed {
+  return failure.referenceId
+    ? { reason: failure.message, referenceId: failure.referenceId }
+    : { reason: failure.message };
+}
 
 // Browser-side: goes through the same-origin `/api/*` proxy (ADR 0018).
 export async function createSession(
@@ -472,11 +483,8 @@ export async function createSession(
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ brief }),
     });
-    if (response.status === 422) {
-      return { ok: false, reason: await validationMessage(response) };
-    }
     if (!response.ok) {
-      return { ok: false, reason: `HTTP ${response.status}` };
+      return { ok: false, ...failed(await apiError(response)) };
     }
     const created = sessionCreatedSchema.safeParse(await response.json());
     if (!created.success) {
@@ -492,21 +500,11 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-const validationErrorSchema = z.object({
-  detail: z.array(z.object({ msg: z.string() })).min(1),
-});
-
-async function validationMessage(response: Response): Promise<string> {
-  const parsed = validationErrorSchema.safeParse(await response.json());
-  return parsed.success ? parsed.data.detail[0].msg : "HTTP 422";
-}
-
 // What a session action (clarify, amend, approve, reject) answered: the session as
 // the API now holds it, or why it failed. A conflict (409) means the session moved on,
 // so the page reloads it (ADR 0061 D9, ADR 0066).
 export type SessionActionResult =
-  | { ok: true; session: Session }
-  | { ok: false; reason: string; conflict: boolean };
+  { ok: true; session: Session } | ({ ok: false; conflict: boolean } & Failed);
 
 export type ClarifyResult = SessionActionResult;
 
@@ -588,7 +586,7 @@ const planSimulationResponseSchema = z.object({
 // approved or can no longer be simulated, so the page reloads the session.
 export type SimulateResult =
   | { ok: true; revisionNumber: number; simulation: PlanSimulation }
-  | { ok: false; reason: string; conflict: boolean };
+  | ({ ok: false; conflict: boolean } & Failed);
 
 // Re-simulates the session's latest plan revision, with the competitor matching each
 // line's discount at `matchProbability`, or not reacting when null (ADR 0043, ADR
@@ -617,7 +615,7 @@ export async function simulatePlan(
       return {
         ok: false,
         conflict: response.status === 409,
-        reason: await detailMessage(response),
+        ...failed(await apiError(response)),
       };
     }
     const parsed = planSimulationResponseSchema.safeParse(
@@ -641,7 +639,8 @@ export async function simulatePlan(
 }
 
 // Posts one action to the same-origin proxy. Every action answers with the session;
-// a failure carries the API's `detail`, or a fixed conflict reason when given.
+// a failure carries the API's `detail` and reference id, or a fixed conflict reason
+// when given.
 async function postSessionAction(
   sessionId: string,
   action: "clarify" | "amend" | "approve" | "reject",
@@ -660,13 +659,12 @@ async function postSessionAction(
     );
     if (!response.ok) {
       const conflict = response.status === 409;
+      const failure = failed(await apiError(response));
       return {
         ok: false,
         conflict,
-        reason:
-          conflict && conflictReason
-            ? conflictReason
-            : await detailMessage(response),
+        ...failure,
+        ...(conflict && conflictReason ? { reason: conflictReason } : {}),
       };
     }
     const parsed = sessionSchema.safeParse(await response.json());
@@ -683,32 +681,13 @@ async function postSessionAction(
   }
 }
 
-const detailSchema = z.object({
-  detail: z.union([
-    z.string().min(1),
-    z.array(z.object({ msg: z.string() })).min(1),
-  ]),
-});
-
-// FastAPI's `detail`: a message from the handler, or the first validation error.
-async function detailMessage(response: Response): Promise<string> {
-  const fallback = `HTTP ${response.status}`;
-  try {
-    const parsed = detailSchema.safeParse(await response.json());
-    if (!parsed.success) return fallback;
-    const { detail } = parsed.data;
-    return typeof detail === "string" ? detail : detail[0].msg;
-  } catch {
-    return fallback;
-  }
-}
-
-export class SessionLoadError extends Error {
+export class SessionLoadError extends ApiRequestError {
   constructor(
     message: string,
     readonly notFound = false,
+    referenceId?: string,
   ) {
-    super(message);
+    super(message, referenceId);
     this.name = "SessionLoadError";
   }
 }
@@ -727,7 +706,8 @@ export async function getSession(
     throw new SessionLoadError("Session not found", true);
   }
   if (!response.ok) {
-    throw new SessionLoadError(`HTTP ${response.status}`);
+    const failure = await apiError(response);
+    throw new SessionLoadError(failure.message, false, failure.referenceId);
   }
   const parsed = sessionSchema.safeParse(await response.json());
   if (!parsed.success) {

@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { responseReason } from "@/lib/api/reason";
+import { apiError, ApiRequestError } from "@/lib/api/reason";
 import type { components } from "@/lib/api/schema";
 
 type Schemas = components["schemas"];
@@ -25,11 +25,16 @@ export type ModelEntry = z.infer<typeof modelEntrySchema>;
 // TanStack Query key for the registry list.
 export const MODELS_QUERY_KEY = ["models"];
 
-export class ModelsRequestError extends Error {
-  constructor(message: string) {
-    super(message);
+export class ModelsRequestError extends ApiRequestError {
+  constructor(message: string, referenceId?: string) {
+    super(message, referenceId);
     this.name = "ModelsRequestError";
   }
+}
+
+async function requestError(response: Response): Promise<ModelsRequestError> {
+  const failure = await apiError(response);
+  return new ModelsRequestError(failure.message, failure.referenceId);
 }
 
 // Browser-side: both go through the same-origin `/api/*` proxy (ADR 0018) and
@@ -39,7 +44,7 @@ export async function listModels(
   fetchImpl: typeof fetch = fetch,
 ): Promise<ModelEntry[]> {
   const response = await fetchImpl("/api/models", { cache: "no-store" });
-  if (!response.ok) throw new ModelsRequestError(`HTTP ${response.status}`);
+  if (!response.ok) throw await requestError(response);
   const parsed = modelListSchema.safeParse(await response.json());
   if (!parsed.success) {
     throw new ModelsRequestError("unexpected models response");
@@ -52,8 +57,7 @@ export async function retrainModels(
   fetchImpl: typeof fetch = fetch,
 ): Promise<ModelEntry> {
   const response = await fetchImpl("/api/models/retrain", { method: "POST" });
-  if (!response.ok)
-    throw new ModelsRequestError(await responseReason(response));
+  if (!response.ok) throw await requestError(response);
   const parsed = modelEntrySchema.safeParse(await response.json());
   if (!parsed.success) {
     throw new ModelsRequestError("unexpected retrain response");

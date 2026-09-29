@@ -1,10 +1,17 @@
 """Request/response schemas: the OpenAPI contract consumed by the frontend."""
 
 from datetime import datetime
-from typing import Literal, Self
+from typing import Annotated, Literal, Self
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    StringConstraints,
+    field_validator,
+    model_validator,
+)
 
 from promopilot.agents.tools.estimate_demand import ModelVersion
 from promopilot.agents.tools.get_relations import Complement, Substitute
@@ -75,6 +82,9 @@ class HealthResponse(BaseModel):
     version: str
     checks: HealthChecks
 
+
+QUERY_MAX_CHARS = 64
+"""The longest a query or path text may be: a category, or a SKU id (ADR 0071)."""
 
 BRIEF_MAX_CHARS = 2000
 
@@ -178,6 +188,8 @@ class RejectRequest(BaseModel):
 
 
 ANSWER_MAX_CHARS = 2000
+ANSWERS_MAX = 20
+QUESTION_ID_MAX_CHARS = 64
 
 
 class ClarifyRequest(BaseModel):
@@ -185,8 +197,13 @@ class ClarifyRequest(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    answers: dict[str, str] = Field(
+    # The limits live in the types, so the OpenAPI contract carries them to the UI (ADR 0071).
+    answers: dict[
+        Annotated[str, StringConstraints(max_length=QUESTION_ID_MAX_CHARS)],
+        Annotated[str, StringConstraints(max_length=ANSWER_MAX_CHARS)],
+    ] = Field(
         min_length=1,
+        max_length=ANSWERS_MAX,
         description="An answer in plain English for every open question, keyed by its id.",
     )
 
@@ -196,10 +213,6 @@ class ClarifyRequest(BaseModel):
         for question_id, answer in answers.items():
             if not answer.strip():
                 raise ValueError(f"the answer to {question_id} is empty")
-            if len(answer) > ANSWER_MAX_CHARS:
-                raise ValueError(
-                    f"the answer to {question_id} is longer than {ANSWER_MAX_CHARS} characters"
-                )
         return answers
 
 

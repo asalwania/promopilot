@@ -48,6 +48,17 @@ class Settings(BaseSettings):
     # `make eval` writes. Relative paths are from backend/.
     eval_report_dir: Path = Path("evals/reports")
 
+    # Timeouts (ADR 0071), in wall-clock seconds. An LLM attempt that has not answered is a
+    # transient error: retried, then the fallback provider, then the agents' graceful
+    # degradation. A tool call that has not answered is a `timeout` tool error; its worker
+    # thread is abandoned, and the optimiser's own nets still stop it. A background graph run
+    # (start, or the resume after clarify or amend) that has not paused fails the session.
+    llm_timeout_seconds: float = Field(default=60.0, gt=0)
+    tool_timeout_seconds: float = Field(default=120.0, gt=0)
+    session_timeout_seconds: float = Field(default=900.0, gt=0)
+    # The largest request body the API reads (ADR 0071); a larger one is 413.
+    max_request_body_bytes: int = Field(default=256 * 1024, ge=1024)
+
     # The live trace (ADR 0047): how often an open SSE stream looks for new trace events, in
     # seconds, and whether logs are JSON lines (`json`) or readable text (`console`).
     trace_poll_interval_s: float = Field(default=0.5, gt=0, le=10)

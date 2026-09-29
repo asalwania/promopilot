@@ -23,6 +23,16 @@ import {
 
 type Call = { url: string; init?: RequestInit };
 
+const REFERENCE = "6f1c2a7e-0b1d-4c55-9a0e-3d2b1f0c9e11";
+
+// The API's error schema (ADR 0071).
+function apiError(status: number, detail: string, code: string) {
+  return Response.json(
+    { detail, code, reference_id: REFERENCE, errors: null },
+    { status, headers: { "x-request-id": REFERENCE } },
+  );
+}
+
 function recordingFetch(response: () => Response) {
   const calls: Call[] = [];
   const fetchImpl: typeof fetch = async (input, init) => {
@@ -75,12 +85,57 @@ describe("createSession", () => {
 
   it("reports the API as unreachable when the proxy answers 502", async () => {
     const { fetchImpl } = recordingFetch(() =>
-      Response.json({ detail: "API unreachable" }, { status: 502 }),
+      apiError(502, "API unreachable", "api_unreachable"),
     );
 
     const result = await createSession("Diwali push", fetchImpl);
 
-    expect(result).toEqual({ ok: false, reason: "HTTP 502" });
+    expect(result).toEqual({
+      ok: false,
+      reason: "API unreachable",
+      referenceId: REFERENCE,
+    });
+  });
+
+  it("reports the API's readable 422 detail with its reference id", async () => {
+    const { fetchImpl } = recordingFetch(() =>
+      Response.json(
+        {
+          detail: "brief: String should have at most 2000 characters",
+          code: "validation_failed",
+          reference_id: REFERENCE,
+          errors: [
+            {
+              loc: "body.brief",
+              message: "String should have at most 2000 characters",
+            },
+          ],
+        },
+        { status: 422 },
+      ),
+    );
+
+    const result = await createSession("x".repeat(2001), fetchImpl);
+
+    expect(result).toEqual({
+      ok: false,
+      reason: "brief: String should have at most 2000 characters",
+      referenceId: REFERENCE,
+    });
+  });
+
+  it("reports why planning is unavailable, not only its status", async () => {
+    const { fetchImpl } = recordingFetch(() =>
+      apiError(503, "planning is unavailable: no checkpoints", "unavailable"),
+    );
+
+    const result = await createSession("Diwali push", fetchImpl);
+
+    expect(result).toEqual({
+      ok: false,
+      reason: "planning is unavailable: no checkpoints",
+      referenceId: REFERENCE,
+    });
   });
 
   it("reports the network error when the request cannot be sent", async () => {
@@ -165,14 +220,18 @@ describe("getSession", () => {
     });
   });
 
-  it("fails with the HTTP status when the proxy answers 502", async () => {
+  it("fails with the API's reason and reference id when the proxy answers 502", async () => {
     const { fetchImpl } = recordingFetch(() =>
-      Response.json({ detail: "API unreachable" }, { status: 502 }),
+      apiError(502, "API unreachable", "api_unreachable"),
     );
 
     const failure = await getSession(SESSION_ID, fetchImpl).catch((e) => e);
 
-    expect(failure).toMatchObject({ message: "HTTP 502", notFound: false });
+    expect(failure).toMatchObject({
+      message: "API unreachable",
+      notFound: false,
+      referenceId: REFERENCE,
+    });
   });
 
   it("fails when the session breaks the contract", async () => {
@@ -471,6 +530,25 @@ describe("approveSession", () => {
       ok: false,
       conflict: false,
       reason: "planning is unavailable: no checkpoints",
+    });
+  });
+
+  it("carries the reference id of a failed decision", async () => {
+    const { fetchImpl } = recordingFetch(() =>
+      apiError(
+        409,
+        "plan revision 1 is not the session's latest plan revision",
+        "conflict",
+      ),
+    );
+
+    const result = await approveSession(SESSION_ID, 1, fetchImpl);
+
+    expect(result).toEqual({
+      ok: false,
+      conflict: true,
+      reason: "plan revision 1 is not the session's latest plan revision",
+      referenceId: REFERENCE,
     });
   });
 });
