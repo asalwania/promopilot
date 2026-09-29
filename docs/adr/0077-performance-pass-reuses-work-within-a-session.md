@@ -66,6 +66,10 @@ We rejected:
 ## Consequences
 
 - **Estimated effect on the demo session**, from the table above: D1 saves about 31 s a revision (twice), and D2 and D3 about 36–50 s of the loop-back, on this machine. On a quiet machine the compute left is about 45 s, dominated by the first generation, both binding analyses and the solves. With about 30–45 s of LLM calls, the demo is likely still above 60 s until D5, D6, D7 or D10 land. D9 measures it.
+- **Measured after the change.**
+  - On the demo brief's loop-back, the narrowed set read off the first set, with its shared facts, then solved took 5.5 s here, against 32.4 s for a fresh generation, fresh facts and the same solve.
+  - Both paths gave identical tables, counts, pairwise pairs and charges in paise, and plan.
+  - On CI's runner, the smoke eval's replayed demo scenario went from 39.8 s to 24.4 s. Main's figure also counted the plan's scoring.
 - **No cassette changes.**
   - D1 is bit-identical.
   - D2 and D3 return the values priced in the first set's batch. Those equal a fresh narrowed pricing whenever the narrowed batch has a line at the window's first week in each region, as the demo's does. Otherwise, a cumulative sum starts at a different week and the last bits can differ, far below the paisa the solver rounds to.
