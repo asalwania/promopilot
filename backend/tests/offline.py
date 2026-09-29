@@ -23,11 +23,11 @@ class NoPlanner:
         raise AssertionError("an offline app never plans")
 
 
-def offline_sessions() -> SessionService:
+def offline_sessions[S: SessionService](kind: type[S] = SessionService) -> S:  # type: ignore[assignment]
     # Creating an engine does not connect, and ASGITransport runs no lifespan.
     engine = create_async_engine("postgresql+asyncpg://unused@127.0.0.1:1/unused")
     store = SessionStore(engine)
-    return SessionService(
+    return kind(
         store=store,
         tools=GraphTools(
             brief_data=RetailData(engine),

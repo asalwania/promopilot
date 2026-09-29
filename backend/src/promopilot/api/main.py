@@ -12,6 +12,7 @@ from promopilot import __version__
 from promopilot.agents import GraphTools, LLMPricing, PostgresCheckpoints
 from promopilot.api.catalog import CatalogService, catalog_router
 from promopilot.api.competitors import CompetitorService, competitors_router
+from promopilot.api.errors import DEFAULT_MAX_REQUEST_BODY_BYTES, install_error_handling
 from promopilot.api.evals import EvalReportService, evals_router
 from promopilot.api.models import ModelService, models_router
 from promopilot.api.planning import build_planning
@@ -47,6 +48,7 @@ def create_app(
     catalog: CatalogService | None = None,
     plans: PlanService | None = None,
     evals: EvalReportService | None = None,
+    max_request_body_bytes: int = DEFAULT_MAX_REQUEST_BODY_BYTES,
 ) -> FastAPI:
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
@@ -66,6 +68,8 @@ def create_app(
         await sessions.close()
 
     app = FastAPI(title="PromoPilot API", version=__version__, lifespan=lifespan)
+    # One error schema for every error, and a request id on every response (ADR 0071).
+    install_error_handling(app, max_request_body_bytes=max_request_body_bytes)
     app.include_router(sessions_router(sessions))
     if models is not None:
         app.include_router(models_router(models))

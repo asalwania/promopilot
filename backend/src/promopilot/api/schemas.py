@@ -76,6 +76,9 @@ class HealthResponse(BaseModel):
     checks: HealthChecks
 
 
+QUERY_MAX_CHARS = 64
+"""The longest a query or path text may be: a category, or a SKU id (ADR 0071)."""
+
 BRIEF_MAX_CHARS = 2000
 
 
@@ -178,6 +181,8 @@ class RejectRequest(BaseModel):
 
 
 ANSWER_MAX_CHARS = 2000
+ANSWERS_MAX = 20
+QUESTION_ID_MAX_CHARS = 64
 
 
 class ClarifyRequest(BaseModel):
@@ -187,6 +192,7 @@ class ClarifyRequest(BaseModel):
 
     answers: dict[str, str] = Field(
         min_length=1,
+        max_length=ANSWERS_MAX,
         description="An answer in plain English for every open question, keyed by its id.",
     )
 
@@ -194,6 +200,8 @@ class ClarifyRequest(BaseModel):
     @classmethod
     def _answered(cls, answers: dict[str, str]) -> dict[str, str]:
         for question_id, answer in answers.items():
+            if len(question_id) > QUESTION_ID_MAX_CHARS:
+                raise ValueError(f"a question id is longer than {QUESTION_ID_MAX_CHARS} characters")
             if not answer.strip():
                 raise ValueError(f"the answer to {question_id} is empty")
             if len(answer) > ANSWER_MAX_CHARS:

@@ -4,7 +4,9 @@ It answers from the same lookup as the `get_relations` tool, so the UI and the p
 the same relations: the live relations model, fitted on the live demand model.
 """
 
-from fastapi import APIRouter, HTTPException, status
+from typing import Annotated
+
+from fastapi import APIRouter, HTTPException, Path, status
 
 from promopilot.agents.tools import ToolCallError
 from promopilot.agents.tools.get_relations import (
@@ -12,7 +14,7 @@ from promopilot.agents.tools.get_relations import (
     RelationsSource,
     lookup_relations,
 )
-from promopilot.api.schemas import RelationsResponse
+from promopilot.api.schemas import QUERY_MAX_CHARS, RelationsResponse
 
 
 class RelationsService:
@@ -44,7 +46,9 @@ def relations_router(relations: RelationsService) -> APIRouter:
             },
         },
     )
-    async def get_relations(sku_id: str) -> RelationsResponse:
+    async def get_relations(
+        sku_id: Annotated[str, Path(max_length=QUERY_MAX_CHARS)],
+    ) -> RelationsResponse:
         try:
             return await relations.of(sku_id)
         except ToolCallError as failure:
