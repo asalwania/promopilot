@@ -16,6 +16,8 @@ from promopilot.agents import (
     GraphTools,
     PlannedRevision,
     Planner,
+    acceptable_relaxation,
+    approval_refusal,
     build_graph,
     checkpoint_serializer,
     graph_state,
@@ -636,3 +638,48 @@ def test_a_relaxation_is_accepted_as_an_amendment_stating_each_change_exactly() 
         "lower the clearance target for SKU0029 to 70.27% sell-through; "
         "drop the clearance target for SKU0030."
     )
+
+
+# What the API and the recorder refuse alike (ADR 0046 D10, ADR 0052 D7, ADR 0070).
+
+CLEARANCE = Relaxation(
+    changes=(
+        RelaxedConstraint(
+            kind=ConstraintKind.CLEARANCE_TARGET,
+            sku_id="SKU0006",
+            current=0.6,
+            relaxed=0.5986,
+            change=0.0023,
+        ),
+    ),
+    policy_binds=True,
+    proven=True,
+)
+
+
+@pytest.mark.parametrize(
+    ("status", "relaxation", "refusal"),
+    [
+        (SolveStatus.OPTIMAL, None, None),
+        (SolveStatus.FEASIBLE, CLEARANCE, None),
+        (
+            SolveStatus.INFEASIBLE,
+            CLEARANCE,
+            "plan revision 3 is infeasible: amend the brief with its relaxation before approving",
+        ),
+    ],
+)
+def test_only_an_infeasible_revision_is_refused_approval(
+    status: SolveStatus, relaxation: Relaxation | None, refusal: str | None
+) -> None:
+    revision = PlanRevision(number=3, solver_status=status, relaxation=relaxation)
+
+    assert approval_refusal(revision) == refusal
+
+
+def test_only_a_relaxation_with_changes_can_be_accepted() -> None:
+    nothing = CLEARANCE.model_copy(update={"changes": ()})
+
+    assert acceptable_relaxation(PlanRevision(number=3, relaxation=CLEARANCE)) == CLEARANCE
+    assert acceptable_relaxation(PlanRevision(number=3, relaxation=nothing)) is None
+    assert acceptable_relaxation(PlanRevision(number=3)) is None

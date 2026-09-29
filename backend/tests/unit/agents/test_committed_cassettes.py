@@ -27,6 +27,11 @@ from tests.unit.agents.fakes import InMemoryRetailData
 CASSETTE_DIR = Path(__file__).parents[3] / "cassettes"
 SCRIPTS = load_scripts(CASSETTE_DIR / "sessions.json")
 
+# Recorded rounds known to reach the Critic's cap, by session and round index. The demo's
+# accept-relaxation round (ADR 0070) gets new risk findings on every attempt and the Critic has
+# no per-SKU lever to answer them, so it hands on its best plan with open issues (#141).
+ROUNDS_AT_CAP = {("demo", 3)}
+
 
 def test_the_manifest_lists_every_session_as_scripted_and_every_cassette_it_called() -> None:
     assert manifest_problems(SCRIPTS, CASSETTE_DIR) == []
@@ -40,13 +45,23 @@ def test_every_recorded_planning_round_converges_or_stops_early() -> None:
     for name, session in manifest.sessions.items():
         rounds = " ".join(session.route).split("explainer")
         attempts = [planning.split().count("planner") for planning in rounds]
-        assert max(attempts) < MAX_ATTEMPTS, f"{name}: {attempts} planner attempts per round"
+        for index, count in enumerate(attempts):
+            if (name, index) in ROUNDS_AT_CAP:
+                assert count <= MAX_ATTEMPTS, f"{name} round {index}: {count} attempts"
+            else:
+                assert count < MAX_ATTEMPTS, f"{name}: {attempts} planner attempts per round"
 
 
 def test_the_demo_the_e2e_journey_and_a_clarification_are_scripted() -> None:
     assert {"demo", "e2e", "clarify"} <= {script.name for script in SCRIPTS}
     assert any(step.answers for script in SCRIPTS for step in script.steps)
     assert any(step.amend for script in SCRIPTS for step in script.steps)
+    # The demo accepts its relaxation and then approves, as the UI can (ADR 0070).
+    [demo] = [script for script in SCRIPTS if script.name == "demo"]
+    assert [
+        "accept" if step.accept_relaxation else "approve" if step.approve else "amend"
+        for step in demo.steps
+    ] == ["amend", "amend", "accept", "approve"]
 
 
 @pytest.mark.parametrize("script", SCRIPTS, ids=[script.name for script in SCRIPTS])
@@ -55,6 +70,12 @@ async def test_every_context_reading_of_a_session_replays_over_the_default_world
 ) -> None:
     # As the graph reads it: the brief, then again after each answer or amendment (ADR 0048,
     # ADR 0052). A miss raises, as the reading is strict here (ADR 0053).
+    # An accepted relaxation's text comes from the plan, so it is read from the manifest
+    # (ADR 0070).
+    manifest = read_manifest(CASSETTE_DIR)
+    recorded = None if manifest is None else manifest.sessions.get(script.name)
+    assert recorded is not None, f"session {script.name!r} was never recorded"
+    written = iter(recorded.amendments)
     replay, data, policy = (
         ReplayProvider(CASSETTE_DIR),
         InMemoryRetailData(default_dataset),
@@ -73,7 +94,13 @@ async def test_every_context_reading_of_a_session_replays_over_the_default_world
             )
         else:
             assert reading.request is not None
-            amendments += (step.amend or "",)
+            amendment = next(written, None)
+            assert amendment is not None, f"no amendment recorded for {step}"
+            if step.amend is not None:
+                assert amendment == step.amend
+            else:
+                assert amendment.startswith("Accept the smallest relaxation: ")
+            amendments += (amendment,)
         reading = await read_context(
             script.brief,
             replay,
