@@ -1188,15 +1188,14 @@
                 "South",
                 "East",
                 "West"
-              ],
-              "sku_ids": []
+              ]
             }
           },
           "target_segments": [
             "Young Urban"
           ]
         },
-        "id": "call_PInAmFD12JH1OTWijnTPXz1w",
+        "id": "call_9jssTThy8EWG1aAdK6cta9UG",
         "name": "generate_candidates"
       }
     ]
@@ -1206,7 +1205,7 @@
     {
       "input_tokens": 5274,
       "model": "gpt-4.1-mini",
-      "output_tokens": 123
+      "output_tokens": 118
     }
   ]
 }
