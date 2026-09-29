@@ -21,6 +21,15 @@ The **Models** link in the header opens `/models`. It lists every registered mod
 
 The **Data** link opens `/data`: products, pooled inventory with overstock flags, and competitor gaps with undercut KVIs, as three cards. Each list loads once; a shared bar filters them by region and category, overstocked SKUs only or undercut KVIs only. Every number's tooltip names the tool it comes from (ADR 0034).
 
+The **Evals** link opens `/evals`, the latest [eval report](#evals) from `GET /api/evals/latest`:
+- **The header** says when the report was generated, with which provider, on which world, and how many scenarios and runs.
+- **Metric cards**, in five groups (constraints, agent behaviour, plan quality, model recovery, latency and cost), show each value against its SPEC §12.2 target with the report's own **Pass** or **Fail**. A metric with no target is **Reported**, with its aim if it has one, and one with nothing scored reads n/a.
+- **A regret chart** puts every scored run's regret in order against the median and the target. The axis stops at ±100%, and **Show values** lists the exact values.
+- **A scenario table** gives one row per scenario with its result and its last run's outcome, constraints, oracle breaches, properties, standing against the baseline, regret, time and cost, and warns of fallbacks and cassette misses. It can be filtered to the failed scenarios or to one group.
+  - **Details** opens each run's trace as the report holds it: the route, questions, fallbacks, cassette misses, plan, oracle objectives, violations and properties, with a link to the scenario's YAML. Eval sessions are never stored, so there is no session page to open.
+
+Before any run, and on the Docker stack, which mounts no report, the page says to run `make eval` (ADR 0072).
+
 The browser never calls the API directly. Next.js route handlers forward every same-origin `/api/*` request to `API_URL` with the path, query, method, body and status unchanged, and stream the response (ADR 0001, ADR 0018). There is one public URL and no CORS.
 
 | Setting | Default | Meaning |
@@ -375,7 +384,7 @@ A second table, **Agent behaviour**, shows per run the fields read right, the qu
 
 The harness builds the baseline and the best plan from each run's final planning request, never from the scenario file, once per scenario seed and request. The report's plan-quality table shows each scored plan against both.
 
-Each run also lists its `cassette_misses`: the hash of every request replay held no cassette for, in any round (ADR 0069).
+Each run also lists its `cassette_misses`: the hash of every request replay held no cassette for, in any round (ADR 0069), and whether it `passed`: it ran, kept its hard constraints and had every expected property (ADR 0072). `/evals` shows the report.
 
 ### Smoke eval in CI
 
@@ -470,6 +479,7 @@ docs/agents/ Agent workflow config (issue tracker, triage labels, domain docs)
 - [ADR 0068: The simulation card charts each plan line's P10–P90 band and P50 and re-simulates a plan awaiting a decision against a competitor reaction; a competitor card shows the KVI gaps in scope, the plan line promoting each, and the planner's response kept on the explanation](docs/adr/0068-simulation-band-chart-and-competitor-panel.md)
 - [ADR 0069: CI replays five tagged smoke scenarios across four weeks and fails on a session with no plan, a broken check or any cassette miss; the API serves the latest report as it was written](docs/adr/0069-smoke-eval-in-ci-and-latest-report-api.md)
 - [ADR 0071: Every API error answers `{detail, code, reference_id}`; inputs are capped in the request types and the body; LLM attempts, tool calls and background graph runs time out from config](docs/adr/0071-one-error-schema-input-limits-and-timeouts.md)
+- [ADR 0072: The `/evals` dashboard shows the latest report as it was written: grouped metric cards with the report's own pass or fail, a sorted and clipped regret chart, and a scenario table whose "trace" is each run's detail in the report](docs/adr/0072-evals-dashboard.md)
 
 The domain glossary is [CONTEXT.md](CONTEXT.md).
 
