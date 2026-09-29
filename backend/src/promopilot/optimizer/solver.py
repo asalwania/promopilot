@@ -19,7 +19,13 @@ constraints, each a linear `sum of x_o * a_o <= b` in whole paise or thousandths
 - each clearance target: a SKU the brief names for clearance sells at least the target
   share of its available stock over the promo window in each region (ADR 0014, ADR 0040);
 - when enabled, no KVI promo price more than the tolerance above the competitor's (ADR
-  0031).
+  0031);
+- no two strong substitutes promoted together (ADR 0075): SKUs the relations model detects as
+  substitutes with an estimated θ at least company policy's `strong_substitute_min_theta` are
+  never in plan lines that run together, in one region with a promo week and a target segment
+  in common, a BUNDLE's partner included. For each such pair, region, week and segment, at
+  most one option that covers that cell is selected; options of one SKU and region already
+  exclude each other, so this is exact.
 
 A brief may only tighten company policy; `plan_limits` applies it and reports what it did not
 apply (ADR 0007). Only options worth at least one paisa alone are eligible, or that sell more
@@ -27,9 +33,10 @@ of a SKU towards its clearance target, so every plan line pays for itself, is a 
 whose clearance value justifies it (F-01 AC1), or is needed for a clearance target the brief
 set. An eligible option must also keep every per-line rule: P90 units within available stock
 (a BUNDLE's partner too, ADR 0004), inside the promo window, no deeper than the maximum
-discount and not below unit cost unless overstocked (ADR 0007); a SKU named for clearance is
-overstocked. Costs are rounded up and the budgets down to whole paise, and units sold towards a
-target down, so every plan the solver accepts also passes `validate_plan` (ADR 0012).
+discount and not below unit cost unless overstocked (ADR 0007), and not a BUNDLE of two
+strong substitutes; a SKU named for clearance is overstocked. Costs are rounded up and the
+budgets down to whole paise, and units sold towards a target down, so every plan the solver
+accepts also passes `validate_plan` (ADR 0012).
 
 With clearance targets the solve has two phases (ADR 0040). The first finds the plan closest to
 every target, the least stock left short of target weighted by unit cost, under every other
@@ -45,8 +52,8 @@ status is INFEASIBLE (a timeout is FEASIBLE, never INFEASIBLE). The closest plan
 back, and so does the relaxation: the smallest change to the brief's own constraints (budget,
 regional caps, minimum margin down to the floor, a tighter promoted-SKU cap, a KVI tolerance
 the brief turned on, the clearance targets) that makes it feasible, each change weighed in
-basis points of the brief's value. Company policy is never relaxed; when only lowering a
-target helps, policy binds.
+basis points of the brief's value. Company policy, the strong-substitute rule included, is
+never relaxed; when only lowering a target helps, policy binds.
 
 Beside the plan, `solve` reports (ADR 0038):
 
@@ -99,7 +106,13 @@ from promopilot.domain import (
     WhyChosen,
 )
 from promopilot.economics import effective_unit_price
-from promopilot.guardrails import PlanLimits, SkuFacts, plan_limits
+from promopilot.guardrails import (
+    PlanLimits,
+    SkuFacts,
+    SubstituteFacts,
+    plan_limits,
+    run_together,
+)
 from promopilot.optimizer.options import ClearanceBaseline, PromoOptions
 
 PAISE = 100
@@ -171,6 +184,11 @@ class OptionFacts(Protocol):
     ) -> Sequence[float] | np.ndarray:
         """What each pair of lines loses together beyond their single-line figures (rupees,
         ADR 0033)."""
+        ...
+
+    def substitutes(self, sku_ids: Sequence[str]) -> Sequence[SubstituteFacts]:
+        """The detected substitute pairs among these SKUs, each once, with the relations
+        model's estimated θ (ADR 0075)."""
         ...
 
 
@@ -297,6 +315,9 @@ class _Limit:
 _BUDGET = _Limit(ConstraintKind.MARKETING_BUDGET)
 _MARGIN = _Limit(ConstraintKind.MINIMUM_MARGIN)
 _KVI = _Limit(ConstraintKind.KVI_PRICE_TOLERANCE)
+_GUARD = _Limit(ConstraintKind.STRONG_SUBSTITUTES)
+"""The strong-substitute rule: not a row of `coefficients` but at-most-one groups
+(`_Problem.guard`), so it has no index in `_Problem.limits`."""
 
 _REASONS = {
     ConstraintKind.MARKETING_BUDGET: NotSelectedReason.OVER_BUDGET,
@@ -306,7 +327,7 @@ _REASONS = {
     ConstraintKind.KVI_PRICE_TOLERANCE: NotSelectedReason.BREAKS_KVI_TOLERANCE,
 }
 """The not-selected reason for adding an option that breaks a constraint (the promoted-SKU
-cap has its own check, `_over_cap`)."""
+cap has its own check, `_over_cap`, and the strong-substitute rule `_strong_partners`)."""
 
 
 @dataclass(frozen=True)
@@ -366,6 +387,9 @@ class _Swaps:
     """options x (plan lines + 1) x constraints: each constraint's left-hand side after the
     swap."""
     valid: np.ndarray
+    conflict: np.ndarray
+    """options x plan lines: the option and the plan line may not run together under the
+    strong-substitute rule."""
 
 
 @dataclass
@@ -400,15 +424,26 @@ class _Problem:
     terms: dict[tuple[int, int], int]
     """Pairwise terms in paise by candidate-table rows (lower row first): every non-zero
     term between eligible options, and any term asked for since, zero or not."""
+    strong: dict[frozenset[str], float]
+    """The strong substitute pairs among the options' SKUs, with their estimated θ."""
+    guard: list[tuple[int, ...]]
+    """Groups of eligible options of which at most one may be selected: those covering one
+    week and segment in one region with either SKU of a strong pair (ADR 0075)."""
     _keys: list[list[tuple[str, Region]]] = field(default_factory=list, init=False)
     """The (SKU, region)s each eligible option occupies."""
     _near: list[dict[int, int]] = field(default_factory=list, init=False)
     """Each eligible option's non-zero pairwise terms, by the other option."""
     _swap_cache: dict[tuple[int, ...], "_Swaps | None"] = field(default_factory=dict, init=False)
     _eligible_rows: set[int] = field(default_factory=set, init=False)
+    _conflicts: list[set[int]] = field(default_factory=list, init=False)
+    """Each eligible option's options it may not run with under the strong-substitute rule."""
 
     def __post_init__(self) -> None:
         self._eligible_rows = set(self.eligible)
+        self._conflicts = [set() for _ in self.lines]
+        for group in self.guard:
+            for n in group:
+                self._conflicts[n].update(m for m in group if m != n)
         self._keys = [[(sku_id, line.region) for sku_id in line.skus] for line in self.lines]
         self._near = [{} for _ in self.lines]
         for (i, j), charge in zip(self.pairs, self.charges, strict=True):
@@ -436,7 +471,8 @@ class _Problem:
             for c in options.clearance
             if c.sku_id in sell_through and c.region in request.scope.regions
         }
-        eligible = _eligible(request, options, facts, policy, cleared, targets)
+        strong = _strong_pairs(options.lines, facts, policy)
+        eligible = _eligible(request, options, facts, policy, cleared, targets, strong)
         lines = [options.lines[n] for n in eligible]
         groups: defaultdict[tuple[str, Region], list[int]] = defaultdict(list)
         for n, line in enumerate(lines):
@@ -484,6 +520,8 @@ class _Problem:
                 _key(eligible[i], eligible[j]): int(term)
                 for (i, j), term in zip(pairs, charges, strict=True)
             },
+            strong=strong,
+            guard=_guard_groups(lines, strong),
         )
         problem.coefficients = problem.row_coefficients(eligible)
         problem.bound = np.array([problem.right_hand_side(limit) for limit in limits], np.int64)
@@ -622,7 +660,14 @@ class _Problem:
         only plans that break the `drop` constraint are. With `first`, the search stops at
         the first feasible plan."""
         model = cp_model.CpModel()
-        x = self._variables(model)
+        x = self._variables(model, guard=drop != _GUARD)
+        if drop == _GUARD and breaking:
+            broken = []
+            for n, group in enumerate(self.guard):
+                both = model.new_bool_var(f"g{n}")
+                model.add(sum(x[m] for m in group) >= 2).only_enforce_if(both)
+                broken.append(both)
+            model.add_bool_or(broken)
         for k, limit in enumerate(self.limits):
             expression = _dot(self.coefficients[k], x)
             if limit != drop:
@@ -663,8 +708,9 @@ class _Problem:
         )
         return _Outcome(status, picked, charged, solver.deterministic_time)
 
-    def _variables(self, model: cp_model.CpModel) -> list[cp_model.IntVar]:
-        """One x per eligible option, at most one per (SKU, region) it occupies."""
+    def _variables(self, model: cp_model.CpModel, *, guard: bool = True) -> list[cp_model.IntVar]:
+        """One x per eligible option, at most one per (SKU, region) it occupies and, with
+        `guard`, at most one per strong-substitute group (ADR 0075)."""
         x = [model.new_bool_var(f"x{n}") for n in range(len(self.lines))]
         occupied: defaultdict[tuple[str, Region], list[cp_model.IntVar]] = defaultdict(list)
         for chosen, keys in zip(x, self._keys, strict=True):
@@ -672,6 +718,9 @@ class _Problem:
                 occupied[key].append(chosen)
         for variables in occupied.values():
             model.add_at_most_one(variables)
+        if guard:
+            for group in self.guard:
+                model.add_at_most_one([x[n] for n in group])
         return x
 
     @staticmethod
@@ -811,6 +860,13 @@ class _Problem:
             return None
         kept = [k for k, limit in enumerate(self.limits) if limit != drop]
         valid = swaps.valid & (swaps.after[:, :, kept] <= self.bound[kept]).all(axis=2)
+        if drop != _GUARD:
+            # The swap keeps the strong-substitute rule when every plan line the option may
+            # not run with is taken out: a clash, or the one extra line.
+            left = swaps.conflict & ~swaps.clash
+            count = left.sum(axis=1)
+            keeps = np.concatenate([(count[:, None] - left) == 0, (count == 0)[:, None]], axis=1)
+            valid &= keeps
         gain = np.where(valid, swaps.gain, 0)
         if gain.max(initial=0) < 1:
             return None
@@ -881,7 +937,14 @@ class _Problem:
         valid = np.ones((size, count + 1), dtype=bool)
         valid[:, :count] &= ~clash
         valid[plan, :] = False
-        swaps = _Swaps(plan=picked, clash=clash, gain=gain, after=after, valid=valid)
+        conflict = np.zeros((size, count), dtype=bool)
+        for o in range(size):
+            for n in self._conflicts[o]:
+                if n in position:
+                    conflict[o, position[n]] = True
+        swaps = _Swaps(
+            plan=picked, clash=clash, gain=gain, after=after, valid=valid, conflict=conflict
+        )
         self._swap_cache[key] = swaps
         return swaps
 
@@ -889,6 +952,9 @@ class _Problem:
         """The plan's objective in paise if it keeps every constraint but `drop`."""
         keys = [key for n in plan for key in self._keys[n]]
         if len(keys) != len(set(keys)):
+            return None
+        chosen = set(plan)
+        if drop != _GUARD and any(self._conflicts[n] & chosen for n in plan):
             return None
         totals = self.coefficients[:, plan].sum(axis=1)
         for k, limit in enumerate(self.limits):
@@ -900,8 +966,10 @@ class _Problem:
         return int(self.value[outcome.picked].sum()) - outcome.charged
 
     def _limits(self) -> list[_Limit]:
-        """The constraints that some plan could break (`_can_bind`)."""
-        return [limit for k, limit in enumerate(self.limits) if self._can_bind(k)]
+        """The constraints that some plan could break (`_can_bind`), and the strong-substitute
+        rule when two options could run together against it."""
+        found = [limit for k, limit in enumerate(self.limits) if self._can_bind(k)]
+        return found + ([_GUARD] if self.guard else [])
 
     def _can_bind(self, k: int) -> bool:
         """False only when no plan could break constraint k.
@@ -971,6 +1039,14 @@ class _Problem:
                 limit=self._applied_target(limit),
                 sku_id=limit.sku_id,
                 region=limit.region,
+                evidence=evidence,
+                objective_gain=rupees,
+            )
+        if limit == _GUARD:
+            return BindingConstraint(
+                kind=limit.kind,
+                source=ConstraintSource.COMPANY_POLICY,
+                limit=self.policy.strong_substitute_min_theta,
                 evidence=evidence,
                 objective_gain=rupees,
             )
@@ -1436,10 +1512,15 @@ class _Problem:
             for other in plan_rows
             if terms.get(_key(row, other), 0) > 0
         ]
-        cannibalises: tuple[str, ...] = ()
+        named: set[str] = set()
         if value >= 1 and value - sum(term for _, term in losing) < 1:
             reasons.add(NotSelectedReason.CANNIBALISES)
-            cannibalises = tuple(sorted({options.lines[other].sku_id for other, _ in losing}))
+            named |= {options.lines[other].sku_id for other, _ in losing}
+        partners = self._strong_partners(line, [options.lines[other] for other in plan_rows])
+        if partners is not None:
+            reasons.add(NotSelectedReason.STRONG_SUBSTITUTE)
+            named |= partners
+        cannibalises = tuple(sorted(named))
         if not reasons:
             # Adding it would keep every rule and gain: only a plan not proven best allows it.
             reasons.add(NotSelectedReason.TIME_LIMIT)
@@ -1450,6 +1531,23 @@ class _Problem:
             reasons=tuple(sorted(reasons, key=order.index)),
             cannibalises=cannibalises,
         )
+
+    def _strong_partners(self, line: PlanLine, plan: Sequence[PlanLine]) -> set[str] | None:
+        """The plan's SKUs the line would promote a strong substitute of together with (its
+        own, for a BUNDLE of a strong pair); None if it keeps the rule (ADR 0075)."""
+        found: set[str] = set()
+        breaks = _has_strong_pair(line.skus, self.strong)
+        for other in plan:
+            if not run_together(line, other):
+                continue
+            for sku_id in line.skus:
+                for other_sku_id in other.skus:
+                    if frozenset((sku_id, other_sku_id)) in self.strong:
+                        breaks = True
+                        found.add(other_sku_id)
+        if breaks and not found:
+            found = set(line.skus)
+        return found if breaks else None
 
     def _over_cap(self, line: PlanLine, picked: list[int]) -> bool:
         chosen = set(picked)
@@ -1501,9 +1599,11 @@ def _eligible(
     policy: CompanyPolicy,
     cleared: frozenset[str],
     targets: dict[_Limit, _Target],
+    strong: dict[frozenset[str], float],
 ) -> list[int]:
     """Options worth at least one paisa alone, or that sell more of a SKU towards a
-    clearance target in its region, that keep every per-line rule, in order."""
+    clearance target in its region, that keep every per-line rule, in order: a BUNDLE of two
+    strong substitutes promotes them together, so it is not eligible (ADR 0075)."""
     table = options.table
     worth = np.rint(table["value"].to_numpy(float) * PAISE) >= 1
     towards = {(limit.sku_id, limit.region) for limit in targets}
@@ -1528,6 +1628,8 @@ def _eligible(
     for n in np.flatnonzero(worth & fits):
         line = options.lines[n]
         if line.bundle_partner_sku_id is not None and not partner_fits[n]:
+            continue
+        if _has_strong_pair(line.skus, strong):
             continue
         if _in_window(line, request) and _priced_within_policy(line, facts, policy, cleared):
             kept.append(int(n))
@@ -1632,16 +1734,67 @@ def _overlapping(lines: Sequence[PlanLine]) -> list[tuple[int, int]]:
 
 def _together(a: PlanLine, b: PlanLine) -> bool:
     """Same region, no SKU in common, and a week and a target segment in common."""
-    if a.region is not b.region or set(a.skus) & set(b.skus):
-        return False
-    if a.start_week + a.duration_weeks <= b.start_week:
-        return False
-    if b.start_week + b.duration_weeks <= a.start_week:
-        return False
-    everyone = TargetSegment.ALL_CUSTOMERS
-    return everyone in (a.target_segment, b.target_segment) or (
-        a.target_segment is b.target_segment
-    )
+    return not set(a.skus) & set(b.skus) and run_together(a, b)
+
+
+def _strong_pairs(
+    lines: Sequence[PlanLine], facts: OptionFacts, policy: CompanyPolicy
+) -> dict[frozenset[str], float]:
+    """The pairs of the options' SKUs the relations model detects as substitutes with an
+    estimated θ of at least the policy's strong-substitute minimum (ADR 0075)."""
+    sku_ids = sorted({sku_id for line in lines for sku_id in line.skus})
+    least = policy.strong_substitute_min_theta
+    return {
+        frozenset((pair.sku_id, pair.other_sku_id)): pair.theta
+        for pair in facts.substitutes(sku_ids)
+        if pair.sku_id != pair.other_sku_id and pair.theta >= least - _EPSILON
+    }
+
+
+def _has_strong_pair(sku_ids: Sequence[str], strong: dict[frozenset[str], float]) -> bool:
+    return any(frozenset((a, b)) in strong for n, a in enumerate(sku_ids) for b in sku_ids[n + 1 :])
+
+
+_SEGMENTS = [target for target in TargetSegment if target is not TargetSegment.ALL_CUSTOMERS]
+
+
+def _guard_groups(
+    lines: Sequence[PlanLine], strong: dict[frozenset[str], float]
+) -> list[tuple[int, ...]]:
+    """For each strong pair, region, week and segment, the options that cover that cell with
+    either SKU, where both SKUs have one: at most one of them may be selected (ADR 0075).
+
+    Two lines run together exactly when they cover a common cell, All customers covering
+    every segment. Options of one SKU in one region already exclude each other, so at most
+    one per group forbids exactly the pairs that run together. Groups come sorted, each once.
+    """
+    if not strong:
+        return []
+    by_key: defaultdict[tuple[str, Region], list[int]] = defaultdict(list)
+    for n, line in enumerate(lines):
+        for sku_id in line.skus:
+            by_key[(sku_id, line.region)].append(n)
+    groups: set[tuple[int, ...]] = set()
+    for pair in strong:
+        first, second = sorted(pair)
+        for region in Region:
+            sides = [by_key.get((first, region), []), by_key.get((second, region), [])]
+            if not sides[0] or not sides[1]:
+                continue
+            cells: defaultdict[tuple[int, TargetSegment], tuple[set[int], set[int]]] = defaultdict(
+                lambda: (set(), set())
+            )
+            for side, members in enumerate(sides):
+                for n in members:
+                    line = lines[n]
+                    everyone = line.target_segment is TargetSegment.ALL_CUSTOMERS
+                    for week in range(line.start_week, line.start_week + line.duration_weeks):
+                        for segment in _SEGMENTS if everyone else [line.target_segment]:
+                            cells[(week, segment)][side].add(n)
+            for one, other in cells.values():
+                if one and other:
+                    groups.add(tuple(sorted(one | other)))
+    return sorted(groups)
 
 
 def _key(a: int, b: int) -> tuple[int, int]:

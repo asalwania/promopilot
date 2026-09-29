@@ -34,6 +34,9 @@ class ConstraintKind(StrEnum):
     """The sell-through the brief asks for a SKU it names for clearance, in one region."""
     KVI_PRICE_TOLERANCE = "kvi_price_tolerance"
     """No KVI promo price more than the tolerance above the competitor price (ADR 0031)."""
+    STRONG_SUBSTITUTES = "strong_substitutes"
+    """No two strong substitutes promoted together: in one region, with a promo week and a
+    target segment in common (company policy, ADR 0075)."""
 
 
 class ConstraintSource(StrEnum):
@@ -130,6 +133,9 @@ class NotSelectedReason(StrEnum):
     """Adding it would leave a clearance target the plan meets unmet."""
     BREAKS_KVI_TOLERANCE = "breaks_kvi_tolerance"
     """A KVI it promotes would stay priced above the competitor beyond the tolerance."""
+    STRONG_SUBSTITUTE = "strong_substitute"
+    """It would promote a strong substitute of a plan line's SKU together with it (ADR
+    0075)."""
     CANNIBALISES = "cannibalises"
     """What it loses together with plan lines outweighs its value."""
     TIME_LIMIT = "time_limit"
@@ -146,7 +152,8 @@ class NotSelectedOption(BaseModel):
     """What the option is worth alone (rupees)."""
     reasons: tuple[NotSelectedReason, ...]
     cannibalises: tuple[str, ...] = ()
-    """The plan lines' SKUs it loses too much with, for CANNIBALISES."""
+    """The plan lines' SKUs it loses too much with, for CANNIBALISES, and those it is a strong
+    substitute of, for STRONG_SUBSTITUTE (ADR 0075)."""
 
 
 class PruneReason(StrEnum):

@@ -716,6 +716,8 @@ def _constraint(
             return f"the clearance target for {sku_id}{where}"
         case ConstraintKind.KVI_PRICE_TOLERANCE:
             return "the KVI price tolerance"
+        case ConstraintKind.STRONG_SUBSTITUTES:
+            return "the rule against promoting strong substitutes together"
 
 
 def _limit(kind: ConstraintKind, value: float) -> str:
@@ -723,4 +725,7 @@ def _limit(kind: ConstraintKind, value: float) -> str:
         return format_rupees(value)
     if kind in _COUNT_LIMITS:
         return f"{format_units(value)} SKUs"
+    if kind is ConstraintKind.STRONG_SUBSTITUTES:
+        # The least estimated cross-price effect of a strong pair (ADR 0075).
+        return f"θ {value:.2f}"
     return format_percent(value)

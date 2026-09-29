@@ -100,7 +100,7 @@ The effect of one SKU's price on another SKU's units: positive for substitutes, 
 A SKU in the same subcategory whose price cut takes units from another: a positive cross-price effect, kept only when significant after the Benjamini–Hochberg adjustment and at least the minimum effect size.
 
 **Strong substitute**:
-In the eval only, a true substitute pair whose larger cross-price effect θ is at least 0.5. The heavy-cannibalisation scenarios expect no two of them promoted together: in one region, in a common week and to a common segment (ADR 0065).
+In planning, a pair the relations model detects as substitutes with an estimated θ of at least company policy's `strong_substitute_min_theta` (0.35). The optimiser never promotes two of them together: in one region, in a common week and to a common segment, a BUNDLE's partner included (ADR 0075). In the eval, a true substitute pair whose larger cross-price effect θ is at least 0.5; the heavy-cannibalisation scenarios expect no two of them promoted together (ADR 0065). The model's estimates run about a fifth below the true θ, hence the lower planning threshold.
 
 **Complement**:
 A SKU bought with another more often than chance (basket lift above 1.5, with minimum support), confirmed by a negative cross-price effect where one can be estimated.
@@ -168,7 +168,7 @@ The smallest change to the brief's constraints that would make an infeasible pla
 Said of a relaxation when no change to the budget, caps, minimum margin or KVI tolerance alone would reach every clearance target, so a target must come down; the relaxation then gives the most sell-through company policy allows (ADR 0044).
 
 **Binding constraint**:
-A plan-level constraint (marketing budget, regional budget cap, minimum margin or margin floor, promoted-SKU cap per category and region, clearance target, KVI price tolerance) whose removal would give the optimiser a strictly better objective. It is unproven when the solver ran out of time before settling it (ADR 0038, ADR 0040). For an infeasible request, the binding constraints are the clearance targets the plan misses and the constraints the relaxation changes (ADR 0044).
+A plan-level constraint (marketing budget, regional budget cap, minimum margin or margin floor, promoted-SKU cap per category and region, clearance target, KVI price tolerance, the strong-substitute rule) whose removal would give the optimiser a strictly better objective. It is unproven when the solver ran out of time before settling it (ADR 0038, ADR 0040). For an infeasible request, the binding constraints are the clearance targets the plan misses and the constraints the relaxation changes (ADR 0044).
 _Avoid_: active constraint, bottleneck
 
 **Company policy**:

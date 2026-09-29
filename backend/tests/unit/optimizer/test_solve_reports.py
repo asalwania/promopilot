@@ -557,4 +557,6 @@ def test_every_plan_line_says_why_and_every_listed_option_says_why_not(instance:
         assert not {(sku_id, entry.option.region) for sku_id in entry.option.skus} & occupied
         assert entry.reasons
         assert NotSelectedReason.TIME_LIMIT not in entry.reasons
-        assert bool(entry.cannibalises) == (NotSelectedReason.CANNIBALISES in entry.reasons)
+        # `cannibalises` names the plan SKUs behind CANNIBALISES and STRONG_SUBSTITUTE (ADR 0075).
+        naming = {NotSelectedReason.CANNIBALISES, NotSelectedReason.STRONG_SUBSTITUTE}
+        assert bool(entry.cannibalises) == bool(naming & set(entry.reasons))

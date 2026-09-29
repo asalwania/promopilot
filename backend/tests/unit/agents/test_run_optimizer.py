@@ -38,7 +38,7 @@ from promopilot.domain import (
     TargetSegment,
     WhyChosen,
 )
-from promopilot.guardrails import LineFacts, PlanFacts, SkuFacts, validate_plan
+from promopilot.guardrails import LineFacts, PlanFacts, SkuFacts, SubstituteFacts, validate_plan
 from promopilot.models.demand import DemandHistory, DemandModel
 from promopilot.models.registry import ModelKind
 from promopilot.models.relations import Relations
@@ -87,6 +87,9 @@ class Facts:
         self, pairs: Sequence[tuple[PlanLine, PlanLine]]
     ) -> Sequence[float]:
         return [150.0 if {a.sku_id, b.sku_id} == {"A", "B"} else 0.0 for a, b in pairs]
+
+    def substitutes(self, sku_ids: Sequence[str]) -> Sequence[SubstituteFacts]:
+        return []
 
 
 def hand_built() -> PromoOptions:

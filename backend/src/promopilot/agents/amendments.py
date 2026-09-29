@@ -59,5 +59,5 @@ def _clause(change: RelaxedConstraint) -> str:
             if relaxed is None:
                 return f"drop the clearance target for {change.sku_id}"
             return f"lower the clearance target for {change.sku_id} to {relaxed:.2%} sell-through"
-        case ConstraintKind.MARGIN_FLOOR:
+        case ConstraintKind.MARGIN_FLOOR | ConstraintKind.STRONG_SUBSTITUTES:
             raise ValueError("company policy is never relaxed (ADR 0007)")

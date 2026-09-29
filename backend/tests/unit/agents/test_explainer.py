@@ -159,3 +159,21 @@ def test_template_explanations_always_pass_numeric_grounding(
     for text in (explanations.summary, *explanations.rationales):
         report = check_numeric_grounding(text, [planned])
         assert report.ungrounded == (), text
+
+
+def test_the_strong_substitute_rule_is_named_with_its_theta() -> None:
+    planned = revision(412.4, 18_250.0, 61_874.6, 172_384.2)
+    guard = BindingConstraint(
+        kind=ConstraintKind.STRONG_SUBSTITUTES,
+        source=ConstraintSource.COMPANY_POLICY,
+        limit=0.35,
+        evidence=BindingEvidence.INFEASIBLE,
+        objective_gain=None,
+    )
+    planned = planned.model_copy(
+        update={"binding_constraints": (*planned.binding_constraints, guard)}
+    )
+
+    summary = template_explanations(planned, ()).summary
+
+    assert "the rule against promoting strong substitutes together at θ 0.35" in summary

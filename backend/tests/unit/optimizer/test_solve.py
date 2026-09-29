@@ -33,6 +33,7 @@ from promopilot.guardrails import (
     LineFacts,
     PlanFacts,
     SkuFacts,
+    SubstituteFacts,
     ViolationCode,
     validate_plan,
 )
@@ -54,6 +55,8 @@ WINDOW = PromoWindow(start_week=60, end_week=61)
 SEED = 0
 PER_LINE = {ViolationCode.STOCK, ViolationCode.MAX_DISCOUNT, ViolationCode.BELOW_COST}
 PER_LINE |= {ViolationCode.WINDOW, ViolationCode.KVI_TOLERANCE}
+PER_LINE |= {ViolationCode.STRONG_SUBSTITUTES}
+"""A one-line plan breaks the strong-substitute rule only with a BUNDLE of a strong pair."""
 
 
 def request(
@@ -138,12 +141,14 @@ CATALOGUE = {
 @dataclass
 class FakeFacts:
     """SKU facts from CATALOGUE, and pinned pairwise terms (0 for any other pair). `kvis`
-    holds the competitor price of each KVI in a region."""
+    holds the competitor price of each KVI in a region, and `thetas` the estimated θ of each
+    detected substitute pair (ADR 0075)."""
 
     overstocked: set[tuple[str, Region]] = field(default_factory=set)
     pairwise: dict[frozenset[PlanLine], float] = field(default_factory=dict)
     asked: list[tuple[PlanLine, PlanLine]] = field(default_factory=list)
     kvis: dict[tuple[str, Region], float] = field(default_factory=dict)
+    thetas: dict[frozenset[str], float] = field(default_factory=dict)
 
     def sku(self, sku_id: str, region: Region) -> SkuFacts:
         category, base_price, unit_cost = CATALOGUE[sku_id]
@@ -161,6 +166,15 @@ class FakeFacts:
     ) -> Sequence[float]:
         self.asked += pairs
         return [self.pairwise.get(frozenset(pair), 0.0) for pair in pairs]
+
+    def substitutes(self, sku_ids: Sequence[str]) -> Sequence[SubstituteFacts]:
+        wanted = set(sku_ids)
+        return [
+            SubstituteFacts(sku_id=a, other_sku_id=b, theta=theta)
+            for pair, theta in sorted(self.thetas.items(), key=lambda item: sorted(item[0]))
+            for a, b in [sorted(pair)]
+            if pair <= wanted
+        ]
 
 
 def run(
@@ -228,6 +242,9 @@ def plan_facts(
                 expected_units=target.baseline_units + sum(uplift(rows[n], target) for n in picked),
             )
             for target in clearance
+        ),
+        substitutes=tuple(
+            facts.substitutes(sorted({s for n in picked for s in rows[n].line.skus}))
         ),
     )
 
@@ -376,6 +393,12 @@ def instances(draw: st.DrawFn) -> Instance:
     clearance: list[ClearanceBaseline] = []
     caps: dict[Region, float] = {}
     kvi_tolerance, brief_cap = None, None
+    # Detected substitutes, some strong enough to keep apart (ADR 0075).
+    thetas = {
+        frozenset(pair): draw(st.sampled_from([0.2, 0.35, 0.6]))
+        for pair in combinations(SKUS, 2)
+        if draw(st.booleans())
+    }
     if draw(st.booleans()):
         promoted = sorted({sku_id for row in rows for sku_id in row.line.skus})
         named = draw(st.lists(st.sampled_from(promoted), min_size=1, max_size=2, unique=True))
@@ -406,7 +429,7 @@ def instances(draw: st.DrawFn) -> Instance:
         brief_cap = draw(st.one_of(st.none(), st.integers(1, 3)))
     return Instance(
         rows=rows,
-        facts=FakeFacts(overstocked=set(overstocked), pairwise=pairwise, kvis=kvis),
+        facts=FakeFacts(overstocked=set(overstocked), pairwise=pairwise, kvis=kvis, thetas=thetas),
         budget=draw(st.integers(1, 1_500_000)) / 100,
         min_margin=draw(st.one_of(st.none(), st.integers(0, 40).map(lambda p: p / 100))),
         policy=CompanyPolicy(

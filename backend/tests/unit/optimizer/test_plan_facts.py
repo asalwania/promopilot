@@ -61,3 +61,22 @@ def test_a_clearance_target_expects_its_baseline_plus_the_window_uplift_of_its_l
     uplift = float(options.table["partner_window_uplift"].iloc[rows[0]])
     assert uplift > 0
     assert fact.expected_units == pytest.approx(target.baseline_units + uplift)
+
+
+def test_the_relations_models_substitute_pairs_among_the_plans_skus_come_with_their_theta() -> None:
+    planning = request(scope=Scope(regions=(Region.NORTH,), categories=("Snacks", "Beverages")))
+    fitted = context(PathDemand())
+    options = generate_options(planning, fitted, sku_ids=["A", "B", "C"])
+    rows = [
+        next(n for n, line in enumerate(options.lines) if line.sku_id == sku_id)
+        for sku_id in ("A", "B", "C")
+    ]
+    facts = FittedOptionFacts(fitted)
+
+    plan = plan_facts(options, rows, facts)
+    alone = plan_facts(options, rows[:1], facts)
+
+    [pair] = plan.substitutes
+    assert (pair.sku_id, pair.other_sku_id, pair.theta) == ("A", "B", 0.5)
+    assert alone.substitutes == ()
+    assert list(facts.substitutes(["B", "A", "C"])) == [pair]
