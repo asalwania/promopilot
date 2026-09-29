@@ -3206,6 +3206,12 @@
           "outcome": {
             "$ref": "#/components/schemas/RunOutcome"
           },
+          "passed": {
+            "description": "It ran, kept its hard constraints and had every expected property. Written into the\nJSON, so `/evals` shows it as the report says and never re-derives it (ADR 0072).",
+            "readOnly": true,
+            "title": "Passed",
+            "type": "boolean"
+          },
           "properties": {
             "default": [],
             "items": {
@@ -3289,7 +3295,8 @@
         },
         "required": [
           "run",
-          "outcome"
+          "outcome",
+          "passed"
         ],
         "title": "RunResult",
         "type": "object"
