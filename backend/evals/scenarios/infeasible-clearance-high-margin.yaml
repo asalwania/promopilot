@@ -7,6 +7,7 @@ brief: >-
   that stock.
 as_of_week: 50
 seed: 0
+smoke: true   # in the CI smoke eval (ADR 0069)
 labels:
   regions: [South]
   categories: [Dairy]

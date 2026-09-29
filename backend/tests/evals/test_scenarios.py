@@ -84,6 +84,15 @@ def test_a_minimal_scenario_needs_only_its_name_group_brief_week_and_seed(tmp_pa
     assert scenario.clarifications == {}
     assert scenario.amendments == ()
     assert scenario.expect == ()
+    assert scenario.smoke is False
+
+
+def test_a_scenario_can_be_tagged_for_the_smoke_eval(tmp_path: Path) -> None:
+    text = "name: plain\ngroup: tight_budget\nbrief: Snacks, ₹50k\nas_of_week: 60\nseed: 0\n"
+
+    scenario = load_scenario(write(tmp_path, "plain", text + "smoke: true\n"))
+
+    assert scenario.smoke is True
 
 
 @pytest.mark.parametrize(

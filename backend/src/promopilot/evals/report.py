@@ -170,6 +170,22 @@ class InfeasibilityCheck(_Frozen):
     binding_named: bool
     passed: bool
 
+    @property
+    def shortfall(self) -> str:
+        """What the final revision failed to do, for a failed check."""
+        if self.revision is None:
+            return "no final plan revision to declare infeasible"
+        missing = [
+            part
+            for part, ok in (
+                ("is not declared infeasible", self.declared),
+                ("proposes no relaxation", self.relaxation),
+                ("names no binding constraint", self.binding_named),
+            )
+            if not ok
+        ]
+        return f"revision {self.revision} {' and '.join(missing)}"
+
 
 class ExplainerRun(_Frozen):
     """One run of the Explainer: the explanation a plan revision waited for approval with."""
@@ -218,6 +234,9 @@ class RunResult(_Frozen):
     """The session's wall-clock time, from the brief to its end, without fitting models."""
     usage: SessionUsage = SessionUsage()
     """The sum of the session's token-usage trace events (ADR 0047)."""
+    cassette_misses: tuple[str, ...] = ()
+    """The hash of every request the replay provider held no cassette for, once each, in the
+    order first asked: every round, not only the final one (ADR 0069)."""
 
     @property
     def passed(self) -> bool:
@@ -517,17 +536,5 @@ def _failures(name: str, run: RunResult) -> list[str]:
         found.append(f"{where} neither asked about nor flagged {', '.join(clarified.named)}")
     infeasible = run.infeasibility
     if infeasible is not None and not infeasible.passed:
-        if infeasible.revision is None:
-            found.append(f"{where} no final plan revision to declare infeasible")
-        else:
-            missing = [
-                part
-                for part, ok in (
-                    ("is not declared infeasible", infeasible.declared),
-                    ("proposes no relaxation", infeasible.relaxation),
-                    ("names no binding constraint", infeasible.binding_named),
-                )
-                if not ok
-            ]
-            found.append(f"{where} revision {infeasible.revision} {' and '.join(missing)}")
+        found.append(f"{where} {infeasible.shortfall}")
     return found

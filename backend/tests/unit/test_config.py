@@ -1,5 +1,7 @@
 """Runtime configuration read from the environment (.env.example)."""
 
+from pathlib import Path
+
 import pytest
 from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import create_async_engine
@@ -221,3 +223,13 @@ RECORDED = (
     "critic_cannibalisation_share",
     "critic_stockout_probability",
 )
+
+
+def test_the_api_serves_the_eval_report_make_eval_writes_by_default(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("EVAL_REPORT_DIR", raising=False)
+    assert Settings().eval_report_dir == Path("evals/reports")
+
+    monkeypatch.setenv("EVAL_REPORT_DIR", "/srv/reports")
+    assert Settings().eval_report_dir == Path("/srv/reports")

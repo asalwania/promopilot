@@ -11,8 +11,13 @@ counts every fallback (ADR 0056, ADR 0065). The report goes to `evals/reports/` 
 `--record` (`make record-eval-cassettes`) plays the scenarios on the live provider LLM_PROVIDER
 names and writes every answer no cassette holds into `evals/cassettes/`; it costs money.
 
-It exits 0 once the report is written, whatever the metrics say; 1 for an invalid scenario and
-2 for bad arguments.
+`--smoke` plays only the scenarios tagged `smoke: true`, the five CI replays (ADR 0069).
+`--check` (replay only) then fails the run on a session with no plan, a broken constraint or
+expected property, a vague or infeasible scenario handled wrongly, or any cassette miss; the
+ratio metrics never fail it. `make eval-smoke` runs both.
+
+It exits 0 once the report is written, whatever the metrics say; 1 for an invalid scenario,
+2 for bad arguments and 3 when `--check` finds a problem.
 """
 
 import argparse
@@ -33,6 +38,7 @@ from promopilot.evals.cassettes import (
     recording_provider,
     replay_provider,
 )
+from promopilot.evals.check import report_problems
 from promopilot.evals.report import (
     REPORT_DIR,
     EvalReport,
@@ -64,14 +70,32 @@ async def run(argv: Sequence[str] | None = None) -> int:
         action="store_true",
         help="play live and record every answer no cassette holds (costs money)",
     )
+    parser.add_argument(
+        "--smoke", action="store_true", help="run only the scenarios tagged `smoke: true`"
+    )
+    parser.add_argument(
+        "--check",
+        action="store_true",
+        help="exit 3 on a run with no plan, a failed constraint or property, or a cassette miss",
+    )
     args = parser.parse_args(argv)
     if args.runs < 1:
         print("--runs must be at least 1", file=sys.stderr)
+        return 2
+    if args.smoke and args.only:
+        print("--smoke picks the scenarios itself: leave out --only", file=sys.stderr)
         return 2
     settings = Settings()
     if args.record and settings.llm_provider in ("replay", "fake"):
         print(
             f"recording needs a live provider, not LLM_PROVIDER={settings.llm_provider}",
+            file=sys.stderr,
+        )
+        return 2
+    if args.check and (args.record or settings.llm_provider != "replay"):
+        print(
+            "--check replays the committed cassettes: it needs LLM_PROVIDER=replay and no "
+            f"--record, not LLM_PROVIDER={settings.llm_provider}",
             file=sys.stderr,
         )
         return 2
@@ -87,6 +111,11 @@ async def run(argv: Sequence[str] | None = None) -> int:
             print(f"no scenario is named {', '.join(unknown)}", file=sys.stderr)
             return 2
         scenarios = [scenario for scenario in scenarios if scenario.name in args.only]
+    if args.smoke:
+        scenarios = [scenario for scenario in scenarios if scenario.smoke]
+        if not scenarios:
+            print(f"no smoke scenario in {args.scenarios}", file=sys.stderr)
+            return 2
     if not scenarios:
         print(f"no scenario in {args.scenarios}", file=sys.stderr)
         return 2
@@ -120,6 +149,14 @@ async def run(argv: Sequence[str] | None = None) -> int:
             f"input and {totals.output_tokens} output tokens, ${totals.cost_usd:.2f} "
             f"(INR {totals.cost_inr:.0f})"
         )
+    if args.check:
+        problems = report_problems(report)
+        if problems:
+            print(f"check failed: {len(problems)} problem(s)", file=sys.stderr)
+            for problem in problems:
+                print(f"- {problem}", file=sys.stderr)
+            return 3
+        print("check passed: every run planned as expected, with no cassette miss")
     return 0
 
 

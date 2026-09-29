@@ -142,6 +142,44 @@
         "title": "AssumptionSource",
         "type": "string"
       },
+      "BestPlanSummary": {
+        "description": "The best plan (ADR 0063): our optimiser run on true-parameter predictions.",
+        "properties": {
+          "lines": {
+            "title": "Lines",
+            "type": "integer"
+          },
+          "objective": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Objective"
+          },
+          "sku_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Sku Ids",
+            "type": "array"
+          },
+          "solver_status": {
+            "$ref": "#/components/schemas/SolveStatus"
+          }
+        },
+        "required": [
+          "solver_status",
+          "lines",
+          "sku_ids",
+          "objective"
+        ],
+        "title": "BestPlanSummary",
+        "type": "object"
+      },
       "BindingConstraint": {
         "description": "A constraint that limits the plan: dropping it gives a strictly better objective, or,\nwhen time ran out, one that may.",
         "properties": {
@@ -223,6 +261,16 @@
         "title": "BindingEvidence",
         "type": "string"
       },
+      "Breach": {
+        "description": "A constraint the plan's true outcome breaks, by the oracle (ADR 0012).",
+        "enum": [
+          "promo_cost_over_budget",
+          "margin_below_minimum",
+          "demand_over_stock"
+        ],
+        "title": "Breach",
+        "type": "string"
+      },
       "Clarification": {
         "description": "A question the agent asked and the manager's answer, in their own words.",
         "properties": {
@@ -262,6 +310,44 @@
           "questions"
         ],
         "title": "ClarificationAsked",
+        "type": "object"
+      },
+      "ClarificationCheck": {
+        "description": "Whether a vague or conflicting scenario's session asked about, or flagged, a field the\nscenario names (#55).",
+        "properties": {
+          "asked": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Asked",
+            "type": "array"
+          },
+          "flagged": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Flagged",
+            "type": "array"
+          },
+          "named": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Named",
+            "type": "array"
+          },
+          "passed": {
+            "title": "Passed",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "named",
+          "asked",
+          "flagged",
+          "passed"
+        ],
+        "title": "ClarificationCheck",
         "type": "object"
       },
       "ClarificationQuestion": {
@@ -557,6 +643,17 @@
         "title": "Complement",
         "type": "object"
       },
+      "ConstraintCheck": {
+        "description": "The final plan revision's hard constraints on its plan-time values (ADR 0012).",
+        "enum": [
+          "passed",
+          "failed",
+          "infeasible",
+          "no_plan"
+        ],
+        "title": "ConstraintCheck",
+        "type": "string"
+      },
       "ConstraintKind": {
         "description": "A plan-level constraint the optimiser enforces (ADR 0036, ADR 0038).",
         "enum": [
@@ -628,6 +725,86 @@
         "title": "DecisionMade",
         "type": "object"
       },
+      "EvalReport": {
+        "properties": {
+          "generated_at": {
+            "format": "date-time",
+            "title": "Generated At",
+            "type": "string"
+          },
+          "metrics": {
+            "items": {
+              "$ref": "#/components/schemas/Metric"
+            },
+            "title": "Metrics",
+            "type": "array"
+          },
+          "planning_settings": {
+            "additionalProperties": true,
+            "title": "Planning Settings",
+            "type": "object"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          },
+          "runs_per_scenario": {
+            "title": "Runs Per Scenario",
+            "type": "integer"
+          },
+          "scenarios": {
+            "items": {
+              "$ref": "#/components/schemas/ScenarioResult"
+            },
+            "title": "Scenarios",
+            "type": "array"
+          },
+          "world_seed": {
+            "title": "World Seed",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "generated_at",
+          "provider",
+          "world_seed",
+          "runs_per_scenario",
+          "planning_settings",
+          "metrics",
+          "scenarios"
+        ],
+        "title": "EvalReport",
+        "type": "object"
+      },
+      "ExplainerRun": {
+        "description": "One run of the Explainer: the explanation a plan revision waited for approval with.",
+        "properties": {
+          "fallback_reason": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FallbackReason"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "integer"
+          },
+          "source": {
+            "$ref": "#/components/schemas/ExplanationSource"
+          }
+        },
+        "required": [
+          "revision",
+          "source",
+          "fallback_reason"
+        ],
+        "title": "ExplainerRun",
+        "type": "object"
+      },
       "ExplanationSource": {
         "enum": [
           "llm",
@@ -645,6 +822,42 @@
         ],
         "title": "FallbackReason",
         "type": "string"
+      },
+      "FieldMatch": {
+        "description": "One labelled planning-request field against what the final request reads (#55).",
+        "properties": {
+          "expected": {
+            "title": "Expected",
+            "type": "string"
+          },
+          "field": {
+            "title": "Field",
+            "type": "string"
+          },
+          "got": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Got"
+          },
+          "matched": {
+            "title": "Matched",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "field",
+          "expected",
+          "got",
+          "matched"
+        ],
+        "title": "FieldMatch",
+        "type": "object"
       },
       "FindingRaised": {
         "description": "Something the Critic found in the plan.",
@@ -739,6 +952,47 @@
           "checks"
         ],
         "title": "HealthResponse",
+        "type": "object"
+      },
+      "InfeasibilityCheck": {
+        "description": "Whether an infeasible scenario's final revision says so, names what binds and proposes\na relaxation (AG-06, #55).",
+        "properties": {
+          "binding_named": {
+            "title": "Binding Named",
+            "type": "boolean"
+          },
+          "declared": {
+            "title": "Declared",
+            "type": "boolean"
+          },
+          "passed": {
+            "title": "Passed",
+            "type": "boolean"
+          },
+          "relaxation": {
+            "title": "Relaxation",
+            "type": "boolean"
+          },
+          "revision": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revision"
+          }
+        },
+        "required": [
+          "revision",
+          "declared",
+          "relaxation",
+          "binding_named",
+          "passed"
+        ],
+        "title": "InfeasibilityCheck",
         "type": "object"
       },
       "InventoryReport": {
@@ -1097,6 +1351,112 @@
         "title": "MechanismOutcome",
         "type": "object"
       },
+      "Metric": {
+        "properties": {
+          "aim": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Aim"
+          },
+          "breakdown": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "default": {},
+            "title": "Breakdown",
+            "type": "object"
+          },
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "direction": {
+            "anyOf": [
+              {
+                "enum": [
+                  "at_least",
+                  "at_most"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Direction"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "of": {
+            "title": "Of",
+            "type": "integer"
+          },
+          "passed": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Passed"
+          },
+          "target": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target"
+          },
+          "unit": {
+            "default": "share",
+            "enum": [
+              "share",
+              "seconds",
+              "rupees"
+            ],
+            "title": "Unit",
+            "type": "string"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          }
+        },
+        "required": [
+          "name",
+          "label",
+          "value",
+          "count",
+          "of"
+        ],
+        "title": "Metric",
+        "type": "object"
+      },
       "ModelEntry": {
         "description": "One registered model version; `live` marks the one the API is serving.",
         "properties": {
@@ -1316,6 +1676,55 @@
           }
         ]
       },
+      "OracleScore": {
+        "description": "The final plan's true expected outcome (ADR 0011, ADR 0017).",
+        "properties": {
+          "blended_margin": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Blended Margin"
+          },
+          "breaches": {
+            "items": {
+              "$ref": "#/components/schemas/Breach"
+            },
+            "title": "Breaches",
+            "type": "array"
+          },
+          "clearance_value": {
+            "title": "Clearance Value",
+            "type": "number"
+          },
+          "incremental_profit": {
+            "title": "Incremental Profit",
+            "type": "number"
+          },
+          "promo_cost": {
+            "title": "Promo Cost",
+            "type": "number"
+          },
+          "stock_capped_lines": {
+            "title": "Stock Capped Lines",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "incremental_profit",
+          "clearance_value",
+          "promo_cost",
+          "blended_margin",
+          "stock_capped_lines",
+          "breaches"
+        ],
+        "title": "OracleScore",
+        "type": "object"
+      },
       "Percentiles": {
         "description": "The 10th, 50th and 90th percentiles of one simulated metric across the runs.",
         "properties": {
@@ -1486,6 +1895,62 @@
           "target_segment"
         ],
         "title": "PlanLine",
+        "type": "object"
+      },
+      "PlanQuality": {
+        "description": "A scored final plan against the rule-based baseline and the best plan (ADR 0063).",
+        "properties": {
+          "best": {
+            "$ref": "#/components/schemas/BestPlanSummary"
+          },
+          "objective": {
+            "title": "Objective",
+            "type": "number"
+          },
+          "regret": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Regret"
+          },
+          "regret_rupees": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Regret Rupees"
+          },
+          "rule_based": {
+            "$ref": "#/components/schemas/RuleBasedSummary"
+          },
+          "versus_rule_based": {
+            "enum": [
+              "beats",
+              "ties",
+              "loses"
+            ],
+            "title": "Versus Rule Based",
+            "type": "string"
+          }
+        },
+        "required": [
+          "objective",
+          "rule_based",
+          "best",
+          "versus_rule_based",
+          "regret",
+          "regret_rupees"
+        ],
+        "title": "PlanQuality",
         "type": "object"
       },
       "PlanRevision": {
@@ -1986,6 +2451,29 @@
         "title": "PromoWindow",
         "type": "object"
       },
+      "PropertyResult": {
+        "properties": {
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          },
+          "passed": {
+            "title": "Passed",
+            "type": "boolean"
+          },
+          "property": {
+            "title": "Property",
+            "type": "string"
+          }
+        },
+        "required": [
+          "property",
+          "passed",
+          "detail"
+        ],
+        "title": "PropertyResult",
+        "type": "object"
+      },
       "PruneReason": {
         "description": "Why option generation dropped an enumerated promo option, in the order the rules are\napplied (ADR 0035).",
         "enum": [
@@ -2354,6 +2842,73 @@
         "title": "RevisionDiff",
         "type": "object"
       },
+      "RevisionSummary": {
+        "properties": {
+          "lines": {
+            "title": "Lines",
+            "type": "integer"
+          },
+          "marketing_budget": {
+            "title": "Marketing Budget",
+            "type": "number"
+          },
+          "number": {
+            "title": "Number",
+            "type": "integer"
+          },
+          "objective": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Objective"
+          },
+          "promo_cost": {
+            "title": "Promo Cost",
+            "type": "number"
+          },
+          "regions": {
+            "items": {
+              "$ref": "#/components/schemas/Region"
+            },
+            "title": "Regions",
+            "type": "array"
+          },
+          "sku_ids": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Sku Ids",
+            "type": "array"
+          },
+          "solver_status": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SolveStatus"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "number",
+          "lines",
+          "regions",
+          "solver_status",
+          "objective",
+          "promo_cost",
+          "marketing_budget"
+        ],
+        "title": "RevisionSummary",
+        "type": "object"
+      },
       "RiskCode": {
         "enum": [
           "OVER_CONCENTRATION",
@@ -2432,6 +2987,296 @@
           "limit"
         ],
         "title": "RiskFinding",
+        "type": "object"
+      },
+      "RuleBasedSummary": {
+        "description": "The rule-based baseline (SPEC \u00a712.2, ADR 0063): 20% off the top 10 sellers in scope,\nto All customers, over the whole promo window, dropped from the bottom until its expected\npromo cost fits the budget.",
+        "properties": {
+          "dropped_sku_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Dropped Sku Ids",
+            "type": "array"
+          },
+          "expected_promo_cost": {
+            "title": "Expected Promo Cost",
+            "type": "number"
+          },
+          "lines": {
+            "title": "Lines",
+            "type": "integer"
+          },
+          "objective": {
+            "title": "Objective",
+            "type": "number"
+          },
+          "sku_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Sku Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "sku_ids",
+          "dropped_sku_ids",
+          "lines",
+          "expected_promo_cost",
+          "objective"
+        ],
+        "title": "RuleBasedSummary",
+        "type": "object"
+      },
+      "RunOutcome": {
+        "description": "How a scenario's session ended.",
+        "enum": [
+          "planned",
+          "awaiting_clarification",
+          "failed"
+        ],
+        "title": "RunOutcome",
+        "type": "string"
+      },
+      "RunResult": {
+        "properties": {
+          "amendments_applied": {
+            "default": 0,
+            "title": "Amendments Applied",
+            "type": "integer"
+          },
+          "cassette_misses": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Cassette Misses",
+            "type": "array"
+          },
+          "clarification": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ClarificationCheck"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "constraints": {
+            "$ref": "#/components/schemas/ConstraintCheck",
+            "default": "no_plan"
+          },
+          "duration_s": {
+            "default": 0.0,
+            "title": "Duration S",
+            "type": "number"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "explanations": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/ExplainerRun"
+            },
+            "title": "Explanations",
+            "type": "array"
+          },
+          "extraction": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/FieldMatch"
+            },
+            "title": "Extraction",
+            "type": "array"
+          },
+          "fallbacks": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Fallbacks",
+            "type": "array"
+          },
+          "flagged": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Flagged",
+            "type": "array"
+          },
+          "infeasibility": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/InfeasibilityCheck"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "oracle": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OracleScore"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "outcome": {
+            "$ref": "#/components/schemas/RunOutcome"
+          },
+          "properties": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/PropertyResult"
+            },
+            "title": "Properties",
+            "type": "array"
+          },
+          "quality": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PlanQuality"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "questions_asked": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Questions Asked",
+            "type": "array"
+          },
+          "revision": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RevisionSummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "route": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Route",
+            "type": "array"
+          },
+          "run": {
+            "title": "Run",
+            "type": "integer"
+          },
+          "session_s": {
+            "default": 0.0,
+            "title": "Session S",
+            "type": "number"
+          },
+          "unneeded_asks": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Unneeded Asks",
+            "type": "array"
+          },
+          "usage": {
+            "$ref": "#/components/schemas/SessionUsage",
+            "default": {
+              "calls": 0,
+              "cost_inr": 0.0,
+              "cost_usd": 0.0,
+              "input_tokens": 0,
+              "output_tokens": 0,
+              "unpriced_models": []
+            }
+          },
+          "violations": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/Violation"
+            },
+            "title": "Violations",
+            "type": "array"
+          }
+        },
+        "required": [
+          "run",
+          "outcome"
+        ],
+        "title": "RunResult",
+        "type": "object"
+      },
+      "ScenarioResult": {
+        "properties": {
+          "as_of_week": {
+            "title": "As Of Week",
+            "type": "integer"
+          },
+          "consistency": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Consistency"
+          },
+          "group": {
+            "title": "Group",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "passed": {
+            "title": "Passed",
+            "type": "boolean"
+          },
+          "runs": {
+            "items": {
+              "$ref": "#/components/schemas/RunResult"
+            },
+            "title": "Runs",
+            "type": "array"
+          },
+          "seed": {
+            "title": "Seed",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "name",
+          "group",
+          "as_of_week",
+          "seed",
+          "runs",
+          "passed"
+        ],
+        "title": "ScenarioResult",
         "type": "object"
       },
       "Scope": {
@@ -3408,6 +4253,30 @@
         "summary": "Competitor Gaps",
         "tags": [
           "competitors"
+        ]
+      }
+    },
+    "/api/evals/latest": {
+      "get": {
+        "operationId": "latest_api_evals_latest_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EvalReport"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "description": "No eval report this version can read"
+          }
+        },
+        "summary": "Latest",
+        "tags": [
+          "evals"
         ]
       }
     },

@@ -2,6 +2,7 @@
 with scripted LLMs, and scores each final plan (E9 seam 1, ADR 0056)."""
 
 from collections.abc import Sequence
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -32,6 +33,7 @@ from promopilot.llm import (
     LLMError,
     LLMProvider,
     Message,
+    ReplayProvider,
     ToolSpec,
     ToolTurn,
     Usage,
@@ -239,6 +241,20 @@ async def test_the_scripted_llm_reads_the_brief_and_what_it_cannot_answer_falls_
     assert not any(fallback.startswith("context") for fallback in plain.fallbacks)
     assert "planner: llm_unavailable" in plain.fallbacks
     assert report.provider == "FakeProvider"
+
+
+async def test_every_request_no_cassette_holds_is_listed_on_its_run(
+    world: EvalWorld, tmp_path: Path
+) -> None:
+    replayed = await evaluate(world, [PLAIN], ReplayProvider(tmp_path))
+    down = await evaluate(world, [PLAIN])
+
+    missed = only_run(replayed, "plain").cassette_misses
+    assert missed, "an empty cassette folder misses every request"
+    assert all(len(digest) == 64 for digest in missed)
+    assert len(set(missed)) == len(missed), "each request is listed once"
+    assert "context: cassette_missing" in only_run(replayed, "plain").fallbacks
+    assert only_run(down, "plain").cassette_misses == (), "a failing LLM is not a miss"
 
 
 async def test_an_unanswered_question_ends_the_run_with_no_plan_to_score(world: EvalWorld) -> None:

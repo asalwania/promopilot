@@ -12,6 +12,7 @@ from promopilot import __version__
 from promopilot.agents import GraphTools, LLMPricing, PostgresCheckpoints
 from promopilot.api.catalog import CatalogService, catalog_router
 from promopilot.api.competitors import CompetitorService, competitors_router
+from promopilot.api.evals import EvalReportService, evals_router
 from promopilot.api.models import ModelService, models_router
 from promopilot.api.planning import build_planning
 from promopilot.api.plans import PlanService, plans_router
@@ -45,6 +46,7 @@ def create_app(
     relations: RelationsService | None = None,
     catalog: CatalogService | None = None,
     plans: PlanService | None = None,
+    evals: EvalReportService | None = None,
 ) -> FastAPI:
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
@@ -75,6 +77,8 @@ def create_app(
         app.include_router(catalog_router(catalog))
     if plans is not None:
         app.include_router(plans_router(plans))
+    if evals is not None:
+        app.include_router(evals_router(evals))
 
     # `/health` serves the container healthcheck; `/api/health` is what the web proxy forwards.
     @app.get("/health")
@@ -156,6 +160,8 @@ def build_app() -> FastAPI:
             policy=policy,
             defaults=planning.simulation,
         ),
+        # The latest `make eval` report, for the /evals dashboard (ADR 0069).
+        evals=EvalReportService(settings.eval_report_dir),
     )
     # The agents' tools (ADR 0025), shared with the planner agent; no endpoint exposes them.
     app.state.candidates = planning.candidates

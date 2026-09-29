@@ -66,6 +66,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/evals/latest": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Latest */
+        get: operations["latest_api_evals_latest_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/health": {
         parameters: {
             query?: never;
@@ -416,6 +433,19 @@ export interface components {
          */
         AssumptionSource: "brief" | "data" | "default";
         /**
+         * BestPlanSummary
+         * @description The best plan (ADR 0063): our optimiser run on true-parameter predictions.
+         */
+        BestPlanSummary: {
+            /** Lines */
+            lines: number;
+            /** Objective */
+            objective: number | null;
+            /** Sku Ids */
+            sku_ids: string[];
+            solver_status: components["schemas"]["SolveStatus"];
+        };
+        /**
          * BindingConstraint
          * @description A constraint that limits the plan: dropping it gives a strictly better objective, or,
          *     when time ran out, one that may.
@@ -441,6 +471,12 @@ export interface components {
          */
         BindingEvidence: "exact" | "lower_bound" | "unproven" | "infeasible";
         /**
+         * Breach
+         * @description A constraint the plan's true outcome breaks, by the oracle (ADR 0012).
+         * @enum {string}
+         */
+        Breach: "promo_cost_over_budget" | "margin_below_minimum" | "demand_over_stock";
+        /**
          * Clarification
          * @description A question the agent asked and the manager's answer, in their own words.
          */
@@ -461,6 +497,21 @@ export interface components {
             kind: "clarification";
             /** Questions */
             questions: string[];
+        };
+        /**
+         * ClarificationCheck
+         * @description Whether a vague or conflicting scenario's session asked about, or flagged, a field the
+         *     scenario names (#55).
+         */
+        ClarificationCheck: {
+            /** Asked */
+            asked: string[];
+            /** Flagged */
+            flagged: string[];
+            /** Named */
+            named: string[];
+            /** Passed */
+            passed: boolean;
         };
         /**
          * ClarificationQuestion
@@ -625,6 +676,12 @@ export interface components {
             theta: number | null;
         };
         /**
+         * ConstraintCheck
+         * @description The final plan revision's hard constraints on its plan-time values (ADR 0012).
+         * @enum {string}
+         */
+        ConstraintCheck: "passed" | "failed" | "infeasible" | "no_plan";
+        /**
          * ConstraintKind
          * @description A plan-level constraint the optimiser enforces (ADR 0036, ADR 0038).
          * @enum {string}
@@ -664,6 +721,38 @@ export interface components {
             /** Summary */
             summary: string;
         };
+        /** EvalReport */
+        EvalReport: {
+            /**
+             * Generated At
+             * Format: date-time
+             */
+            generated_at: string;
+            /** Metrics */
+            metrics: components["schemas"]["Metric"][];
+            /** Planning Settings */
+            planning_settings: {
+                [key: string]: unknown;
+            };
+            /** Provider */
+            provider: string;
+            /** Runs Per Scenario */
+            runs_per_scenario: number;
+            /** Scenarios */
+            scenarios: components["schemas"]["ScenarioResult"][];
+            /** World Seed */
+            world_seed: number;
+        };
+        /**
+         * ExplainerRun
+         * @description One run of the Explainer: the explanation a plan revision waited for approval with.
+         */
+        ExplainerRun: {
+            fallback_reason: components["schemas"]["FallbackReason"] | null;
+            /** Revision */
+            revision: number;
+            source: components["schemas"]["ExplanationSource"];
+        };
         /**
          * ExplanationSource
          * @enum {string}
@@ -675,6 +764,20 @@ export interface components {
          * @enum {string}
          */
         FallbackReason: "ungrounded" | "invalid_answer" | "llm_unavailable";
+        /**
+         * FieldMatch
+         * @description One labelled planning-request field against what the final request reads (#55).
+         */
+        FieldMatch: {
+            /** Expected */
+            expected: string;
+            /** Field */
+            field: string;
+            /** Got */
+            got: string | null;
+            /** Matched */
+            matched: boolean;
+        };
         /**
          * FindingRaised
          * @description Something the Critic found in the plan.
@@ -720,6 +823,23 @@ export interface components {
             status: "ok" | "degraded";
             /** Version */
             version: string;
+        };
+        /**
+         * InfeasibilityCheck
+         * @description Whether an infeasible scenario's final revision says so, names what binds and proposes
+         *     a relaxation (AG-06, #55).
+         */
+        InfeasibilityCheck: {
+            /** Binding Named */
+            binding_named: boolean;
+            /** Declared */
+            declared: boolean;
+            /** Passed */
+            passed: boolean;
+            /** Relaxation */
+            relaxation: boolean;
+            /** Revision */
+            revision: number | null;
         };
         /** InventoryReport */
         InventoryReport: {
@@ -859,6 +979,40 @@ export interface components {
              */
             unavailable: components["schemas"]["PruneReason"][];
         };
+        /** Metric */
+        Metric: {
+            /** Aim */
+            aim?: number | null;
+            /**
+             * Breakdown
+             * @default {}
+             */
+            breakdown: {
+                [key: string]: number;
+            };
+            /** Count */
+            count: number;
+            /** Direction */
+            direction?: ("at_least" | "at_most") | null;
+            /** Label */
+            label: string;
+            /** Name */
+            name: string;
+            /** Of */
+            of: number;
+            /** Passed */
+            passed?: boolean | null;
+            /** Target */
+            target?: number | null;
+            /**
+             * Unit
+             * @default share
+             * @enum {string}
+             */
+            unit: "share" | "seconds" | "rupees";
+            /** Value */
+            value: number | null;
+        };
         /**
          * ModelEntry
          * @description One registered model version; `live` marks the one the API is serving.
@@ -971,6 +1125,24 @@ export interface components {
         NotSelectedReason: "low_uplift" | "out_of_stock" | "breaks_policy" | "over_budget" | "over_regional_budget" | "breaks_margin" | "max_promoted_skus" | "misses_clearance_target" | "breaks_kvi_tolerance" | "cannibalises" | "time_limit";
         OpenIssue: components["schemas"]["Violation"] | components["schemas"]["RiskFinding"];
         /**
+         * OracleScore
+         * @description The final plan's true expected outcome (ADR 0011, ADR 0017).
+         */
+        OracleScore: {
+            /** Blended Margin */
+            blended_margin: number | null;
+            /** Breaches */
+            breaches: components["schemas"]["Breach"][];
+            /** Clearance Value */
+            clearance_value: number;
+            /** Incremental Profit */
+            incremental_profit: number;
+            /** Promo Cost */
+            promo_cost: number;
+            /** Stock Capped Lines */
+            stock_capped_lines: number;
+        };
+        /**
          * Percentiles
          * @description The 10th, 50th and 90th percentiles of one simulated metric across the runs.
          */
@@ -1039,6 +1211,25 @@ export interface components {
             /** Start Week */
             start_week: number;
             target_segment: components["schemas"]["TargetSegment"];
+        };
+        /**
+         * PlanQuality
+         * @description A scored final plan against the rule-based baseline and the best plan (ADR 0063).
+         */
+        PlanQuality: {
+            best: components["schemas"]["BestPlanSummary"];
+            /** Objective */
+            objective: number;
+            /** Regret */
+            regret: number | null;
+            /** Regret Rupees */
+            regret_rupees: number | null;
+            rule_based: components["schemas"]["RuleBasedSummary"];
+            /**
+             * Versus Rule Based
+             * @enum {string}
+             */
+            versus_rule_based: "beats" | "ties" | "loses";
         };
         /**
          * PlanRevision
@@ -1237,6 +1428,15 @@ export interface components {
             /** Start Week */
             start_week: number;
         };
+        /** PropertyResult */
+        PropertyResult: {
+            /** Detail */
+            detail: string;
+            /** Passed */
+            passed: boolean;
+            /** Property */
+            property: string;
+        };
         /**
          * PruneReason
          * @description Why option generation dropped an enumerated promo option, in the order the rules are
@@ -1400,6 +1600,27 @@ export interface components {
              */
             unchanged: number;
         };
+        /** RevisionSummary */
+        RevisionSummary: {
+            /** Lines */
+            lines: number;
+            /** Marketing Budget */
+            marketing_budget: number;
+            /** Number */
+            number: number;
+            /** Objective */
+            objective: number | null;
+            /** Promo Cost */
+            promo_cost: number;
+            /** Regions */
+            regions: components["schemas"]["Region"][];
+            /**
+             * Sku Ids
+             * @default []
+             */
+            sku_ids: string[];
+            solver_status: components["schemas"]["SolveStatus"] | null;
+        };
         /**
          * RiskCode
          * @enum {string}
@@ -1431,6 +1652,138 @@ export interface components {
             region?: components["schemas"]["Region"] | null;
             /** Sku Id */
             sku_id?: string | null;
+        };
+        /**
+         * RuleBasedSummary
+         * @description The rule-based baseline (SPEC §12.2, ADR 0063): 20% off the top 10 sellers in scope,
+         *     to All customers, over the whole promo window, dropped from the bottom until its expected
+         *     promo cost fits the budget.
+         */
+        RuleBasedSummary: {
+            /** Dropped Sku Ids */
+            dropped_sku_ids: string[];
+            /** Expected Promo Cost */
+            expected_promo_cost: number;
+            /** Lines */
+            lines: number;
+            /** Objective */
+            objective: number;
+            /** Sku Ids */
+            sku_ids: string[];
+        };
+        /**
+         * RunOutcome
+         * @description How a scenario's session ended.
+         * @enum {string}
+         */
+        RunOutcome: "planned" | "awaiting_clarification" | "failed";
+        /** RunResult */
+        RunResult: {
+            /**
+             * Amendments Applied
+             * @default 0
+             */
+            amendments_applied: number;
+            /**
+             * Cassette Misses
+             * @default []
+             */
+            cassette_misses: string[];
+            clarification?: components["schemas"]["ClarificationCheck"] | null;
+            /** @default no_plan */
+            constraints: components["schemas"]["ConstraintCheck"];
+            /**
+             * Duration S
+             * @default 0
+             */
+            duration_s: number;
+            /** Error */
+            error?: string | null;
+            /**
+             * Explanations
+             * @default []
+             */
+            explanations: components["schemas"]["ExplainerRun"][];
+            /**
+             * Extraction
+             * @default []
+             */
+            extraction: components["schemas"]["FieldMatch"][];
+            /**
+             * Fallbacks
+             * @default []
+             */
+            fallbacks: string[];
+            /**
+             * Flagged
+             * @default []
+             */
+            flagged: string[];
+            infeasibility?: components["schemas"]["InfeasibilityCheck"] | null;
+            oracle?: components["schemas"]["OracleScore"] | null;
+            outcome: components["schemas"]["RunOutcome"];
+            /**
+             * Properties
+             * @default []
+             */
+            properties: components["schemas"]["PropertyResult"][];
+            quality?: components["schemas"]["PlanQuality"] | null;
+            /**
+             * Questions Asked
+             * @default []
+             */
+            questions_asked: string[];
+            revision?: components["schemas"]["RevisionSummary"] | null;
+            /**
+             * Route
+             * @default []
+             */
+            route: string[];
+            /** Run */
+            run: number;
+            /**
+             * Session S
+             * @default 0
+             */
+            session_s: number;
+            /**
+             * Unneeded Asks
+             * @default []
+             */
+            unneeded_asks: string[];
+            /**
+             * @default {
+             *       "calls": 0,
+             *       "cost_inr": 0,
+             *       "cost_usd": 0,
+             *       "input_tokens": 0,
+             *       "output_tokens": 0,
+             *       "unpriced_models": []
+             *     }
+             */
+            usage: components["schemas"]["SessionUsage"];
+            /**
+             * Violations
+             * @default []
+             */
+            violations: components["schemas"]["Violation"][];
+        };
+        /** ScenarioResult */
+        ScenarioResult: {
+            /** As Of Week */
+            as_of_week: number;
+            /** Consistency */
+            consistency?: number | null;
+            /** Group */
+            group: string;
+            /** Name */
+            name: string;
+            /** Passed */
+            passed: boolean;
+            /** Runs */
+            runs: components["schemas"]["RunResult"][];
+            /** Seed */
+            seed: number;
         };
         /**
          * Scope
@@ -1874,6 +2227,33 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
+            };
+        };
+    };
+    latest_api_evals_latest_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EvalReport"];
+                };
+            };
+            /** @description No eval report this version can read */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

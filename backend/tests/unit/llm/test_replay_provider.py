@@ -54,6 +54,7 @@ async def test_replay_miss_raises_naming_the_request_hash(tmp_path: Path) -> Non
         await ReplayProvider(tmp_path).complete_structured(Weather, changed)
 
     assert request_hash(Weather, changed) in str(miss.value)
+    assert miss.value.digest == request_hash(Weather, changed)
     assert request_hash(Weather, changed) != request_hash(Weather, ASK)
 
 
