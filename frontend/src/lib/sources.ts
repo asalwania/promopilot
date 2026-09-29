@@ -17,6 +17,12 @@ export const SOURCES = {
   mechanisms: "compare_mechanisms",
   // Competitor prices and undercut KVIs at the request's as-of week.
   competitorGaps: "get_competitor_gaps",
+  // The constraint checklist: the Critic's hard-constraint check (ADR 0067).
+  checks: "validate_plan",
+  // The best options left out, and why (F-01 AC3).
+  notSelected: "run_optimizer",
+  // An infeasible request's shortfalls, binding constraints and relaxation (ADR 0044).
+  relaxation: "relax_constraints",
 } as const;
 
 export type Source = (typeof SOURCES)[keyof typeof SOURCES];

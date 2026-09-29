@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { formatMoney, formatShare, formatUplift } from "@/lib/format";
+import {
+  formatBasisPoints,
+  formatMoney,
+  formatShare,
+  formatUplift,
+} from "@/lib/format";
 
 describe("formatMoney", () => {
   // The Explainer's formats (ADR 0050 D2), so the table reads as the rationales do.
@@ -31,6 +36,18 @@ describe("formatShare", () => {
     [1, "100%"],
   ])("shows the fraction %d as %s", (fraction, shown) => {
     expect(formatShare(fraction)).toBe(shown);
+  });
+});
+
+describe("formatBasisPoints", () => {
+  // A relaxation is exact to a basis point (ADR 0044).
+  it.each([
+    [0.5993, "59.93%"],
+    [0.6, "60%"],
+    [0.7027, "70.27%"],
+    [0.03, "3%"],
+  ])("shows the fraction %d as %s", (fraction, shown) => {
+    expect(formatBasisPoints(fraction)).toBe(shown);
   });
 });
 

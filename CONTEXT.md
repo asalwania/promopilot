@@ -277,6 +277,14 @@ _Avoid_: fallback parser, rule-based context
 A violation or a risk finding that a plan revision still has when it goes for approval. It is listed on the revision; it does not block approval, but an infeasible revision cannot be approved.
 _Avoid_: error, warning
 
+**Constraint checklist**:
+A plan revision's pass or fail for each group of hard constraints (budget, minimum margin, stock, clearance, company policy), read from its open issues: a group fails when one of its violations is open. Clearance also fails on a clearance shortfall, and is not set when the brief names no target (ADR 0067).
+_Avoid_: validation report
+
+**Not-selected option**:
+One of the up to five best promo options, one per SKU and region, that the optimiser left out of a plan, with why: low uplift, stock, policy, a budget, margin, cap, clearance or KVI rule it would break, cannibalisation, or the time limit (F-01 AC3, ADR 0038).
+_Avoid_: rejected option, alternative
+
 **Risk finding**:
 A risk the critic's risk review flags in a plan that may break no hard constraint: over-concentration (one plan line, category or region takes too much of the promo spend), heavy cannibalisation (a line's substitutes lose too much of its incremental profit) or stock-out risk (a line runs out in too many simulated runs). It carries feedback for the planner. Found deterministically; the LLM only words the feedback (ADR 0051).
 _Avoid_: warning, risk score
