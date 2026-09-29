@@ -1,5 +1,5 @@
-import { BriefComposer } from "@/components/brief-composer";
 import { HealthPanel } from "@/components/health-panel";
+import { HomeComposer } from "@/components/home-composer";
 
 export default function Home() {
   return (
@@ -11,7 +11,7 @@ export default function Home() {
           brief and add constraints.
         </p>
       </header>
-      <BriefComposer />
+      <HomeComposer />
       <HealthPanel />
     </main>
   );

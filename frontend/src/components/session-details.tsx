@@ -12,6 +12,7 @@ import {
   type CompetitorPrices,
 } from "@/components/competitor-panel";
 import { ConstraintChecklist } from "@/components/constraint-checklist";
+import { DemoRecordingNote } from "@/components/demo-recording-note";
 import { ErrorMessage } from "@/components/error-message";
 import {
   InfeasibilityPanel,
@@ -109,6 +110,9 @@ export function SessionDetails({
               This plan is final: it can no longer be amended, approved or
               rejected.
             </p>
+          )}
+          {session.demo_recording === "not_in_demo_recordings" && (
+            <DemoRecordingNote planned />
           )}
           {session.error && <ErrorMessage message={session.error} />}
         </CardContent>

@@ -722,6 +722,11 @@ export interface components {
             summary: string;
         };
         /**
+         * DemoRecording
+         * @enum {string}
+         */
+        DemoRecording: "recorded" | "not_in_demo_recordings";
+        /**
          * ErrorResponse
          * @description What every API error answers (ADR 0071).
          */
@@ -852,6 +857,7 @@ export interface components {
         /** HealthResponse */
         HealthResponse: {
             checks: components["schemas"]["HealthChecks"];
+            llm: components["schemas"]["LLMStatus"];
             /**
              * Status
              * @enum {string}
@@ -911,6 +917,28 @@ export interface components {
             sku_id: string;
         };
         JsonValue: unknown;
+        /**
+         * LLMStatus
+         * @description Which LLM answers the planning agents (ADR 0073): the committed cassettes (`replay`, the
+         *     no-key demo) or a live provider and its model.
+         */
+        LLMStatus: {
+            /**
+             * Mode
+             * @enum {string}
+             */
+            mode: "replay" | "live";
+            /**
+             * Model
+             * @description The live provider's model; null when replaying.
+             */
+            model: string | null;
+            /**
+             * Provider
+             * @enum {string}
+             */
+            provider: "replay" | "openai" | "anthropic" | "fake";
+        };
         /**
          * LineChange
          * @description A plan line whose SKU and region are in both revisions but whose decision changed.
@@ -1910,6 +1938,8 @@ export interface components {
              * @description Every approval and rejection, oldest first: the session's audit trail.
              */
             decisions: components["schemas"]["PlanDecision"][];
+            /** @description Replaying with no API key: `recorded` while the brief, answers and amendments so far are a recorded session's, which replays; `not_in_demo_recordings` once not, and it plans without the language model. Null with a live LLM (ADR 0073). */
+            demo_recording?: components["schemas"]["DemoRecording"] | null;
             /** Error */
             error: string | null;
             plan_revision: components["schemas"]["PlanRevision"] | null;

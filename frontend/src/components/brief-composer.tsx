@@ -4,9 +4,11 @@ import { useRouter } from "next/navigation";
 import { useRef, useState, type FormEvent } from "react";
 
 import { ConstraintForm } from "@/components/constraint-form";
+import { DemoRecordingNote } from "@/components/demo-recording-note";
 import { ErrorMessage, type ShownError } from "@/components/error-message";
 import { ExampleBriefs } from "@/components/example-briefs";
 import { Button } from "@/components/ui/button";
+import type { LLMStatus } from "@/lib/api/health";
 import { createSession } from "@/lib/api/sessions";
 import {
   composeBrief,
@@ -18,7 +20,7 @@ import {
 import { EXAMPLE_BRIEFS, type ExampleBrief } from "@/lib/example-briefs";
 import { BRIEF_MAX_CHARS } from "@/lib/input-limits";
 
-export function BriefComposer() {
+export function BriefComposer({ llm }: { llm?: LLMStatus }) {
   const router = useRouter();
   const briefRef = useRef<HTMLTextAreaElement>(null);
   const [brief, setBrief] = useState("");
@@ -36,6 +38,11 @@ export function BriefComposer() {
   const composed = checked.ok ? composeBrief(brief, checked.value) : brief;
   const addsConstraints = checked.ok && composed !== brief.trim();
   const tooLong = composed.length > BRIEF_MAX_CHARS;
+  // With no API key only the example briefs replay, word for word (ADR 0058, ADR 0073).
+  const unrecorded =
+    llm?.mode === "replay" &&
+    composed.trim() !== "" &&
+    !EXAMPLE_BRIEFS.some((example) => example.brief === composed);
 
   function changeConstraint(
     field: keyof ConstraintValues,
@@ -115,6 +122,7 @@ export function BriefComposer() {
               </p>
             </div>
           )}
+          {unrecorded && <DemoRecordingNote planned={false} />}
           <div className="flex items-center justify-between gap-4">
             <span
               className={
