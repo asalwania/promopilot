@@ -1,0 +1,72 @@
+{
+  "hash": "148503073f07c71c4b9a9c0050e6ffe2ac7a038e1353691e0aa2c96a17c0d927",
+  "request": {
+    "messages": [
+      {
+        "content": "<!-- prompt: critic v2 (E8 #135). Editing this file changes the request hash: re-record cassettes. -->\nYou are the Critic of PromoPilot, a retail promotion planner for a multi-region Indian retailer.\nPromoPilot's deterministic risk review has flagged the plan the Planner agent chose. For each\nfinding, write feedback that tells the Planner agent what to change in its next plan.\n\nThe Planner's levers are:\n- leaving a SKU out of generate_candidates with exclude_sku_ids, in every region;\n- narrowing generate_candidates by mechanisms or target segments, for every SKU;\n- tightening the optimiser options: a lower regional budget cap, a smaller cap on promoted SKUs\n  per category and region, or the KVI price tolerance.\nIt cannot choose a mechanism or depth for one SKU, and it may never loosen the brief's\nconstraints (budget, scope, promo window, minimum margin, clearance targets).\n\nRules:\n- Write one or two sentences of feedback for every finding, by its `finding` number.\n- Name the SKU, category or region and the lever to use. Start from the template feedback,\n  which names the lever that fits the finding.\n- Never compute or invent a number. Cite a number only exactly as the finding shows it, and\n  prefer citing none.\n",
+        "role": "system"
+      },
+      {
+        "content": "Risk findings (JSON from PromoPilot's deterministic review):\n[{\"finding\": 1, \"code\": \"HEAVY_CANNIBALISATION\", \"message\": \"SKU0035 in West: the cannibalisation of its substitutes ₹1,630 is 88.6% of its incremental profit ₹1,841, at or above the 50% limit\", \"template_feedback\": \"SKU0035 in West mostly takes sales from its own substitutes: leave SKU0035 out with generate_candidates' exclude_sku_ids.\", \"sku_id\": \"SKU0035\", \"region\": \"West\"}]",
+        "role": "user"
+      }
+    ],
+    "schema": {
+      "$defs": {
+        "FindingFeedback": {
+          "properties": {
+            "feedback": {
+              "description": "What the planner should change: one or two sentences.",
+              "title": "Feedback",
+              "type": "string"
+            },
+            "finding": {
+              "description": "The finding's `finding` number in the findings data.",
+              "title": "Finding",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "finding",
+            "feedback"
+          ],
+          "title": "FindingFeedback",
+          "type": "object"
+        }
+      },
+      "description": "What the Critic's LLM writes: actionable feedback for each risk finding.",
+      "properties": {
+        "feedback": {
+          "description": "One feedback for every finding.",
+          "items": {
+            "$ref": "#/$defs/FindingFeedback"
+          },
+          "title": "Feedback",
+          "type": "array"
+        }
+      },
+      "required": [
+        "feedback"
+      ],
+      "title": "CriticFeedback",
+      "type": "object"
+    },
+    "temperature": 0.0
+  },
+  "response": {
+    "feedback": [
+      {
+        "feedback": "SKU0035 in West mostly takes sales from its own substitutes: leave SKU0035 out with generate_candidates' exclude_sku_ids.",
+        "finding": 1
+      }
+    ]
+  },
+  "schema_name": "CriticFeedback",
+  "usage": [
+    {
+      "input_tokens": 546,
+      "model": "gpt-4.1-mini",
+      "output_tokens": 39
+    }
+  ]
+}
