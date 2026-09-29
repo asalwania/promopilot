@@ -124,14 +124,94 @@ describe("SessionDetails", () => {
   it("says an infeasible request is infeasible, not that nothing pays", () => {
     render(<SessionDetails session={infeasibleSession} />);
 
-    expect(screen.getByRole("alert")).toHaveTextContent(
+    const panel = screen.getByRole("region", { name: /^Infeasible/ });
+    expect(within(panel).getByRole("alert")).toHaveTextContent(
       "Infeasible: no plan reaches every clearance target within the brief's constraints.",
     );
+    expect(
+      within(panel).getByRole("table", { name: "Proposed relaxation" }),
+    ).toBeInTheDocument();
     expect(
       screen.queryByText(
         "No promo option pays for itself within the brief's constraints.",
       ),
     ).not.toBeInTheDocument();
+  });
+
+  it("accepts an infeasible revision's relaxation as an amendment in one click", async () => {
+    const amend = vi.fn(async () => ({ ok: true as const }));
+    render(<SessionDetails session={infeasibleSession} actions={{ amend }} />);
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Accept the relaxation and re-plan" }),
+    );
+
+    await vi.waitFor(() =>
+      expect(amend).toHaveBeenCalledWith({ acceptRelaxation: true }),
+    );
+    expect(amend).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows the relaxation, with nothing to accept, while the accepted one re-plans", () => {
+    const text =
+      "Accept the smallest relaxation: raise the marketing budget to ₹2,14,500.00.";
+    render(
+      <SessionDetails
+        session={{
+          ...infeasibleSession,
+          status: "planning",
+          amendments: [
+            {
+              text,
+              amends_revision: 1,
+              relaxation: infeasibleSession.plan_revision!.relaxation,
+              amended_at: "2026-09-28T10:15:00Z",
+            },
+          ],
+        }}
+      />,
+    );
+
+    expect(
+      screen.getByRole("table", { name: "Proposed relaxation" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", {
+        name: "Accept the relaxation and re-plan",
+      }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByText(/^Re-planning after your amendment/),
+    ).toHaveTextContent(text);
+  });
+
+  it("offers no relaxation to accept on a final plan", () => {
+    render(
+      <SessionDetails session={{ ...infeasibleSession, status: "approved" }} />,
+    );
+
+    expect(
+      screen.getByRole("table", { name: "Proposed relaxation" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", {
+        name: "Accept the relaxation and re-plan",
+      }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("follows the plan with its constraint checklist and the options left out", () => {
+    render(<SessionDetails session={awaitingApprovalSession} />);
+
+    const checklist = screen.getByRole("region", {
+      name: "Constraint checklist",
+    });
+    expect(checklist).toHaveTextContent("Every constraint passes");
+    const notSelected = screen.getByRole("region", { name: "Not selected" });
+    expect(notSelected).toHaveTextContent(
+      "Low uplift: not worth it on its own",
+    );
+    expect(screen.queryByRole("region", { name: /^Infeasible/ })).toBeNull();
   });
 
   it("says so when no promo option is worth a plan line", () => {
@@ -159,7 +239,9 @@ describe("SessionDetails", () => {
         "No promo option pays for itself within the brief's constraints.",
       ),
     ).toBeInTheDocument();
-    expect(screen.queryByRole("table")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("table", { name: /^Plan lines/ }),
+    ).not.toBeInTheDocument();
   });
 
   it("shows which plan revision an approved session approved", () => {

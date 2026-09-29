@@ -71,6 +71,23 @@ test("a typed brief becomes a plan table with no API key", async ({ page }) => {
     page.getByRole("table", { name: "Regions side by side" }),
   ).toBeVisible();
 
+  // The plan is checked constraint by constraint, and the options left out say why
+  // (F-01 AC3, ADR 0067).
+  const checklist = page.getByRole("table", { name: "Constraint checklist" });
+  await expect(checklist.getByRole("rowheader")).toHaveText([
+    "Budget",
+    "Minimum margin",
+    "Stock",
+    "Clearance",
+    "Policy",
+  ]);
+  await expect(
+    checklist.getByRole("row").nth(1).getByRole("cell").first(),
+  ).toHaveText(/^(Pass|Fail)$/);
+  await expect(
+    page.getByRole("region", { name: "Not selected" }),
+  ).toBeVisible();
+
   // The live trace streamed the agent at work through the proxy (ADR 0047, ADR 0057).
   const trace = page.getByRole("list", { name: "Trace timeline" });
   await expect(

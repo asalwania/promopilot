@@ -46,6 +46,13 @@ export function formatShare(fraction: number): string {
   return `${sign(fraction, shown)}${shown}%`;
 }
 
+// A fraction as a percentage to at most two decimals, e.g. 0.5993 is 59.93%: a
+// relaxation is exact to a basis point (ADR 0044, ADR 0067).
+export function formatBasisPoints(fraction: number): string {
+  const shown = trimmed((Math.abs(fraction) * 100).toFixed(2));
+  return `${sign(fraction, shown)}${shown}%`;
+}
+
 // An uplift already in percent, signed, e.g. +62.5% or -12.3%.
 export function formatUplift(pct: number): string {
   const shown = trimmed(Math.abs(pct).toFixed(1));

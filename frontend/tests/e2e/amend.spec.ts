@@ -44,6 +44,32 @@ test("amending a plan re-plans it and shows what changed from the last revision"
     ),
   ).toBeVisible();
 
+  // Why it is infeasible, and the smallest relaxation, one click from an amendment
+  // (ADR 0044, ADR 0067). Accepting it is not replayed: no cassette records that round.
+  const infeasible = page.getByRole("region", { name: /^Infeasible/ });
+  await expect(
+    infeasible.getByRole("list", { name: "Binding constraints" }),
+  ).toContainText("Clearance target for SKU0006");
+  const relaxation = infeasible.getByRole("table", {
+    name: "Proposed relaxation",
+  });
+  await expect(
+    relaxation.getByRole("rowheader", { name: "Clearance target for SKU0006" }),
+  ).toBeVisible();
+  await expect(
+    relaxation.locator("[title^='Source: relax_constraints']").first(),
+  ).toBeVisible();
+  await expect(
+    infeasible.getByRole("button", {
+      name: "Accept the relaxation and re-plan",
+    }),
+  ).toBeEnabled();
+  const clearance = page
+    .getByRole("table", { name: "Constraint checklist" })
+    .getByRole("row")
+    .filter({ has: page.getByRole("rowheader", { name: "Clearance" }) });
+  await expect(clearance.getByRole("cell").first()).toHaveText("Fail");
+
   await amend(page, budgetCut);
   await expect(
     page.getByRole("region", { name: "Review plan revision 2" }),

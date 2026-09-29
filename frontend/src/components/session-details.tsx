@@ -7,6 +7,12 @@ import {
   ClarificationForm,
   type SubmitAnswers,
 } from "@/components/clarification-form";
+import { ConstraintChecklist } from "@/components/constraint-checklist";
+import {
+  InfeasibilityPanel,
+  needsRelaxation,
+} from "@/components/infeasibility-panel";
+import { NotSelectedList } from "@/components/not-selected-list";
 import { PlanSummary } from "@/components/plan-summary";
 import { RegionPlanTabs } from "@/components/region-plan-tabs";
 import {
@@ -138,12 +144,14 @@ export function SessionDetails({
                 plan revision {revision.number} until the new one is ready.
               </p>
             )}
-            {/* The relaxation itself is shown in E10 (ADR 0044). */}
-            {revision.solver_status === "INFEASIBLE" && (
-              <p role="alert" className="text-destructive text-sm">
-                Infeasible: no plan reaches every clearance target within the
-                brief&apos;s constraints.
-              </p>
+            {needsRelaxation(revision) && (
+              // Keyed so a new revision starts with no pending accept (ADR 0067).
+              <InfeasibilityPanel
+                key={revision.number}
+                revision={revision}
+                canAccept={reviewable}
+                onAcceptRelaxation={() => act.amend({ acceptRelaxation: true })}
+              />
             )}
             {revision.explanation && (
               <PlanSummary explanation={revision.explanation} />
@@ -177,6 +185,13 @@ export function SessionDetails({
           </CardContent>
         </Card>
       )}
+      {revision && (
+        <ConstraintChecklist
+          revision={revision}
+          request={session.planning_request}
+        />
+      )}
+      {revision && <NotSelectedList options={revision.not_selected} />}
       <AuditTrail
         amendments={session.amendments}
         decisions={session.decisions}
