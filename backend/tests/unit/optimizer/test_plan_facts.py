@@ -1,10 +1,19 @@
 """The plan facts of a selection of promo options: what `validate_plan` reads (ADR 0028)."""
 
+from dataclasses import replace
+
+import pandas as pd
 import pytest
 
 from promopilot.domain import Mechanism, Region, Scope
 from promopilot.optimizer import FittedOptionFacts, generate_options, plan_facts
-from tests.unit.optimizer.test_generate_options import PathDemand, cleared, context, request
+from tests.unit.optimizer.test_generate_options import (
+    FakeRelations,
+    PathDemand,
+    cleared,
+    context,
+    request,
+)
 
 
 def test_each_selected_option_carries_its_own_numbers_and_sku_facts() -> None:
@@ -80,3 +89,22 @@ def test_the_relations_models_substitute_pairs_among_the_plans_skus_come_with_th
     assert (pair.sku_id, pair.other_sku_id, pair.theta) == ("A", "B", 0.5)
     assert alone.substitutes == ()
     assert list(facts.substitutes(["B", "A", "C"])) == [pair]
+
+
+class DirectedRelations(FakeRelations):
+    """A's price moves B's units more than B's moves A's, as the generator's truth can."""
+
+    def substitutes(self, sku_id: str) -> pd.DataFrame:
+        theta = {"A": 0.6, "B": 0.4}.get(sku_id)
+        partner = {"A": "B", "B": "A"}.get(sku_id)
+        rows = [] if partner is None else [{"sku_id": partner, "theta": theta}]
+        frame = pd.DataFrame(rows, columns=["sku_id", "theta"])
+        return frame.assign(std_error=0.05, q_value=0.001)
+
+
+def test_a_pair_with_two_directed_effects_takes_the_larger() -> None:
+    facts = FittedOptionFacts(replace(context(PathDemand()), relations=DirectedRelations()))
+
+    [pair] = facts.substitutes(["A", "B"])
+
+    assert (pair.sku_id, pair.other_sku_id, pair.theta) == ("A", "B", 0.6)

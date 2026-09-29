@@ -209,7 +209,8 @@ class FittedOptionFacts:
 
     def substitutes(self, sku_ids: Sequence[str]) -> list[SubstituteFacts]:
         """The relations model's detected substitute pairs among these SKUs, each once and
-        sorted, with its estimated θ (ADR 0075). Never the ground truth."""
+        sorted, with its estimated θ (ADR 0075). The model has one θ per pair; a lookup with
+        a θ per direction gives the larger, as the eval does (ADR 0065)."""
         wanted = set(sku_ids)
         found: dict[tuple[str, str], float] = {}
         for sku_id in sorted(wanted):
@@ -217,7 +218,8 @@ class FittedOptionFacts:
             for partner, theta in zip(partners["sku_id"], partners["theta"], strict=True):
                 partner = str(partner)
                 if partner in wanted and partner != sku_id and np.isfinite(theta):
-                    found[(min(sku_id, partner), max(sku_id, partner))] = float(theta)
+                    key = (min(sku_id, partner), max(sku_id, partner))
+                    found[key] = max(found.get(key, -np.inf), float(theta))
         return [
             SubstituteFacts(sku_id=a, other_sku_id=b, theta=theta)
             for (a, b), theta in sorted(found.items())

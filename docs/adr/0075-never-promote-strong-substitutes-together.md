@@ -129,4 +129,8 @@ The owner's plan:
 - **ADR 0038:** the binding constraints can include `strong_substitutes`. The not-selected reasons include `strong_substitute`, and `cannibalises` names the SKUs behind either.
 - **ADR 0051:** the Critic's heavy-cannibalisation risk still flags weaker pairs that lose too much together.
 - **ADR 0065:** the eval property stays on the true θ at 0.5; planning never reads it.
+- **ADR 0063:** the eval's best plan is this optimiser under the same company policy, with the true relations standing in for the model. So it keeps apart true pairs with θ at least 0.35. That is nearly every true pair, since the generator draws θ from U[0.3, 0.8].
+  - `FittedOptionFacts.substitutes` takes the larger of a pair's two directed θ when the lookup has one per direction, as the eval does.
+  - The best plan's objective can fall, and the regret with it. The full re-record's report shows by how much.
+  - `best_plan` runs no binding analysis, so the rule, like any constraint that could bind, is listed there as unproven.
 - The rule can make a clearance target on one SKU of a strong pair harder to reach alongside the other. That shows as a lowered target with `policy_binds`.
