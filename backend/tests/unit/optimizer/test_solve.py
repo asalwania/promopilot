@@ -908,6 +908,21 @@ def test_a_solve_that_finds_nothing_in_time_returns_the_greedy_plan() -> None:
     assert instance.solve().objective == pytest.approx(550.0)
 
 
+def test_the_greedy_plan_never_promotes_strong_substitutes_together() -> None:
+    a = Row(line("A"), 300.0)
+    b = Row(line("B"), 250.0)
+    c = Row(line("C"), 100.0)
+    facts = FakeFacts(thetas={frozenset(("A", "B")): 0.6})
+    instance = Instance([a, b, c], facts, budget=100_000.0, min_margin=None, policy=CompanyPolicy())
+
+    result = starved(instance)
+
+    # B runs with A, its strong substitute, so it stays out (ADR 0075); C joins.
+    assert result.status is SolveStatus.FEASIBLE
+    assert chosen(result) == [a.line, c.line]
+    assert validate_plan(instance.facts_of([0, 2]), instance.planning(), instance.policy) == ()
+
+
 def test_an_empty_candidate_set_gives_an_empty_optimal_plan() -> None:
     result = run([])
 

@@ -700,15 +700,16 @@ class _Problem:
 
     def greedy(self) -> list[int]:
         """A plan built best value first (ADR 0074): each option joins when it keeps every
-        constraint and one line per SKU and region, and gains at least a paisa net of its
-        pairwise terms with the lines already in. No solver and no clock, so the same input
-        gives the same plan; ties go to the earlier option. Empty when the model holds a
-        constraint the empty plan breaks (a clearance target)."""
+        constraint, one line per SKU and region and the strong-substitute rule (ADR 0075), and
+        gains at least a paisa net of its pairwise terms with the lines already in. No solver
+        and no clock, so the same input gives the same plan; ties go to the earlier option.
+        Empty when the model holds a constraint the empty plan breaks (a clearance target)."""
         picked: list[int] = []
         taken: set[tuple[str, Region]] = set()
+        barred: set[int] = set()
         totals = np.zeros(len(self.limits), dtype=np.int64)
         for n in np.argsort(-self.value, kind="stable").tolist():
-            if any(key in taken for key in self._keys[n]):
+            if n in barred or any(key in taken for key in self._keys[n]):
                 continue
             after = totals + self.coefficients[:, n]
             if (after > self.bound).any():
@@ -717,6 +718,7 @@ class _Problem:
                 continue
             picked.append(n)
             taken.update(self._keys[n])
+            barred |= self._conflicts[n]
             totals = after
         return sorted(picked)
 

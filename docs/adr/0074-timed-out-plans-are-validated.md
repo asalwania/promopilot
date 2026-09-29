@@ -37,6 +37,7 @@ We chose these with the owner (D1–D8 on #156; every recommended option).
   - The greedy plan takes options best value first, ties to the earlier option. Each option joins when:
     - it keeps every constraint;
     - it keeps one line per SKU and region;
+    - it runs with no plan line of a strong substitute (ADR 0075), which the check (D1) also keeps, since it uses the same model;
     - it gains at least a paisa net of its pairwise terms with the lines already in.
   - It is pure numpy, with no CP-SAT work and no clock, so the same input gives the same plan and there is no new exposure to the wall-clock net. It takes under a second on the largest eval scope.
   - The status is `FEASIBLE`, and every constraint that could bind is reported unproven.
@@ -72,7 +73,7 @@ We chose these with the owner (D1–D8 on #156; every recommended option).
   - phase 1 starved of work and the check given work: the request is proven `INFEASIBLE`, with a proven relaxation and `infeasible` binding evidence;
   - the same with reachable targets: no shortfall and no relaxation;
   - the check starved too: `INFEASIBLE`, with `proven: false`;
-  - a starved solve without targets returns the greedy plan, by hand (a budget, a SKU clash and a pairwise term each keep an option out);
+  - a starved solve without targets returns the greedy plan, by hand (a budget, a SKU clash and a pairwise term each keep an option out), and it keeps the strong-substitute rule;
   - a hypothesis property over #36's instances with every phase starved: every plan keeps every hard constraint, it is `INFEASIBLE` exactly when a shortfall is reported, and without targets it is empty only when the best plan is;
   - the Explainer's two new template sentences.
 - **LLM requests.** The tool descriptions, `SolveStatus`, the API and the web types are unchanged, and there is no migration. The change reaches a request only through a solve that hits one of these paths: the `run_optimizer` tool output that goes into the next planner request, and the Explainer's and Critic's inputs. The PR lists the cassettes that miss in a full offline replay. They are re-recorded in the main session with the owner's OK.
