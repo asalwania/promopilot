@@ -207,6 +207,54 @@ def test_effects_come_one_row_per_line_and_affected_sku() -> None:
     assert effects_of().empty
 
 
+class CountingDemand(FakeDemand):
+    """FakeDemand that counts its baseline forecasts."""
+
+    def __init__(self) -> None:
+        self.forecasts = 0
+
+    def baseline(
+        self,
+        weeks: Iterable[int],
+        *,
+        regions: Sequence[str] | None = None,
+        store_ids: Sequence[str] | None = None,
+        sku_ids: Sequence[str] | None = None,
+    ) -> pd.DataFrame:
+        self.forecasts += 1
+        return super().baseline(weeks, regions=regions, store_ids=store_ids, sku_ids=sku_ids)
+
+
+def one_by_one(lines: Sequence[PlanLine], relations: Any, demand: Any, products: Any) -> Any:
+    """`line_effects` of each line alone, numbered as in one batch."""
+    frames = [
+        line_effects([promoted], relations, demand, products).assign(line=n)
+        for n, promoted in enumerate(lines)
+    ]
+    return pd.concat(frames, ignore_index=True)
+
+
+def test_a_batch_of_lines_forecasts_the_baseline_once_per_region() -> None:
+    lines = [
+        line("A"),
+        line("B", start_week=61, duration_weeks=1),
+        line("A", region=Region.SOUTH, target_segment=TargetSegment.FAMILIES),
+        line("B", mechanism=Mechanism.BUNDLE, bundle_partner_sku_id="E", start_week=62),
+        line("C", mechanism=Mechanism.BOGO, depth_pct=50),
+    ]
+    demand = CountingDemand()
+
+    effects = line_effects(lines, FakeRelations(), demand, PRODUCTS)
+
+    assert demand.forecasts == 2
+    pd.testing.assert_frame_equal(
+        effects,
+        one_by_one(lines, FakeRelations(), FakeDemand(), PRODUCTS),
+        check_exact=True,
+        check_dtype=False,
+    )
+
+
 def summed(effects: pd.DataFrame, count: int) -> pd.DataFrame:
     """`line_effects` totalled per line, with zeros for a line that moves nothing."""
     totals = effects.groupby("line")[["cannibalised_profit", "halo_profit"]].sum()
@@ -440,6 +488,26 @@ def test_the_fitted_models_plug_into_the_calculators(
     )
     singles = [pairwise_cannibalisation(a, b, found, model, products) for a, b in others]
     assert list(batch) == pytest.approx([together, *singles], rel=1e-9)
+
+
+def test_fitted_line_effects_of_a_batch_are_exactly_each_line_alone(
+    small_models: tuple[DemandModel, Relations], small_history: DemandHistory
+) -> None:
+    model, found = small_models
+    products = small_history.products
+    lines = [
+        line(sku_id, start_week=SMALL_AS_OF + 1 + n % 3, region=region, duration_weeks=1 + n % 2)
+        for n, sku_id in enumerate(sorted(products["sku_id"])[:8])
+        for region in (Region.NORTH, Region.SOUTH)
+    ]
+
+    effects = line_effects(lines, found, model, products)
+
+    assert not effects.empty
+    # Bit for bit: the Explainer's plan data, and so its cassettes, read these numbers.
+    pd.testing.assert_frame_equal(
+        effects, one_by_one(lines, found, model, products), check_exact=True, check_dtype=False
+    )
 
 
 def test_fitted_effect_totals_match_the_per_line_calculator(
