@@ -3,6 +3,9 @@
 A fake clock records each backoff instead of sleeping, so no test waits.
 """
 
+import asyncio
+from collections.abc import Sequence
+
 import pytest
 from pydantic import BaseModel
 
@@ -161,3 +164,47 @@ async def test_openai_overloaded_falls_back_to_claude_and_the_session_is_billed_
     # One Claude call: 40 in x $2/M + 15 out x $10/M = $0.00008 + $0.00015 = $0.00023.
     assert (totals.calls, totals.input_tokens, totals.output_tokens) == (1, 40, 15)
     assert totals.cost_usd == pytest.approx(0.00023)
+
+
+class Hanging:
+    """A provider that never answers, like a stalled connection."""
+
+    def __init__(self) -> None:
+        self.calls = 0
+
+    async def complete_structured[T: BaseModel](
+        self, schema: type[T], messages: Sequence[Message]
+    ) -> T:
+        self.calls += 1
+        await asyncio.Event().wait()
+        raise AssertionError("unreachable")
+
+    async def complete_with_tools(
+        self, tools: Sequence[ToolSpec], messages: Sequence[Message]
+    ) -> ToolTurn:
+        self.calls += 1
+        await asyncio.Event().wait()
+        raise AssertionError("unreachable")
+
+
+async def test_an_attempt_that_takes_too_long_times_out_and_is_retried() -> None:
+    clock = FakeClock()
+    inner = Hanging()
+    llm = RetryingProvider(inner, sleep=clock.sleep, timeout_s=0.01)
+
+    with pytest.raises(TransientLLMError, match=r"no answer within 0\.01 s"):
+        await llm.complete_with_tools([FORECAST], ASK)
+
+    assert inner.calls == 3
+    assert clock.sleeps == [1.0, 2.0]
+    assert llm.timeout_s == 0.01
+
+
+async def test_a_timed_out_primary_falls_back_to_the_secondary() -> None:
+    clock = FakeClock()
+    llm = FallbackProvider(
+        RetryingProvider(Hanging(), sleep=clock.sleep, timeout_s=0.01),
+        RetryingProvider(FakeProvider([PUNE]), sleep=clock.sleep, timeout_s=0.01),
+    )
+
+    assert await llm.complete_structured(Weather, ASK) == PUNE

@@ -5,9 +5,11 @@ plan revision, the one `GET /api/sessions/{id}` shows. The revision is simulated
 demand model with the configured seed, units capped at the stock of the planning request's
 as-of week, and the result replaces the revision's stored simulation. The revision number and
 its plan lines stay as they are. An optional competitor reaction stress-tests the plan against a
-price war, and the stored simulation records it (ADR 0045).
+price war, and the stored simulation records it (ADR 0045). A simulation still running after
+`TOOL_TIMEOUT_SECONDS` is stopped, stores nothing and is 504 (ADR 0071).
 """
 
+import asyncio
 from typing import Protocol
 from uuid import UUID
 
@@ -35,6 +37,10 @@ class ApprovedPlanError(Exception):
     (ADR 0046)."""
 
 
+class SimulationTimeoutError(Exception):
+    """The simulation outlived the service's timeout (ADR 0071)."""
+
+
 class PlanRevisions(Protocol):
     """The session reads and simulation writes it makes (`promopilot.data.SessionStore`)."""
 
@@ -53,12 +59,14 @@ class PlanService:
         data: SimulationData,
         policy: CompanyPolicy,
         defaults: SimulationSettings,
+        timeout_s: float | None = None,
     ) -> None:
         self._revisions = revisions
         self._demand_models = demand_models
         self._data = data
         self._policy = policy
         self._defaults = defaults
+        self._timeout_s = timeout_s
 
     async def simulate(
         self,
@@ -68,7 +76,8 @@ class PlanService:
     ) -> PlanSimulationResponse | None:
         """None when the session is unknown or has no plan revision yet. Raises
         `ToolCallError` when the revision cannot be simulated now (`simulate_on_latest_model`),
-        and `ApprovedPlanError` when the session is approved."""
+        `ApprovedPlanError` when the session is approved, and `SimulationTimeoutError` when it
+        takes longer than the timeout."""
         session = await self._revisions.get(session_id)
         if session is None or session.latest_revision is None or session.planning_request is None:
             return None
@@ -78,16 +87,24 @@ class PlanService:
             )
         revision = session.latest_revision
         week = session.planning_request.as_of_week
-        simulated = await simulate_on_latest_model(
-            PromoPlan(lines=tuple(planned.line for planned in revision.lines)),
-            self._demand_models,
-            self._data,
-            week,
-            policy=self._policy,
-            n_runs=n_runs or self._defaults.n_runs,
-            seed=self._defaults.seed,
-            competitor_reaction=competitor_reaction,
-        )
+        try:
+            async with asyncio.timeout(self._timeout_s) as deadline:
+                simulated = await simulate_on_latest_model(
+                    PromoPlan(lines=tuple(planned.line for planned in revision.lines)),
+                    self._demand_models,
+                    self._data,
+                    week,
+                    policy=self._policy,
+                    n_runs=n_runs or self._defaults.n_runs,
+                    seed=self._defaults.seed,
+                    competitor_reaction=competitor_reaction,
+                )
+        except TimeoutError as error:
+            if not deadline.expired():
+                raise
+            raise SimulationTimeoutError(
+                f"The simulation took longer than {self._timeout_s:g} s and was stopped."
+            ) from error
         await self._revisions.save_simulation(session_id, revision.number, simulated.simulation)
         return PlanSimulationResponse(
             session_id=session_id,
@@ -115,6 +132,9 @@ def plans_router(plans: PlanService) -> APIRouter:
                 "description": "No trained demand model, or no inventory snapshot for the "
                 "planning request's as-of week"
             },
+            status.HTTP_504_GATEWAY_TIMEOUT: {
+                "description": "The simulation took longer than TOOL_TIMEOUT_SECONDS"
+            },
         },
     )
     async def simulate_plan(session_id: UUID, body: SimulatePlanRequest) -> PlanSimulationResponse:
@@ -130,6 +150,8 @@ def plans_router(plans: PlanService) -> APIRouter:
             raise HTTPException(code, failure.error.message) from failure
         except ApprovedPlanError as error:
             raise HTTPException(status.HTTP_409_CONFLICT, str(error)) from error
+        except SimulationTimeoutError as error:
+            raise HTTPException(status.HTTP_504_GATEWAY_TIMEOUT, str(error)) from error
         if found is None:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "Unknown plan")
         return found

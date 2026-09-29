@@ -1,5 +1,6 @@
 """The tool registry: the single seam through which agents reach deterministic computation."""
 
+import asyncio
 from typing import Any
 
 import pytest
@@ -96,3 +97,34 @@ def test_results_serialise_to_json_for_the_llm() -> None:
         "message": "no tool named x",
         "details": [],
     }
+
+
+class SlowInput(BaseModel):
+    seconds: float
+
+
+async def slow(arguments: SlowInput) -> AddOutput:
+    await asyncio.sleep(arguments.seconds)
+    return AddOutput(total=0)
+
+
+SLOW = Tool(
+    name="slow", description="Waits.", input_type=SlowInput, output_type=AddOutput, handler=slow
+)
+
+
+async def test_a_tool_that_takes_too_long_is_a_timeout_error() -> None:
+    registry = ToolRegistry([SLOW], timeout_s=0.01)
+
+    result = await registry.call("slow", {"seconds": 5})
+
+    assert isinstance(result, ToolError)
+    assert result.code == "timeout"
+    assert result.message == "slow took longer than 0.01 s and was stopped"
+
+
+async def test_a_tool_within_its_timeout_answers() -> None:
+    registry = ToolRegistry([SLOW], timeout_s=5)
+
+    assert await registry.call("slow", {"seconds": 0}) == ToolOk(output=AddOutput(total=0))
+    assert ToolRegistry([SLOW]).timeout_s is None

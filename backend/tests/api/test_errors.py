@@ -64,7 +64,9 @@ def assert_error(response: Any, status_code: int, code: str) -> dict[str, Any]:
     assert isinstance(body["detail"], str)
     assert body["detail"]
     assert body["reference_id"] == response.headers["x-request-id"]
-    assert set(body) <= {"detail", "code", "reference_id", "errors"}
+    assert set(body) == {"detail", "code", "reference_id", "errors"}
+    if status_code != 422:
+        assert body["errors"] is None
     return body
 
 
@@ -117,7 +119,7 @@ async def test_an_oversized_input_is_422_with_the_error_schema(
 ) -> None:
     body = assert_error(await client.post(path, json=payload), 422, "validation_failed")
 
-    assert body["detail"].startswith(f"{field}: ")
+    assert body["detail"].startswith(field)
     assert "2000" in body["detail"]
     assert body["errors"][0]["loc"].startswith(f"body.{field}")
     # The rejected input is never echoed back.
@@ -181,6 +183,8 @@ async def test_too_many_answers_or_too_long_an_id_is_422(
     response = await client.post(f"/api/sessions/{UUID(int=1)}/clarify", json={"answers": answers})
 
     assert_error(response, 422, "validation_failed")
+    # Even an oversized key is cut short where it names the problem.
+    assert "q" * 65 not in response.text
 
 
 async def test_an_unexpected_error_is_500_without_its_text_or_a_traceback() -> None:

@@ -58,6 +58,7 @@ _CODES: Final[Mapping[int, ErrorCode]] = {
 _LOCATIONS: Final = frozenset({"body", "query", "path", "header", "cookie"})
 _PREFIXES: Final = ("Value error, ", "Assertion failed, ")
 _BODY_METHODS: Final = frozenset({"POST", "PUT", "PATCH"})
+_PART_MAX_CHARS: Final = 64
 
 
 class FieldError(BaseModel):
@@ -77,7 +78,7 @@ class ErrorResponse(BaseModel):
         "request in the logs."
     )
     errors: list[FieldError] | None = Field(
-        default=None, description="Every problem with the request (422 only)."
+        default=None, description="Every problem with the request: a 422's, null otherwise."
     )
 
 
@@ -201,7 +202,7 @@ def _error_json(
         errors=None if errors is None else list(errors),
     )
     return JSONResponse(
-        body.model_dump(mode="json", exclude_none=True),
+        body.model_dump(mode="json"),
         status_code=status_code,
         headers={**(headers or {}), REQUEST_ID_HEADER: request_id},
     )
@@ -228,7 +229,13 @@ def _field_error(issue: Mapping[str, Any]) -> FieldError:
     message = str(issue.get("msg", "is not valid"))
     for prefix in _PREFIXES:
         message = message.removeprefix(prefix)
-    return FieldError(loc=".".join(str(part) for part in issue.get("loc", ())), message=message)
+    return FieldError(loc=".".join(_part(part) for part in issue.get("loc", ())), message=message)
+
+
+def _part(part: object) -> str:
+    """A location part, cut short: a dict key there is the client's input."""
+    text = str(part)
+    return text if len(text) <= _PART_MAX_CHARS else f"{text[:_PART_MAX_CHARS]}…"
 
 
 def _readable(problem: FieldError) -> str:

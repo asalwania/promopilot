@@ -87,7 +87,8 @@ def build_planning(settings: Settings, engine: AsyncEngine) -> Planning:
     # The models are resolved per call, so a retrain is picked up, and so is the as-of week,
     # so newly loaded data moves the data tools' clock (ADR 0025, ADR 0032). Generated promo
     # options wait in the candidate store for the optimiser (ADR 0035, ADR 0036); the
-    # simulator samples with the session's seed and default runs (ADR 0042).
+    # simulator samples with the session's seed and default runs (ADR 0042). A tool call that
+    # outlives TOOL_TIMEOUT_SECONDS is a `timeout` tool error (ADR 0071).
     stack = planning_stack(
         demand_model,
         relations_model,
@@ -97,6 +98,7 @@ def build_planning(settings: Settings, engine: AsyncEngine) -> Planning:
         simulation=planning.simulation,
         seed=planning.seed,
         as_of_week=data.default_as_of_week,
+        tool_timeout_s=settings.tool_timeout_seconds,
     )
     return Planning(
         registry=registry,

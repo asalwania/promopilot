@@ -116,3 +116,15 @@ def test_an_empty_key_from_an_env_file_counts_as_missing(monkeypatch: pytest.Mon
     monkeypatch.setenv("OPENAI_API_KEY", "")
     with pytest.raises(ValueError, match="OPENAI_API_KEY"):
         build_provider(Settings(llm_provider="openai", openai_model="gpt-4.1-mini"))
+
+
+@pytest.mark.parametrize("primary", ["openai", "anthropic"])
+def test_a_live_provider_times_out_each_attempt_after_the_configured_seconds(
+    primary: str,
+) -> None:
+    config = OPENAI if primary == "openai" else ANTHROPIC
+
+    llm = build_provider(Settings(llm_provider=primary, llm_timeout_seconds=12.5, **config))  # type: ignore[arg-type]
+
+    assert isinstance(llm, RetryingProvider)
+    assert llm.timeout_s == 12.5

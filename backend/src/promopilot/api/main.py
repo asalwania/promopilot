@@ -148,11 +148,14 @@ def build_app() -> FastAPI:
         checkpoints=PostgresCheckpoints(settings.database_url),
         trace=trace,
         trace_poll_interval_s=settings.trace_poll_interval_s,
+        # A background run that has not paused by then fails the session (ADR 0071).
+        session_timeout_s=settings.session_timeout_seconds,
     )
     app = create_app(
         database_probe=probe,
         model_status=planning.demand_model,
         sessions=sessions,
+        max_request_body_bytes=settings.max_request_body_bytes,
         models=models,
         competitors=CompetitorService(data, policy=policy),
         relations=RelationsService(planning.relations_model, data),
@@ -163,6 +166,7 @@ def build_app() -> FastAPI:
             data=data,
             policy=policy,
             defaults=planning.simulation,
+            timeout_s=settings.tool_timeout_seconds,
         ),
         # The latest `make eval` report, for the /evals dashboard (ADR 0069).
         evals=EvalReportService(settings.eval_report_dir),
