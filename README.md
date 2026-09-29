@@ -544,6 +544,7 @@ docs/agents/ Agent workflow config (issue tracker, triage labels, domain docs)
 - [ADR 0071: Every API error answers `{detail, code, reference_id}`; inputs are capped in the request types and the body; LLM attempts, tool calls and background graph runs time out from config](docs/adr/0071-one-error-schema-input-limits-and-timeouts.md)
 - [ADR 0072: The `/evals` dashboard shows the latest report as it was written: grouped metric cards with the report's own pass or fail, a sorted and clipped regret chart, and a scenario table whose "trace" is each run's detail in the report](docs/adr/0072-evals-dashboard.md)
 - [ADR 0073: `make demo` prepares the data and models in an init step, replays unless `.env` holds a key, and explains a brief outside the recordings instead of failing it](docs/adr/0073-make-demo-from-a-fresh-clone.md)
+- [ADR 0075: Strong substitutes are never promoted together: a hard, always-on company-policy rule on the relations model's estimated θ, at most one option per pair, region, week and segment](docs/adr/0075-never-promote-strong-substitutes-together.md)
 - [ADR 0076: An eval scenario's amendment can accept the waiting revision's relaxation, sent as the API sends it; the labels stay as stated and the accepted values replace them when scored](docs/adr/0076-eval-scenarios-accept-a-relaxation.md)
 
 The domain glossary is [CONTEXT.md](CONTEXT.md).
