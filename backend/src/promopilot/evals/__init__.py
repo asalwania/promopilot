@@ -21,6 +21,8 @@ from promopilot.evals.report import (
 from promopilot.evals.runner import run
 from promopilot.evals.scenarios import (
     SCENARIO_DIR,
+    AcceptRelaxation,
+    Amendment,
     AsksClarification,
     DeclaresInfeasible,
     DiffChanges,
@@ -44,6 +46,8 @@ __all__ = [
     "REPORT_DIR",
     "SCENARIO_DIR",
     "STRONG_SUBSTITUTE_THETA",
+    "AcceptRelaxation",
+    "Amendment",
     "AsksClarification",
     "DeclaresInfeasible",
     "DiffChanges",

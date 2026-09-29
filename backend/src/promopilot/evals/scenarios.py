@@ -2,9 +2,10 @@
 
 A scenario is a brief, the answers the manager gives if the Context agent asks (by question id,
 which is the field name, ADR 0048), the amendments made once a plan is waiting for approval, in
-order, the as-of week it is planned at (ADR 0008), the seed its sessions plan with, its group,
-the planning-request fields the brief states (labels), and the properties its outcome is
-expected to have: never an exact plan.
+order (each a text, or accepting the waiting revision's relaxation, ADR 0076), the as-of week
+it is planned at (ADR 0008), the seed its sessions plan with, its group, the planning-request
+fields the brief states (labels), and the properties its outcome is expected to have: never an
+exact plan.
 """
 
 from enum import StrEnum
@@ -144,6 +145,18 @@ type ExpectedProperty = (
 # ---------------------------------------------------------------- the scenario
 
 
+class AcceptRelaxation(_Frozen):
+    """An amendment that accepts the waiting plan revision's relaxation, as
+    `POST /amend {accept_relaxation: true}` does (ADR 0052 D7, ADR 0076): the runner sends the
+    relaxation's own amendment text, and refuses the step when the revision has none."""
+
+    accept_relaxation: Literal[True]
+
+
+type Amendment = str | AcceptRelaxation
+"""A text the manager types, or `{accept_relaxation: true}`."""
+
+
 class RequestLabels(_Frozen):
     """The planning-request fields the scenario states, as the final request should read them
     once the answers and amendments are in; a field left out is not scored (#55)."""
@@ -170,12 +183,18 @@ class Scenario(_Frozen):
     """The optimiser's and the simulation's seed for every session of the scenario."""
     clarifications: dict[str, str] = Field(default_factory=dict)
     """Answers by question id, given only when that question is asked."""
-    amendments: tuple[str, ...] = ()
+    amendments: tuple[Amendment, ...] = ()
     """Made in order, each once the session waits for approval."""
     labels: RequestLabels = RequestLabels()
     expect: tuple[ExpectedProperty, ...] = ()
     smoke: bool = False
     """One of the five scenarios CI's smoke eval replays on every PR (`--smoke`, ADR 0069)."""
+
+    @property
+    def stated_amendments(self) -> tuple[str, ...]:
+        """The amendments the manager words: every one but the accepted relaxations, whose text
+        comes from the plan (ADR 0076)."""
+        return tuple(a for a in self.amendments if isinstance(a, str))
 
     @property
     def clarified_fields(self) -> tuple[str, ...]:

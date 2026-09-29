@@ -183,6 +183,75 @@ def test_a_match_shows_the_label_and_what_was_read() -> None:
     assert (budget.expected, budget.got) == ("150000", "200000.4")
 
 
+def relaxed(kind: ConstraintKind, current: float, to: float | None, **where: object) -> Relaxation:
+    change = RelaxedConstraint.model_validate(
+        {"kind": kind, "current": current, "relaxed": to, "change": 0.01, **where}
+    )
+    return Relaxation(changes=(change,), policy_binds=False, proven=True)
+
+
+def test_an_accepted_relaxation_is_applied_to_the_labels_before_they_are_matched() -> None:
+    # The labels are what the scenario states; the request read after accepting a relaxation
+    # holds the relaxation's values, which the optimiser computes (ADR 0076).
+    labels = RequestLabels(
+        marketing_budget=150_000,
+        min_margin=0.2,
+        clearance_targets=(
+            ClearanceTarget(sku_id="SKU0002", sell_through=0.6),
+            ClearanceTarget(sku_id="SKU0006", sell_through=0.7),
+            ClearanceTarget(sku_id="SKU0009", sell_through=0.9),
+        ),
+        regional_budget_caps={Region.NORTH: 100_000.0},
+        kvi_price_tolerance=0.03,
+        max_promoted_skus_per_category_per_region=3,
+    )
+    accepted = (
+        relaxed(ConstraintKind.MARKETING_BUDGET, 150_000, 200_000.4),
+        relaxed(ConstraintKind.MINIMUM_MARGIN, 0.2, 0.18),
+        relaxed(ConstraintKind.CLEARANCE_TARGET, 0.7, 0.6, sku_id="SKU0006"),
+        relaxed(ConstraintKind.CLEARANCE_TARGET, 0.9, None, sku_id="SKU0009"),
+        relaxed(ConstraintKind.REGIONAL_BUDGET, 100_000, 120_000, region=Region.NORTH),
+        relaxed(ConstraintKind.KVI_PRICE_TOLERANCE, 0.03, 0.05),
+        relaxed(ConstraintKind.MAX_PROMOTED_SKUS, 3, 4),
+    )
+
+    before = match_fields(labels, REQUEST)
+    after = match_fields(labels, REQUEST, accepted=accepted)
+
+    assert not any(match.matched for match in before)
+    assert [(match.field, match.matched) for match in after] == [
+        ("marketing_budget", True),
+        ("min_margin", True),
+        ("clearance_targets", True),
+        ("regional_budget_caps", True),
+        ("kvi_price_tolerance", True),
+        ("max_promoted_skus_per_category_per_region", True),
+    ]
+    [budget, *_] = after
+    assert budget.expected == "200000.4"
+
+
+def test_an_accepted_relaxation_never_scores_a_field_the_scenario_does_not_label() -> None:
+    accepted = (relaxed(ConstraintKind.MARKETING_BUDGET, 150_000, 200_000.4),)
+
+    assert match_fields(RequestLabels(min_margin=0.18), REQUEST, accepted=accepted) == (
+        match_fields(RequestLabels(min_margin=0.18), REQUEST)
+    )
+
+
+def test_a_kvi_tolerance_the_relaxation_turns_off_is_expected_off() -> None:
+    accepted = (relaxed(ConstraintKind.KVI_PRICE_TOLERANCE, 0.03, None),)
+    off = REQUEST.model_copy(update={"kvi_price_tolerance": None})
+    labels = RequestLabels(kvi_price_tolerance=0.03)
+
+    assert [(m.field, m.matched) for m in match_fields(labels, off, accepted=accepted)] == [
+        ("kvi_price_tolerance", True)
+    ]
+    assert [(m.field, m.matched) for m in match_fields(labels, REQUEST, accepted=accepted)] == [
+        ("kvi_price_tolerance", False)
+    ]
+
+
 # ---------------------------------------------------------------- extraction accuracy
 
 
