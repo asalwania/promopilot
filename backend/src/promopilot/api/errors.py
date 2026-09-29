@@ -1,6 +1,7 @@
 """One error schema for every API error (SPEC §6, E11 #69, ADR 0071).
 
-Every error answers `ErrorResponse`: `{detail, code, reference_id}`, plus `errors` for a 422.
+Every error answers `ErrorResponse`: `{detail, code, reference_id, errors}`, where `errors`
+lists a 422's problems and is null otherwise.
 
 - `detail` is the message a promotions manager reads, as FastAPI's `detail` always was.
 - `code` is chosen by the HTTP status.
