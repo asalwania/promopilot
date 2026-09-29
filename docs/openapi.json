@@ -3249,6 +3249,11 @@
               }
             ]
           },
+          "llm_s": {
+            "default": 0.0,
+            "title": "Llm S",
+            "type": "number"
+          },
           "oracle": {
             "anyOf": [
               {

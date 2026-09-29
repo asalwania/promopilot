@@ -1784,6 +1784,11 @@ export interface components {
              */
             flagged: string[];
             infeasibility?: components["schemas"]["InfeasibilityCheck"] | null;
+            /**
+             * Llm S
+             * @default 0
+             */
+            llm_s: number;
             oracle?: components["schemas"]["OracleScore"] | null;
             outcome: components["schemas"]["RunOutcome"];
             /**

@@ -31,6 +31,7 @@ A fall in profit is cannibalisation and a rise is halo, as the oracle counts the
 import warnings
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
+from functools import cached_property
 from itertools import combinations
 from typing import Protocol
 
@@ -112,11 +113,33 @@ class Relations:
         )
 
     def _partners(self, sku_id: str, kind: str) -> pd.DataFrame:
-        pairs = self._pairs[self._pairs[kind]].reset_index()
-        as_a = pairs[pairs["sku_a"] == sku_id].assign(sku_id=lambda frame: frame["sku_b"])
-        as_b = pairs[pairs["sku_b"] == sku_id].assign(sku_id=lambda frame: frame["sku_a"])
-        q_value = f"{kind}_q"
-        return pd.concat([as_a, as_b]).rename(columns={q_value: "q_value"})
+        partners, none = self._partner_index[kind]
+        return partners.get(sku_id, none)
+
+    @cached_property
+    def _partner_index(self) -> dict[str, tuple[dict[str, pd.DataFrame], pd.DataFrame]]:
+        """Per kind, each SKU's pairs of that kind with the partner as sku_id, and the empty
+        table: built on the first lookup, so a lookup no longer scans every pair (ADR 0077)."""
+        index = {}
+        for kind in ("substitute", "complement"):
+            pairs = self._pairs[self._pairs[kind]].reset_index()
+            as_a = pairs.assign(sku_id=pairs["sku_b"], _of=pairs["sku_a"])
+            as_b = pairs.assign(sku_id=pairs["sku_a"], _of=pairs["sku_b"])
+            both = pd.concat([as_a, as_b]).rename(columns={f"{kind}_q": "q_value"})
+            index[kind] = (
+                {
+                    str(of): partners.drop(columns="_of")
+                    for of, partners in both.groupby("_of", sort=False)
+                },
+                both.iloc[0:0].drop(columns="_of"),
+            )
+        return index
+
+    def __getstate__(self) -> dict[str, object]:
+        # The registry pickles the model (ADR 0023): the index is rebuilt, never stored.
+        state = dict(self.__dict__)
+        state.pop("_partner_index", None)
+        return state
 
 
 def fit(
@@ -372,17 +395,28 @@ def line_effects(
 
     Other SKUs are assumed at base price, and the units are not stock-capped (ADR 0017).
     `products` needs sku_id, base_price and unit_cost.
+
+    The baseline is forecast once per region, for every week and SKU the region's lines
+    need, and each line reads its own rows off it in the order a forecast of its weeks and
+    SKUs alone lists them, so every number is exactly the one-line figure (ADR 0077).
     """
     economics = _Economics.of(products)
+    lookup = _MemoLookup(relations)
+    moving = [
+        (n, line, shifts)
+        for n, line in enumerate(lines)
+        if (shifts := _price_shifts(line, lookup, economics))
+    ]
+    forecasts = _regional_baselines(
+        demand_model, [(line, sorted(shifts)) for _, line, shifts in moving]
+    )
     frames = []
-    for n, line in enumerate(lines):
-        shifts = _price_shifts(line, relations, economics)
-        if not shifts:
-            continue
+    for n, line, shifts in moving:
         affected = sorted(shifts)
-        baseline = demand_model.baseline(
-            _weeks(line), regions=[line.region.value], sku_ids=affected
-        )
+        forecast = forecasts[line.region.value]
+        baseline = forecast[
+            forecast["week_id"].isin(_weeks(line)) & forecast["sku_id"].isin(affected)
+        ]
         targeted = baseline[baseline["segment"].isin(_segments(line))]
         base = _units_by_sku(baseline, affected)
         units_change = _units_by_sku(targeted, affected) * np.expm1(
@@ -413,6 +447,25 @@ def line_effects(
     effects = effects.assign(size=effects["profit_change"].abs())
     effects = effects.sort_values(["line", "size", "sku_id"], ascending=[True, False, True])
     return effects[EFFECT_COLUMNS].reset_index(drop=True)
+
+
+def _regional_baselines(
+    demand_model: BaselineForecast, lines: Sequence[tuple[PlanLine, list[str]]]
+) -> dict[str, pd.DataFrame]:
+    """One baseline forecast per region: every week any of its lines runs, and every SKU any
+    of them moves (each line with the SKUs it moves)."""
+    weeks: dict[str, set[int]] = {}
+    skus: dict[str, set[str]] = {}
+    for line, affected in lines:
+        region = line.region.value
+        weeks.setdefault(region, set()).update(_weeks(line))
+        skus.setdefault(region, set()).update(affected)
+    return {
+        region: demand_model.baseline(
+            sorted(weeks[region]), regions=[region], sku_ids=sorted(skus[region])
+        )
+        for region in weeks
+    }
 
 
 def line_effect_totals(

@@ -1,5 +1,6 @@
 """Substitutes and complements (SPEC §9.2): detection against known truth and hand-built cases."""
 
+import pickle
 from itertools import combinations
 
 import numpy as np
@@ -246,6 +247,28 @@ def test_fitting_is_deterministic_per_seed(
         assert_frame_equal(again.complements(sku), small_relations.complements(sku))
         for other in small_history.products["sku_id"]:
             assert again.cross_effect(sku, other) == small_relations.cross_effect(sku, other)
+
+
+def test_lookups_survive_a_caller_editing_a_table_and_a_pickle_round_trip(
+    small_history: DemandHistory, small_relations: Relations
+) -> None:
+    sku_ids = list(small_history.products["sku_id"])
+    expected = {
+        sku: (small_relations.substitutes(sku).copy(), small_relations.complements(sku).copy())
+        for sku in sku_ids
+    }
+    for sku in sku_ids:  # a caller that edits what it was given
+        small_relations.substitutes(sku)["theta"] = 0.0
+        small_relations.complements(sku)["lift"] = 0.0
+
+    # The registry stores a pickle (ADR 0023): one taken after lookups reads the same.
+    again = pickle.loads(pickle.dumps(small_relations))
+
+    for sku, (substitutes, complements) in expected.items():
+        for fitted in (small_relations, again):
+            assert_frame_equal(fitted.substitutes(sku), substitutes)
+            assert_frame_equal(fitted.complements(sku), complements)
+    assert any(not substitutes.empty for substitutes, _ in expected.values())
 
 
 def test_the_demand_model_must_share_the_as_of_week(

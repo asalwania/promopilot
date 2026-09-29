@@ -157,6 +157,7 @@ def generate_candidates_tool(
             request, demand_models, relations_models, data, as_of_week, policy
         )
         context = loaded.context
+        whole = _unnarrowed(arguments, loaded, store)
         try:
             # Prediction is CPU-bound: keep the event loop free (ADR 0025).
             options = await asyncio.to_thread(
@@ -167,13 +168,14 @@ def generate_candidates_tool(
                 target_segments=arguments.target_segments,
                 sku_ids=arguments.sku_ids,
                 exclude_sku_ids=arguments.exclude_sku_ids,
+                unnarrowed=None if whole is None else whole[0],
             )
         except ValueError as error:
             raise ToolCallError("invalid_input", str(error)) from error
         stored = store.put(
             request,
             options,
-            FittedOptionFacts(context),
+            FittedOptionFacts(context) if whole is None else whole[1],
             candidate_set_id=candidate_set_id(arguments, loaded),
         )
         return _summary(stored.candidate_set_id, options, loaded)
@@ -203,6 +205,27 @@ def candidate_set_id(arguments: GenerateCandidatesInput, loaded: LoadedOptionCon
         "relations_model_as_of_week": loaded.relations_model.as_of_week,
     }
     return uuid5(CANDIDATE_SET_NAMESPACE, json.dumps(key, sort_keys=True, separators=(",", ":")))
+
+
+def _unnarrowed(
+    arguments: GenerateCandidatesInput, loaded: LoadedOptionContext, store: CandidateStore
+) -> tuple[PromoOptions, FittedOptionFacts] | None:
+    """The stored set the same request generated with no narrowing, on these same models, and
+    its facts, when the call narrows it: the narrowed set is read off it, and its pairwise
+    terms are not priced again (ADR 0077). None otherwise."""
+    whole = GenerateCandidatesInput(request=arguments.request)
+    if arguments == whole:
+        return None
+    stored = store.get(candidate_set_id(whole, loaded))
+    if stored is None or not isinstance(stored.facts, FittedOptionFacts):
+        return None
+    generated, context = stored.facts.context, loaded.context
+    if (
+        generated.demand_model is not context.demand_model
+        or generated.relations is not context.relations
+    ):
+        return None  # a retrain since: generate afresh on the live models
+    return stored.options, stored.facts
 
 
 def _summary(

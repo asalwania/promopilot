@@ -30,7 +30,7 @@ competitor's price, when that depth is not already on the grid (ADR 0031, ADR 00
 
 import math
 from collections import Counter, defaultdict
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Protocol
 
@@ -168,15 +168,36 @@ class PromoOptions:
     """One per clearance target and region of the scope with available stock."""
     price_matches: tuple[PriceMatch, ...] = ()
     """The price-match level of each undercut KVI in scope, enumerated as PCT_OFF."""
+    _tally: "_Tally | None" = field(default=None, repr=False, compare=False)
+    """What was enumerated and pruned per anchor SKU, region, mechanism and target segment,
+    so a narrower set can be read off this one (`generate_options` with `unnarrowed`, ADR
+    0077); None for a set built by hand."""
+
+
+_Key = tuple[str, Region, Mechanism, TargetSegment]
+
+
+@dataclass(frozen=True)
+class _Tally:
+    """Options enumerated, and pruned per reason, per anchor SKU, region, mechanism and target
+    segment: the counts of generation, at the grain every narrowing keeps or drops whole."""
+
+    enumerated: Mapping[_Key, int]
+    pruned: Mapping[_Key, Mapping[PruneReason, int]]
 
 
 class FittedOptionFacts:
     """What the optimiser reads beyond the options' own numbers (`OptionFacts`, ADR 0036),
     from the context the options were generated in: each SKU's category, prices and
-    overstock flag, and the pairwise cannibalisation of option pairs on the same models."""
+    overstock flag, and the pairwise cannibalisation of option pairs on the same models.
+
+    Each option pair is priced once: a later call for the same pair of line objects, such as
+    the Critic's loop-back solving a narrower set read off the first (ADR 0077), gets the
+    term already priced."""
 
     def __init__(self, context: OptionContext) -> None:
         self._context = context
+        self._priced = _PricedPairs()
         self._catalogue = _Catalogue.of(context.products)
         self._stock = _Stock.of(context.stock)
         products = context.products
@@ -197,15 +218,26 @@ class FittedOptionFacts:
             competitor_price=None if gap is None else gap.competitor_price,
         )
 
+    @property
+    def context(self) -> OptionContext:
+        """The context the facts, and the options they were built with, come from."""
+        return self._context
+
     def pairwise_cannibalisation(self, pairs: Sequence[tuple[PlanLine, PlanLine]]) -> np.ndarray:
         context = self._context
-        return pairwise_cannibalisations(
-            pairs,
-            context.relations,
-            context.demand_model,
-            context.products,
-            PredictionContext(policy=context.policy, competitor_prices=context.competitor_prices),
-        )
+
+        def price(missing: Sequence[tuple[PlanLine, PlanLine]]) -> np.ndarray:
+            return pairwise_cannibalisations(
+                missing,
+                context.relations,
+                context.demand_model,
+                context.products,
+                PredictionContext(
+                    policy=context.policy, competitor_prices=context.competitor_prices
+                ),
+            )
+
+        return self._priced.terms(pairs, price)
 
     def substitutes(self, sku_ids: Sequence[str]) -> list[SubstituteFacts]:
         """The relations model's detected substitute pairs among these SKUs, each once and
@@ -226,6 +258,53 @@ class FittedOptionFacts:
         ]
 
 
+class _PricedPairs:
+    """Pairwise terms already priced, per ordered pair of line objects. Lines are told apart
+    by identity, as `pairwise_cannibalisations` tells them, and each is kept so its id stays
+    its own. The pairs are kept as sorted codes with their terms: a few hundred thousand on
+    the demo brief (ADR 0077)."""
+
+    def __init__(self) -> None:
+        self._index: dict[int, int] = {}
+        self._lines: list[PlanLine] = []
+        self._codes = np.zeros(0, dtype=np.int64)
+        self._terms = np.zeros(0)
+
+    def terms(
+        self,
+        pairs: Sequence[tuple[PlanLine, PlanLine]],
+        price: Callable[[Sequence[tuple[PlanLine, PlanLine]]], np.ndarray],
+    ) -> np.ndarray:
+        """Each pair's term, in order, pricing only the pairs never priced before."""
+        codes = np.fromiter(
+            ((self._number(a) << 32) | self._number(b) for a, b in pairs),
+            dtype=np.int64,
+            count=len(pairs),
+        )
+        at = np.searchsorted(self._codes, codes)
+        found = at < len(self._codes)
+        found[found] = self._codes[at[found]] == codes[found]
+        result = np.zeros(len(pairs))
+        result[found] = self._terms[at[found]]
+        missing = np.flatnonzero(~found)
+        if missing.size:
+            priced = np.asarray(price([pairs[k] for k in missing.tolist()]), dtype=float)
+            result[missing] = priced
+            new, first = np.unique(codes[missing], return_index=True)
+            codes_all = np.concatenate([self._codes, new])
+            order = np.argsort(codes_all, kind="stable")
+            self._codes = codes_all[order]
+            self._terms = np.concatenate([self._terms, priced[first]])[order]
+        return result
+
+    def _number(self, line: PlanLine) -> int:
+        number = self._index.get(id(line))
+        if number is None:
+            number = self._index[id(line)] = len(self._lines)
+            self._lines.append(line)
+        return number
+
+
 def generate_options(
     request: PlanningRequest,
     context: OptionContext,
@@ -234,6 +313,7 @@ def generate_options(
     target_segments: Sequence[TargetSegment] | None = None,
     sku_ids: Sequence[str] | None = None,
     exclude_sku_ids: Sequence[str] | None = None,
+    unnarrowed: PromoOptions | None = None,
 ) -> PromoOptions:
     """The promo options for the planning request's scope and promo window.
 
@@ -241,6 +321,12 @@ def generate_options(
     `exclude_sku_ids` leaves SKUs out (ADR 0059). A ValueError for: a SKU outside the request's
     scope, a SKU both kept and left out, leaving out every SKU or a clearance target of the
     brief, and an option the demand model cannot predict.
+
+    `unnarrowed` is the set generated for the same request in the same context with no
+    narrowing. The narrowed set is then read off it, its rows and its counts, instead of
+    being enumerated and predicted again: the Critic's loop-back leaves a SKU out of the set
+    the planner generated first (ADR 0077). Every option is predicted on its own, so the rows
+    are the ones a narrowed generation predicts.
     """
     catalogue = _Catalogue.of(context.products)
     cleared = _clearance_skus(context.products, request)
@@ -255,8 +341,12 @@ def generate_options(
     if exclude_sku_ids:
         scoped = _left_out(scoped, context.products, request, sku_ids, exclude_sku_ids, cleared)
     matches = _price_matches(context.competitor_gaps, request, set(scoped), catalogue)
+    if unnarrowed is not None and unnarrowed._tally is not None and chosen and targets:
+        return _narrowed(unnarrowed, unnarrowed._tally, set(scoped), chosen, targets, matches)
 
     pruned: Counter[PruneReason] = Counter()
+    enumerated_by: Counter[_Key] = Counter()
+    pruned_by_key: defaultdict[_Key, Counter[PruneReason]] = defaultdict(Counter)
     pruned_by: defaultdict[tuple[str, Region, Mechanism], set[PruneReason]] = defaultdict(set)
     enumerated = 0
     lines: list[PlanLine] = []
@@ -282,6 +372,10 @@ def generate_options(
                     if price in charm_prices:
                         reason = PruneReason.DUPLICATE_PRICE
                     charm_prices.add(price)
+                for target in targets:
+                    enumerated_by[sku_id, region, mechanism, target] += len(timings)
+                    if reason is not None:
+                        pruned_by_key[sku_id, region, mechanism, target][reason] += len(timings)
                 if reason is not None:
                     pruned[reason] += per_price
                     pruned_by[sku_id, region, mechanism].add(reason)
@@ -316,6 +410,7 @@ def generate_options(
             pruned_by_mechanism=_frozen(pruned_by),
             clearance=clearance,
             price_matches=tuple(matches),
+            _tally=_tally(enumerated_by, pruned_by_key),
         )
     prediction = context.demand_model.predict(lines, prediction_context)
     table = prediction.options.reset_index(drop=True)
@@ -336,6 +431,7 @@ def generate_options(
         line = lines[n]
         reason = PruneReason.STOCK if over[n] else PruneReason.PARTNER_STOCK
         pruned_by[line.sku_id, line.region, line.mechanism].add(reason)
+        pruned_by_key[line.sku_id, line.region, line.mechanism, line.target_segment][reason] += 1
     keep = ~(over | partner_over)
     kept = [line for line, fits in zip(lines, keep, strict=True) if fits]
     table = table[keep].reset_index(drop=True)
@@ -363,6 +459,67 @@ def generate_options(
         pruned_by_mechanism=_frozen(pruned_by),
         clearance=clearance,
         price_matches=tuple(matches),
+        _tally=_tally(enumerated_by, pruned_by_key),
+    )
+
+
+_PREDICTED_REASONS = (PruneReason.STOCK, PruneReason.PARTNER_STOCK)
+"""The reasons an option is pruned for after it is predicted."""
+
+
+def _tally(enumerated: Mapping[_Key, int], pruned: Mapping[_Key, Counter[PruneReason]]) -> _Tally:
+    return _Tally(dict(enumerated), {key: dict(reasons) for key, reasons in pruned.items()})
+
+
+def _narrowed(
+    unnarrowed: PromoOptions,
+    tally: _Tally,
+    skus: set[str],
+    mechanisms: list[Mechanism],
+    targets: list[TargetSegment],
+    matches: list[PriceMatch],
+) -> PromoOptions:
+    """The options of `unnarrowed` whose anchor SKU, mechanism and target segment the
+    narrowing keeps, with the counts of generation for those alone (ADR 0077)."""
+
+    def kept(key: _Key) -> bool:
+        sku_id, _, mechanism, target = key
+        return sku_id in skus and mechanism in mechanisms and target in targets
+
+    pruned: Counter[PruneReason] = Counter()
+    pruned_by: defaultdict[tuple[str, Region, Mechanism], set[PruneReason]] = defaultdict(set)
+    for key, reasons in tally.pruned.items():
+        if kept(key):
+            for reason, count in reasons.items():
+                pruned[reason] += count
+                pruned_by[key[:3]].add(reason)
+    rows = [
+        n
+        for n, line in enumerate(unnarrowed.lines)
+        if kept((line.sku_id, line.region, line.mechanism, line.target_segment))
+    ]
+    enumerated = sum(count for key, count in tally.enumerated.items() if kept(key))
+    predicted = enumerated - sum(
+        count for reason, count in pruned.items() if reason not in _PREDICTED_REASONS
+    )
+    # With nothing to predict, generation returns an untyped empty table.
+    table = (
+        unnarrowed.table.iloc[rows].reset_index(drop=True)
+        if predicted
+        else pd.DataFrame(columns=TABLE_COLUMNS)
+    )
+    return PromoOptions(
+        tuple(unnarrowed.lines[n] for n in rows),
+        table,
+        enumerated,
+        _counts(pruned),
+        pruned_by_mechanism=_frozen(pruned_by),
+        clearance=unnarrowed.clearance,
+        price_matches=tuple(matches),
+        _tally=_Tally(
+            {key: count for key, count in tally.enumerated.items() if kept(key)},
+            {key: reasons for key, reasons in tally.pruned.items() if kept(key)},
+        ),
     )
 
 

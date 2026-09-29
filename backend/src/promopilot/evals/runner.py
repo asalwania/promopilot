@@ -28,6 +28,7 @@ from datetime import UTC, datetime
 from uuid import NAMESPACE_URL, UUID, uuid5
 
 from langgraph.checkpoint.memory import InMemorySaver
+from pydantic import BaseModel
 
 from promopilot.agents import (
     GraphSnapshot,
@@ -99,7 +100,7 @@ from promopilot.evals.report import (
 from promopilot.evals.scenarios import KviResponsePresent, NoStrongSubstitutesTogether, Scenario
 from promopilot.evals.substitutes import SubstitutePair, strong_in_scope, strong_substitutes
 from promopilot.evals.world import EvalWorld
-from promopilot.llm import LLMProvider
+from promopilot.llm import LLMProvider, Message, ToolSpec, ToolTurn
 
 MAX_CLARIFICATION_ROUNDS = 3
 """A session still asking after this many answered rounds is stopped: no final plan."""
@@ -189,6 +190,35 @@ class _Session:
     """The explanation each plan revision waited for approval with."""
     started: float | None = None
     """When the brief was sent, after the models were fitted."""
+    ended: float | None = None
+    """When the session ended, before its plan was scored (ADR 0077)."""
+
+
+class _Waited:
+    """Wraps a provider and adds up the wall-clock seconds its calls take, answered or not:
+    a session's time waiting on the LLM (ADR 0077)."""
+
+    def __init__(self, inner: LLMProvider) -> None:
+        self._inner = inner
+        self.seconds = 0.0
+
+    async def complete_structured[T: BaseModel](
+        self, schema: type[T], messages: Sequence[Message]
+    ) -> T:
+        started = time.perf_counter()
+        try:
+            return await self._inner.complete_structured(schema, messages)
+        finally:
+            self.seconds += time.perf_counter() - started
+
+    async def complete_with_tools(
+        self, tools: Sequence[ToolSpec], messages: Sequence[Message]
+    ) -> ToolTurn:
+        started = time.perf_counter()
+        try:
+            return await self._inner.complete_with_tools(tools, messages)
+        finally:
+            self.seconds += time.perf_counter() - started
 
 
 async def _run(
@@ -205,11 +235,15 @@ async def _run(
     session = _Session(route=[], asked=[])
     trace = MemoryTrace()
     session_id = uuid5(NAMESPACE_URL, f"promopilot:eval:{scenario.name}:{number}")
-    logged = MissLog(provider)
+    waited = _Waited(provider)
+    logged = MissLog(waited)
     try:
-        outcome = await _play(
-            scenario, session_id, logged, world, settings, policy, pricing, trace, session
-        )
+        try:
+            outcome = await _play(
+                scenario, session_id, logged, world, settings, policy, pricing, trace, session
+            )
+        finally:
+            session.ended = time.perf_counter()
         result = await _score(scenario, number, outcome, session, world, policy)
         result = await _assess(scenario, result, session, benchmarks)
     except Exception as error:  # a failed session is a result, not the end of the eval
@@ -231,7 +265,12 @@ async def _run(
             **_behaviour(scenario, session, result.outcome),
             "usage": session_usage(trace.of(session_id)),
             "cassette_misses": tuple(logged.misses),
-            "session_s": 0.0 if session.started is None else ended - session.started,
+            "session_s": (
+                0.0
+                if session.started is None or session.ended is None
+                else session.ended - session.started
+            ),
+            "llm_s": waited.seconds,
             "duration_s": ended - started,
         }
     )
