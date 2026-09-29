@@ -1,0 +1,15 @@
+# Standard festive: Diwali 2025 (week 55) across every region, planned at week 50.
+name: diwali-2025-home-personal-care
+group: standard_festive
+brief: >-
+  Plan a Diwali promotion for Home Care and Personal Care across all regions for weeks 54-55,
+  with a marketing budget of ₹4 lakh.
+as_of_week: 50
+seed: 0
+labels:
+  regions: [North, South, East, West]
+  categories: [Home Care, Personal Care]
+  promo_window: {start_week: 54, end_week: 55}
+  marketing_budget: 400000
+expect:
+  - declares_infeasible: false

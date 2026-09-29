@@ -1,0 +1,16 @@
+# Heavy cannibalisation: Bakery, with strong substitutes among rusks and cakes.
+name: cannibal-bakery-diwali-2026
+group: heavy_cannibalisation
+brief: >-
+  Plan a Diwali promotion for Bakery in North and West for weeks 108-109, with a marketing
+  budget of ₹1.5 lakh.
+as_of_week: 104
+seed: 0
+labels:
+  regions: [North, West]
+  categories: [Bakery]
+  promo_window: {start_week: 108, end_week: 109}
+  marketing_budget: 150000
+expect:
+  - declares_infeasible: false
+  - no_strong_substitutes_together: true

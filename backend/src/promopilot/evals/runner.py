@@ -89,7 +89,8 @@ from promopilot.evals.report import (
     RunResult,
     ScenarioResult,
 )
-from promopilot.evals.scenarios import KviResponsePresent, Scenario
+from promopilot.evals.scenarios import KviResponsePresent, NoStrongSubstitutesTogether, Scenario
+from promopilot.evals.substitutes import SubstitutePair, strong_in_scope, strong_substitutes
 from promopilot.evals.world import EvalWorld
 from promopilot.llm import LLMProvider
 
@@ -334,6 +335,13 @@ async def _score(
     wants_kvi = any(isinstance(prop, KviResponsePresent) for prop in scenario.expect)
     if wants_kvi and revision is not None and request is not None:
         kvi = await kvi_response(world.data(scenario.as_of_week), request, revision, policy=policy)
+    substitutes: tuple[SubstitutePair, ...] = ()
+    wants_substitutes = any(isinstance(p, NoStrongSubstitutesTogether) for p in scenario.expect)
+    if wants_substitutes and request is not None:
+        truth = world.ground_truth
+        strong = strong_substitutes(truth.substitute_pairs, truth.cross_effects)
+        products = await world.data(scenario.as_of_week).products()
+        substitutes = strong_in_scope(strong, products, request.scope)
     fallbacks: list[str] = []
     if state is not None:
         if state.context_degraded is not None:
@@ -365,6 +373,7 @@ async def _score(
                 if state is not None and state.explanations is not None
                 else None,
                 kvi=kvi,
+                substitutes=substitutes,
             )
             for prop in scenario.expect
         ),

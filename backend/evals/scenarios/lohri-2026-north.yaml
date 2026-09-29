@@ -1,0 +1,18 @@
+# Regional holiday: Lohri (North only), the same week as Pongal in the South.
+name: lohri-2026-north
+group: regional_holidays
+brief: >-
+  Plan a Lohri promotion for Snacks and Beverages in North for weeks 66-67, with a marketing
+  budget of ₹1.5 lakh.
+as_of_week: 62
+seed: 0
+labels:
+  regions: [North]
+  categories: [Snacks, Beverages]
+  promo_window: {start_week: 66, end_week: 67}
+  marketing_budget: 150000
+expect:
+  - declares_infeasible: false
+  - excludes_region: South
+  - excludes_region: East
+  - excludes_region: West

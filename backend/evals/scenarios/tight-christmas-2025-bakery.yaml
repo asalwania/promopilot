@@ -1,0 +1,16 @@
+# Tight budget: Christmas 2025 in one region on ₹25k.
+name: tight-christmas-2025-bakery
+group: tight_budget
+brief: >-
+  Plan a Christmas promotion for Bakery in South for weeks 63-64. The marketing budget is only
+  ₹25k.
+as_of_week: 62
+seed: 0
+labels:
+  regions: [South]
+  categories: [Bakery]
+  promo_window: {start_week: 63, end_week: 64}
+  marketing_budget: 25000
+expect:
+  - declares_infeasible: false
+  - excludes_region: North

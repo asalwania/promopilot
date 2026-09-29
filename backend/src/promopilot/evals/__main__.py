@@ -3,9 +3,13 @@
 Every scenario in `evals/scenarios/` (or those named with `--only`) plays through the full
 agent graph on the eval's own world, the one `make data` generates with this seed, with models
 fitted as of each scenario's week. The LLM is the provider LLM_PROVIDER names: `replay` (the
-default) answers from the committed cassettes and needs no key; a request with no cassette
-falls back as the stack does, and the report counts every fallback (ADR 0056). The report goes
-to `evals/reports/` as `<timestamp>.json` and `.md`, and as `latest.json` and `latest.md`.
+default) answers from the committed cassettes, the eval's `evals/cassettes/` first and then the
+app's, and needs no key; a request with no cassette falls back as the stack does, and the report
+counts every fallback (ADR 0056, ADR 0065). The report goes to `evals/reports/` as
+`<timestamp>.json` and `.md`, and as `latest.json` and `latest.md`.
+
+`--record` (`make record-eval-cassettes`) plays the scenarios on the live provider LLM_PROVIDER
+names and writes every answer no cassette holds into `evals/cassettes/`; it costs money.
 
 It exits 0 once the report is written, whatever the metrics say; 1 for an invalid scenario and
 2 for bad arguments.
@@ -23,6 +27,12 @@ from pydantic import ValidationError
 from promopilot.agents import LLMPricing, PlanningSettings
 from promopilot.config import Settings
 from promopilot.datagen import load_config
+from promopilot.evals.cassettes import (
+    EVAL_CASSETTE_DIR,
+    LiveUsage,
+    recording_provider,
+    replay_provider,
+)
 from promopilot.evals.report import (
     REPORT_DIR,
     EvalReport,
@@ -33,7 +43,7 @@ from promopilot.evals.report import (
 from promopilot.evals.runner import run as run_scenarios
 from promopilot.evals.scenarios import SCENARIO_DIR, load_scenarios
 from promopilot.evals.world import EvalWorld
-from promopilot.llm import build_provider
+from promopilot.llm import LLMProvider, build_provider
 
 
 async def run(argv: Sequence[str] | None = None) -> int:
@@ -46,9 +56,24 @@ async def run(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--seed", type=int, help="the world's seed; defaults to the config's")
     parser.add_argument("--config", type=Path, help="YAML overriding datagen/config.yaml")
     parser.add_argument("--out", type=Path, default=REPORT_DIR, help="report folder")
+    parser.add_argument(
+        "--cassettes", type=Path, default=EVAL_CASSETTE_DIR, help="the eval's cassette folder"
+    )
+    parser.add_argument(
+        "--record",
+        action="store_true",
+        help="play live and record every answer no cassette holds (costs money)",
+    )
     args = parser.parse_args(argv)
     if args.runs < 1:
         print("--runs must be at least 1", file=sys.stderr)
+        return 2
+    settings = Settings()
+    if args.record and settings.llm_provider in ("replay", "fake"):
+        print(
+            f"recording needs a live provider, not LLM_PROVIDER={settings.llm_provider}",
+            file=sys.stderr,
+        )
         return 2
 
     try:
@@ -66,28 +91,49 @@ async def run(argv: Sequence[str] | None = None) -> int:
         print(f"no scenario in {args.scenarios}", file=sys.stderr)
         return 2
 
-    settings = Settings()
     config = load_config(args.config)
     world = EvalWorld.generated(config.seed if args.seed is None else args.seed, config)
+    live = LiveUsage(build_provider(settings)) if args.record else None
+    provider, provider_name = _provider(settings, args.cassettes, live)
     print(
         f"running {len(scenarios)} scenario(s) x {args.runs} on the seed-{world.seed} world "
-        f"with LLM_PROVIDER={settings.llm_provider}",
+        f"with LLM_PROVIDER={provider_name}",
         flush=True,
     )
     report = await run_scenarios(
         scenarios,
-        build_provider(settings),
+        provider,
         args.runs,
         world=world,
         settings=PlanningSettings.from_settings(settings),
         pricing=LLMPricing(prices=settings.llm_prices, usd_inr_rate=settings.usd_inr_rate),
-        provider_name=settings.llm_provider,
+        provider_name=provider_name,
         progress=lambda line: print(line, flush=True),
     )
     paths = write_report(report, args.out)
     _summary(report)
     print(f"wrote {paths.json} and {paths.markdown} (and {paths.latest_markdown.name})")
+    if live is not None:
+        totals = live.meter.totals(settings.llm_prices, usd_inr_rate=settings.usd_inr_rate)
+        print(
+            f"recorded into {args.cassettes}: {totals.calls} live calls, {totals.input_tokens} "
+            f"input and {totals.output_tokens} output tokens, ${totals.cost_usd:.2f} "
+            f"(INR {totals.cost_inr:.0f})"
+        )
     return 0
+
+
+def _provider(
+    settings: Settings, cassettes: Path, live: LLMProvider | None
+) -> tuple[LLMProvider, str]:
+    """The LLM the scenarios play on, and its name in the report: the live model recording into
+    the eval's cassettes, the eval's and the app's cassettes replayed, or the live model."""
+    if live is not None:
+        recorder = recording_provider(live, cassettes, settings.llm_cassette_dir)
+        return recorder, f"{settings.llm_provider} (recording)"
+    if settings.llm_provider == "replay":
+        return replay_provider(cassettes, settings.llm_cassette_dir), "replay"
+    return build_provider(settings), settings.llm_provider
 
 
 def _summary(report: EvalReport) -> None:

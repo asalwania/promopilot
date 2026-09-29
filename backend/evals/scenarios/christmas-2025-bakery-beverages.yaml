@@ -1,0 +1,16 @@
+# Standard festive: Christmas 2025 (week 64) in South and West, planned at week 62.
+name: christmas-2025-bakery-beverages
+group: standard_festive
+brief: >-
+  Plan a Christmas promotion for Bakery and Beverages in South and West for weeks 63-64, with a
+  marketing budget of ₹2.5 lakh.
+as_of_week: 62
+seed: 0
+labels:
+  regions: [South, West]
+  categories: [Bakery, Beverages]
+  promo_window: {start_week: 63, end_week: 64}
+  marketing_budget: 250000
+expect:
+  - declares_infeasible: false
+  - excludes_region: North

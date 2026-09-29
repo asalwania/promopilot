@@ -1,0 +1,17 @@
+# Vague: no category, so the Context agent must ask for one; the manager answers Beverages.
+name: vague-no-category
+group: vague_or_conflicting
+brief: >-
+  We need an off-season push in West for weeks 84-85, with a marketing budget of ₹1 lakh.
+as_of_week: 82
+seed: 0
+clarifications:
+  scope.categories: "Beverages"
+labels:
+  regions: [West]
+  categories: [Beverages]
+  promo_window: {start_week: 84, end_week: 85}
+  marketing_budget: 100000
+expect:
+  - asks_clarification: scope.categories
+  - declares_infeasible: false

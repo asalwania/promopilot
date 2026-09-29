@@ -1,0 +1,19 @@
+# Competitor price war: five Staples KVIs undercut in North, with the margin protected.
+name: price-war-staples-christmas-2025
+group: competitor_price_war
+brief: >-
+  Plan a Christmas promotion for Staples in North for weeks 63-64, with a marketing budget of
+  ₹2 lakh. Keep margin above 16%. Competitors are cheaper on our KVIs: stay within 2% of
+  competitor prices on KVIs.
+as_of_week: 62
+seed: 0
+labels:
+  regions: [North]
+  categories: [Staples]
+  promo_window: {start_week: 63, end_week: 64}
+  marketing_budget: 200000
+  min_margin: 0.16
+  kvi_price_tolerance: 0.02
+expect:
+  - declares_infeasible: false
+  - kvi_response_present: true

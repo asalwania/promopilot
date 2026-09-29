@@ -1,0 +1,16 @@
+# Heavy cannibalisation: Personal Care has the most strong substitute pairs (shampoo, toothpaste).
+name: cannibal-personal-care-offseason
+group: heavy_cannibalisation
+brief: >-
+  Plan an off-season promotion for Personal Care in North and South for weeks 84-86, with a
+  marketing budget of ₹2 lakh.
+as_of_week: 82
+seed: 0
+labels:
+  regions: [North, South]
+  categories: [Personal Care]
+  promo_window: {start_week: 84, end_week: 86}
+  marketing_budget: 200000
+expect:
+  - declares_infeasible: false
+  - no_strong_substitutes_together: true

@@ -12,6 +12,7 @@ from promopilot.evals import (
     DeclaresInfeasible,
     ExcludesRegion,
     MeetsClearance,
+    NoStrongSubstitutesTogether,
     Scenario,
     ScenarioGroup,
     load_scenario,
@@ -102,6 +103,22 @@ def test_an_invalid_scenario_is_refused(
 
     with pytest.raises(ValidationError, match=problem):
         load_scenario(path)
+
+
+def test_the_strong_substitutes_property_loads(tmp_path: Path) -> None:
+    text = FULL.replace("  - meets_clearance: SKU0002", "  - no_strong_substitutes_together: true")
+
+    scenario = load_scenario(write(tmp_path, "amend-drop-west", text))
+
+    assert scenario.expect[-1] == NoStrongSubstitutesTogether(no_strong_substitutes_together=True)
+    assert scenario.expect[-1].describe() == "no_strong_substitutes_together: true"
+
+
+def test_a_labelled_promo_window_must_start_after_the_as_of_week(tmp_path: Path) -> None:
+    text = FULL.replace("start_week: 108", "start_week: 104")
+
+    with pytest.raises(ValidationError, match="after the as-of week"):
+        load_scenario(write(tmp_path, "amend-drop-west", text))
 
 
 def test_a_scenarios_name_is_its_file_name(tmp_path: Path) -> None:

@@ -1,0 +1,18 @@
+# Regional holiday: Pongal (South only, week 67), planned at week 62.
+name: pongal-2026-south
+group: regional_holidays
+brief: >-
+  Plan a Pongal promotion for Staples and Snacks in South for weeks 66-67, with a marketing
+  budget of ₹1.5 lakh.
+as_of_week: 62
+seed: 0
+labels:
+  regions: [South]
+  categories: [Staples, Snacks]
+  promo_window: {start_week: 66, end_week: 67}
+  marketing_budget: 150000
+expect:
+  - declares_infeasible: false
+  - excludes_region: North
+  - excludes_region: East
+  - excludes_region: West

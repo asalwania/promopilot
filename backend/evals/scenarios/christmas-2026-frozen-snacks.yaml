@@ -1,0 +1,16 @@
+# Standard festive: Christmas 2026 (week 116), planned twelve weeks ahead at week 104.
+name: christmas-2026-frozen-snacks
+group: standard_festive
+brief: >-
+  Plan a Christmas promotion for Frozen and Snacks in North and South for weeks 115-116, with a
+  marketing budget of ₹2 lakh.
+as_of_week: 104
+seed: 0
+labels:
+  regions: [North, South]
+  categories: [Frozen, Snacks]
+  promo_window: {start_week: 115, end_week: 116}
+  marketing_budget: 200000
+expect:
+  - declares_infeasible: false
+  - excludes_region: West

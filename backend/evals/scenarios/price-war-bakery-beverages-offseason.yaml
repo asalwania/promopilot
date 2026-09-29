@@ -1,0 +1,18 @@
+# Competitor price war: an off-season response to undercut Bakery and Beverages KVIs in North.
+name: price-war-bakery-beverages-offseason
+group: competitor_price_war
+brief: >-
+  Plan an off-season promotion for Bakery and Beverages in North for weeks 84-85, with a
+  marketing budget of ₹1.5 lakh. Competitors are undercutting us: keep KVI prices within 1% of
+  competitor prices.
+as_of_week: 82
+seed: 0
+labels:
+  regions: [North]
+  categories: [Bakery, Beverages]
+  promo_window: {start_week: 84, end_week: 85}
+  marketing_budget: 150000
+  kvi_price_tolerance: 0.01
+expect:
+  - declares_infeasible: false
+  - kvi_response_present: true

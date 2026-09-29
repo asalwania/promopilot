@@ -99,6 +99,9 @@ The effect of one SKU's price on another SKU's units: positive for substitutes, 
 **Substitute**:
 A SKU in the same subcategory whose price cut takes units from another: a positive cross-price effect, kept only when significant after the Benjamini–Hochberg adjustment and at least the minimum effect size.
 
+**Strong substitute**:
+In the eval only, a true substitute pair whose larger cross-price effect θ is at least 0.5. The heavy-cannibalisation scenarios expect no two of them promoted together: in one region, in a common week and to a common segment (ADR 0065).
+
 **Complement**:
 A SKU bought with another more often than chance (basket lift above 1.5, with minimum support), confirmed by a negative cross-price effect where one can be estimated.
 
