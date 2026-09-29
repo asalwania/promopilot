@@ -141,7 +141,9 @@ test("a typed brief becomes a plan table with no API key", async ({ page }) => {
   });
   await expect(simulation).toBeVisible();
   await expect(simulation.locator("svg").first()).toBeVisible();
-  await expect(page.getByText("No competitor reaction")).toBeVisible();
+  await expect(
+    page.getByText("No competitor reaction", { exact: true }),
+  ).toBeVisible();
   await page.getByRole("button", { name: "Show values" }).click();
   await expect(
     page.getByRole("table", { name: "Simulated ranges" }).getByRole("row"),
@@ -153,6 +155,7 @@ test("a typed brief becomes a plan table with no API key", async ({ page }) => {
   await expect(
     page.getByText(
       "Stress test: the competitor matches each plan line's discount with probability 50%",
+      { exact: true },
     ),
   ).toBeVisible({ timeout: 30_000 });
   const stressed = (await (
