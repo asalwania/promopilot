@@ -56,7 +56,7 @@
 - **D7. Explainer latency:** no prompt change here. D4's `llm_s` measures it on the next live run. If the demo is still over 60 s, capping each rationale's length or explaining per region is ticketed. Either way, every Explainer cassette must be re-recorded.
 - **D8. Cost:** no work. The P50 is ₹3.04–3.55 on `gpt-4.1-mini`. ADR 0049 estimated about ₹22 for a planning answered by the `claude-sonnet-5` fallback; that is unmeasured.
 - **D9. Measurement:** after this merges, the main session runs `make eval ONLY=diwali-snacks-beverages RUNS=3` live on a quiet machine (no parallel agents), with the owner's OK, for P50 session time, P50 LLM time and cost. Any gap above 60 s is ticketed from that report.
-- **D10. Faster first generation:** recorded on #113, which already covers speeding up `DemandModel.predict`. The rows would be shared across an option's five target-segment variants.
+- **D10. Faster first generation:** recorded on #113, which already covers speeding up `DemandModel.predict`. The rows would be shared across an option's five target-segment variants. Done in ADR 0087: each store-invariant term is computed once per cell, which shares it across the variants too.
 
 We rejected:
 - computing the binding analysis only for the attempt that reaches the Explainer (it restructures `solve()` under #156, and changes `run_optimizer`'s output or its description);

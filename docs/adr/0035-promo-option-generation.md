@@ -39,6 +39,7 @@ E6 (#33) adds promo option generation (SPEC §9.3) and the `generate_candidates`
   - On the demo brief, prediction for all 28,980 options fell from 36 s to 8 s.
   - End-to-end generation (price pruning, prediction of the ~17,400 survivors, stock pruning, effects and clearance) takes about 7 s. It keeps 10,988 options.
   - SPEC's budgets are 60 s for a full plan and 10 s for the optimiser.
+  - Superseded in part by ADR 0087 (#113): each store-invariant response term is computed once per option, SKU, week and segment, and every number is unchanged.
 - **`PromoOptions` is what the optimiser consumes.** It is a frozen dataclass:
   - `lines`: a tuple of `PlanLine`.
   - `table`: a DataFrame with one row per line, in the same order. Its `TABLE_COLUMNS` are the demand model's option columns plus `p90_units`, `available_stock`, `partner_p90_units`, `partner_available_stock`, `cannibalised_profit`, `halo_profit`, `clearance_value` and `value`. `value` is incremental profit − cannibalised + halo + clearance value, the option's worth if it runs alone.
