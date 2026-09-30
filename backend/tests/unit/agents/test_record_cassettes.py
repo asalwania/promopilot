@@ -577,26 +577,25 @@ async def test_only_answers_a_request_a_kept_session_recorded_from_its_cassette(
 
 # --- accepting a relaxation, as the API does (ADR 0052 D7, ADR 0070) --------------------------
 
+RELAXED_BUDGET = 21_000.0
+"""What accepting the relaxation raises the ₹20k budget to; code applies it (ADR 0083)."""
 RELAXATION = Relaxation(
     changes=(
         RelaxedConstraint(
-            kind=ConstraintKind.CLEARANCE_TARGET,
-            sku_id="SKU0001",
-            current=0.6,
-            relaxed=0.5986,
-            change=0.0023,
+            kind=ConstraintKind.MARKETING_BUDGET,
+            current=20_000.0,
+            relaxed=RELAXED_BUDGET,
+            change=0.05,
         ),
     ),
-    policy_binds=True,
+    policy_binds=False,
     proven=True,
 )
-ACCEPTED = (
-    "Accept the smallest relaxation: lower the clearance target for SKU0001 to 59.86% sell-through."
-)
+ACCEPTED = "Accept the smallest relaxation: raise the marketing budget to ₹21,000.00."
 
 
 def infeasible() -> PlannedRevision:
-    """Plan revision 1, infeasible: its clearance target is out of reach (ADR 0044)."""
+    """Plan revision 1, infeasible: its marketing budget is too small (ADR 0044)."""
     base = planned()
     revision = base.revision.model_copy(
         update={
@@ -604,11 +603,11 @@ def infeasible() -> PlannedRevision:
             "relaxation": RELAXATION,
             "binding_constraints": (
                 BindingConstraint(
-                    kind=ConstraintKind.CLEARANCE_TARGET,
+                    kind=ConstraintKind.MARKETING_BUDGET,
                     source=ConstraintSource.BRIEF,
-                    limit=0.6,
-                    region="North",
-                    sku_id="SKU0001",
+                    limit=20_000.0,
+                    region=None,
+                    sku_id=None,
                     evidence=BindingEvidence.INFEASIBLE,
                     objective_gain=None,
                 ),
@@ -642,13 +641,12 @@ def planning_in_turn(*revisions: PlannedRevision) -> RecordedPlanning:
     )
 
 
-RELAXED_BUDGET = 21_000.0  # the relaxed round reads another request than the first
-
-
 async def accepted_round(data: InMemoryRetailData) -> list[BaseModel]:
-    """The live answers of the round that accepts the relaxation."""
+    """The live answers of the round that accepts the relaxation. The LLM never reads the
+    accept, so the brief is asked as in round 1 and replays from its cassette; code raises the
+    budget, so the planner and the Explainer are asked anew (ADR 0083)."""
     relaxed = await request_for(data, budget=RELAXED_BUDGET)
-    return [reading(budget=RELAXED_BUDGET), *round_turns(relaxed), CHANGED]
+    return [*round_turns(relaxed), CHANGED]
 
 
 async def test_accepting_the_relaxation_re_plans_and_the_feasible_revision_is_approved(
@@ -760,7 +758,8 @@ async def test_only_extends_a_named_session_asking_the_live_model_only_its_new_r
 
     after = {path.name: path.read_bytes() for path in cassette_paths(tmp_path)}
     assert {name: after.get(name) for name in before} == before
-    assert len(after) == len(before) + 5, "the reading, three planner steps, the explanation"
+    # The round's reading replays from round 1's cassette: the LLM never reads the accept.
+    assert len(after) == len(before) + 4, "three planner steps, the explanation"
     assert manifest.sessions["demo"].amendments == (ACCEPTED,)
     assert manifest_problems([other, extended], tmp_path) == []
 
