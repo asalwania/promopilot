@@ -468,7 +468,7 @@ async def test_feedback_the_llm_cannot_word_falls_back_to_the_template(
     assert run.route == loops(1)
     [finding] = run.state.attempts[0].findings
     assert isinstance(finding, RiskFinding)
-    assert finding.feedback.startswith("Leave SKU0001 out with generate_candidates'")
+    assert finding.feedback.startswith("Cap SKU0001's depth below ")
     assert check_numeric_grounding(finding.feedback, finding.message).grounded
 
 

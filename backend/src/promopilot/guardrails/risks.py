@@ -13,9 +13,10 @@ A plan that breaks no hard constraint can still be risky. `review_risks` flags:
   the simulation's runs.
 
 Each finding carries a message with the numbers that show it, and template feedback naming the
-planner's levers. The planner has no mechanism or depth of its own for one SKU: a SKU-level
-finding's lever is to leave the SKU out with `generate_candidates`' `exclude_sku_ids`, unless
-it is a clearance target of the brief, which stays in the plan (ADR 0059). Every number the
+planner's levers. A SKU-level finding's message names the plan line's mechanism and depth, and
+its feedback leads with capping the SKU's depth below it with `generate_candidates`'
+`sku_limits` (ADR 0084), then leaving the SKU out with `exclude_sku_ids` (ADR 0059). A
+clearance target of the brief takes neither: it stays in the plan as it is. Every number the
 feedback cites is one its message shows, so the LLM that rewords it (`promopilot.agents`) is
 grounded against the findings alone.
 """
@@ -28,6 +29,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from promopilot.domain import (
     MechanismOption,
+    PlanLine,
     PlanningRequest,
     PlanRevision,
     PlanRevisionLine,
@@ -89,6 +91,26 @@ def review_risks(
     )
 
 
+def _promoted(line: PlanLine) -> str:
+    """The plan line's SKU, region, mechanism and depth, as a finding's message names them."""
+    return f"{line.sku_id} in {line.region} ({line.mechanism} at {line.depth_pct}%)"
+
+
+def _gentler(line: PlanLine, *, mechanisms: bool = False) -> str:
+    """The SKU-level lever that keeps the SKU in the plan: cap its depth below the line's
+    (ADR 0084)."""
+    also = " or limit its mechanisms" if mechanisms else ""
+    return (
+        f"cap {line.sku_id}'s depth below {line.depth_pct}%{also} with generate_candidates' "
+        "sku_limits"
+    )
+
+
+def _left_out(sku_id: str) -> str:
+    """The fallback lever: leave the SKU out (ADR 0059)."""
+    return f"leave {sku_id} out with generate_candidates' exclude_sku_ids"
+
+
 def _stays(sku_id: str) -> str:
     """Why a clearance target is not left out: `exclude_sku_ids` refuses it (ADR 0059)."""
     return f"{sku_id} is a clearance target of the brief, so it stays in the plan"
@@ -114,7 +136,7 @@ def _concentration(
                 RiskFinding(
                     code=RiskCode.OVER_CONCENTRATION,
                     message=(
-                        f"{sku_id} in {region}: its promo cost {format_rupees(fact.promo_cost)} "
+                        f"{_promoted(fact.line)}: its promo cost {format_rupees(fact.promo_cost)} "
                         f"is {format_percent(share)} of the plan's promo spend "
                         f"{format_rupees(total)}, above the {format_percent(limit)} limit for "
                         "one plan line"
@@ -122,8 +144,8 @@ def _concentration(
                     feedback=(
                         f"{_stays(sku_id)}, and this finding stays open."
                         if sku_id in cleared
-                        else f"Spread the promo spend: leave {sku_id} out with "
-                        f"generate_candidates' exclude_sku_ids, so no plan line takes over "
+                        else f"Spread the promo spend: {_gentler(fact.line)}, or else "
+                        f"{_left_out(sku_id)}, so no plan line takes over "
                         f"{format_percent(limit)} of it."
                     ),
                     sku_id=sku_id,
@@ -203,7 +225,7 @@ def _cannibalisation(
             RiskFinding(
                 code=RiskCode.HEAVY_CANNIBALISATION,
                 message=(
-                    f"{sku_id} in {region}: the cannibalisation of its substitutes "
+                    f"{_promoted(planned.line)}: the cannibalisation of its substitutes "
                     f"{format_rupees(option.cannibalised_profit)} is {format_percent(share)} of "
                     f"its incremental profit {format_rupees(option.incremental_profit)}, at or "
                     f"above the {format_percent(limit)} limit"
@@ -212,7 +234,7 @@ def _cannibalisation(
                     f"{_stays(sku_id)}, and this finding stays open."
                     if sku_id in cleared
                     else f"{sku_id} in {region} mostly takes sales from its own substitutes: "
-                    f"leave {sku_id} out with generate_candidates' exclude_sku_ids."
+                    f"{_gentler(planned.line, mechanisms=True)}, or else {_left_out(sku_id)}."
                 ),
                 sku_id=sku_id,
                 region=region,
@@ -234,27 +256,39 @@ def _chosen(planned: PlanRevisionLine) -> MechanismOption | None:
 def _stockouts(revision: PlanRevision, limit: float, cleared: frozenset[str]) -> list[RiskFinding]:
     if revision.simulation is None:
         return []
-    return [
-        RiskFinding(
-            code=RiskCode.STOCKOUT_RISK,
-            message=(
-                f"{line.sku_id} in {line.region} runs out of stock in "
-                f"{format_percent(line.stockout_probability)} of the simulated runs, at or "
-                f"above the {format_percent(limit)} limit"
-            ),
-            feedback=(
-                f"{_stays(line.sku_id)}: narrow generate_candidates' target_segments, so "
-                f"{line.sku_id} in {line.region} does not run out of stock."
-                if line.sku_id in cleared
-                else f"Leave {line.sku_id} out with generate_candidates' exclude_sku_ids, or "
-                f"narrow generate_candidates' target_segments, so {line.sku_id} in "
-                f"{line.region} does not run out of stock."
-            ),
-            sku_id=line.sku_id,
-            region=line.region,
-            actual=line.stockout_probability,
-            limit=limit,
+    planned = {(line.line.sku_id, line.line.region): line.line for line in revision.lines}
+    findings = []
+    for line in revision.simulation.lines:
+        if line.stockout_probability < limit - _EPSILON:
+            continue
+        sku_id, region = line.sku_id, line.region
+        plan_line = planned.get((sku_id, region))
+        named = f"{sku_id} in {region}" if plan_line is None else _promoted(plan_line)
+        if sku_id in cleared:
+            feedback = (
+                f"{_stays(sku_id)}: narrow generate_candidates' target_segments, so "
+                f"{sku_id} in {region} does not run out of stock."
+            )
+        else:
+            gentler = "" if plan_line is None else f"{_gentler(plan_line)}, "
+            feedback = (
+                f"{gentler}narrow generate_candidates' target_segments, or else "
+                f"{_left_out(sku_id)}, so {sku_id} in {region} does not run out of stock."
+            )
+            feedback = feedback[0].upper() + feedback[1:]
+        findings.append(
+            RiskFinding(
+                code=RiskCode.STOCKOUT_RISK,
+                message=(
+                    f"{named} runs out of stock in "
+                    f"{format_percent(line.stockout_probability)} of the simulated runs, at or "
+                    f"above the {format_percent(limit)} limit"
+                ),
+                feedback=feedback,
+                sku_id=sku_id,
+                region=region,
+                actual=line.stockout_probability,
+                limit=limit,
+            )
         )
-        for line in revision.simulation.lines
-        if line.stockout_probability >= limit - _EPSILON
-    ]
+    return findings
