@@ -77,101 +77,101 @@
     "rationales": [
       {
         "line": 1,
-        "rationale": "Line 1 uses a 30% FIXED_PRICE discount on SKU0002 in North as it offers the best clearance value and meets the clearance target, despite a negative incremental profit and a low stockout risk of 1.5%."
+        "rationale": "Line 1 uses a 30% fixed price discount on SKU0002 in North as it offers the best clearance value and meets the clearance target of 779 units, despite a negative incremental profit and a low stockout risk of 1.5%."
       },
       {
         "line": 2,
-        "rationale": "Line 2 applies a 40% PCT_OFF on SKU0002 in West, chosen for its clearance value though it yields a negative incremental profit and a higher stockout probability of 6.4%."
+        "rationale": "Line 2 applies a 40% percentage-off discount on SKU0002 in West, chosen for its clearance value though it has a higher stockout risk of 6.4% and negative incremental profit, reflecting a trade-off between volume and margin."
       },
       {
         "line": 3,
-        "rationale": "Line 3 selects a 50% BOGO on SKU0006 in North to meet clearance targets, despite its negative incremental profit and a very low stockout risk of 0.2%."
+        "rationale": "Line 3 selects a 50% BOGO on SKU0006 in North to meet clearance needs despite its negative incremental profit and low stockout risk, as other mechanisms yield less clearance value; however, it risks further profit loss."
       },
       {
         "line": 4,
-        "rationale": "Line 4 also uses a 50% BOGO on SKU0006 in West for clearance, accepting negative incremental profit and a low stockout risk of 1.3%."
+        "rationale": "Line 4 also uses a 50% BOGO on SKU0006 in West, chosen for clearance despite negative incremental profit and a low stockout probability, reflecting the challenge of clearing this SKU within constraints."
       },
       {
         "line": 5,
-        "rationale": "Line 5 offers a 20% FIXED_PRICE discount on SKU0017 in North, chosen for its positive clearance value and halo effect, with zero stockout risk."
+        "rationale": "Line 5 offers a 20% fixed price discount on SKU0017 in North, the best option for this SKU and region, balancing clearance value and a small negative incremental profit with zero stockout risk."
       },
       {
         "line": 6,
-        "rationale": "Line 6 applies a 20% FIXED_PRICE discount on SKU0017 in West, selected for positive clearance value and halo, also with zero stockout risk."
+        "rationale": "Line 6 applies a 20% fixed price discount on SKU0017 in West, chosen for its positive clearance value and low stockout risk, despite a slight negative incremental profit."
       },
       {
         "line": 7,
-        "rationale": "Line 7 uses a 5% FIXED_PRICE discount on SKU0025 in North, chosen for its positive incremental profit and zero stockout risk."
+        "rationale": "Line 7 uses a 5% fixed price discount on SKU0025 in North, selected for its positive incremental profit and low stockout risk, maximizing margin with a short one-week promotion."
       },
       {
         "line": 8,
-        "rationale": "Line 8 applies a 5% FIXED_PRICE discount on SKU0025 in West, selected for positive incremental profit and zero stockout risk."
+        "rationale": "Line 8 applies a 5% fixed price discount on SKU0025 in West, chosen for similar reasons as line 7, balancing positive incremental profit and low stockout risk."
       },
       {
         "line": 9,
-        "rationale": "Line 9 offers a 40% PCT_OFF on SKU0029 in North, chosen for clearance value and halo despite negative incremental profit and zero stockout risk."
+        "rationale": "Line 9 uses a 40% percentage-off discount on SKU0029 in North, selected for its clearance and halo effects despite negative incremental profit, with zero stockout risk."
       },
       {
         "line": 10,
-        "rationale": "Line 10 applies a 40% PCT_OFF on SKU0029 in West, selected for clearance value and halo with negative incremental profit but zero stockout risk."
+        "rationale": "Line 10 applies a 40% percentage-off discount on SKU0029 in West, chosen for clearance and halo benefits, balancing negative incremental profit and zero stockout risk."
       },
       {
         "line": 11,
-        "rationale": "Line 11 uses a 10% FIXED_PRICE discount on SKU0030 in North, chosen for a marginal positive incremental profit and zero stockout risk."
+        "rationale": "Line 11 offers a 10% fixed price discount on SKU0030 in North, chosen for a marginal positive incremental profit and zero stockout risk, suitable for a short promotion."
       },
       {
         "line": 12,
-        "rationale": "Line 12 applies a 5% PCT_OFF on SKU0031 in North, selected for positive incremental profit and halo effect, with zero stockout risk."
+        "rationale": "Line 12 applies a 5% percentage-off discount on SKU0031 in North, selected for positive incremental profit and halo effect, with zero stockout risk."
       },
       {
         "line": 13,
-        "rationale": "Line 13 offers a 5% PCT_OFF on SKU0031 in West, chosen for positive incremental profit and halo, with zero stockout risk."
+        "rationale": "Line 13 uses a 5% percentage-off discount on SKU0031 in West, chosen for positive incremental profit and halo effect, maintaining zero stockout risk."
       },
       {
         "line": 14,
-        "rationale": "Line 14 uses a 5% FIXED_PRICE discount on SKU0035 in North, selected for clearance value and halo despite a slight negative incremental profit and zero stockout risk."
+        "rationale": "Line 14 offers a 5% fixed price discount on SKU0035 in North, chosen for clearance value and halo despite a slight negative incremental profit and zero stockout risk."
       },
       {
         "line": 15,
-        "rationale": "Line 15 applies a 5% FIXED_PRICE discount on SKU0035 in West, chosen for clearance value and halo with a small negative incremental profit and zero stockout risk."
+        "rationale": "Line 15 applies a 5% fixed price discount on SKU0035 in West, selected for clearance and halo benefits with a small negative incremental profit and zero stockout risk."
       },
       {
         "line": 16,
-        "rationale": "Line 16 offers a 25% PCT_OFF on SKU0040 in North, selected for clearance value and halo despite negative incremental profit and zero stockout risk."
+        "rationale": "Line 16 uses a 25% percentage-off discount on SKU0040 in North, chosen for clearance and halo effects despite negative incremental profit, with zero stockout risk."
       },
       {
         "line": 17,
-        "rationale": "Line 17 applies a 25% PCT_OFF on SKU0040 in West, chosen for clearance value and halo with negative incremental profit and zero stockout risk."
+        "rationale": "Line 17 applies a 25% percentage-off discount on SKU0040 in West, selected for clearance and halo benefits, balancing negative incremental profit and zero stockout risk."
       },
       {
         "line": 18,
-        "rationale": "Line 18 uses a 5% PCT_OFF on SKU0041 in West, selected for positive incremental profit and halo, with zero stockout risk."
+        "rationale": "Line 18 offers a 5% percentage-off discount on SKU0041 in West, chosen for positive incremental profit and halo effect, with zero stockout risk during a one-week promotion."
       },
       {
         "line": 19,
-        "rationale": "Line 19 offers a 5% FIXED_PRICE discount on SKU0049 in North, chosen for strong positive incremental profit and low stockout risk of 0.1%."
+        "rationale": "Line 19 uses a 5% fixed price discount on SKU0049 in North, selected for strong positive incremental profit and low stockout risk, maximizing margin."
       },
       {
         "line": 20,
-        "rationale": "Line 20 applies a 5% FIXED_PRICE discount on SKU0049 in West, selected for positive incremental profit and zero stockout risk."
+        "rationale": "Line 20 applies a 5% fixed price discount on SKU0049 in West, chosen for positive incremental profit and zero stockout risk, supporting margin goals."
       },
       {
         "line": 21,
-        "rationale": "Line 21 uses a 5% FIXED_PRICE discount on SKU0050 in North, chosen for positive incremental profit and zero stockout risk."
+        "rationale": "Line 21 offers a 5% fixed price discount on SKU0050 in North, selected for positive incremental profit and zero stockout risk during a short promotion."
       },
       {
         "line": 22,
-        "rationale": "Line 22 applies a 5% FIXED_PRICE discount on SKU0050 in West, selected for positive incremental profit and zero stockout risk."
+        "rationale": "Line 22 applies a 5% fixed price discount on SKU0050 in West, chosen for positive incremental profit and zero stockout risk, complementing the North region's promotion."
       }
     ],
-    "summary": "This plan promotes a selection of Snacks and Beverages SKUs across the North and West regions during weeks W108 to W109, targeting Families. It aims to generate an expected gross profit of ₹2.9 lakh with a promotional spend around ₹1.88 lakh. The plan is limited by the clearance target for SKU0006 in the North region, which is narrowly missed by 1 unit, causing the solver to mark the plan as INFEASIBLE. Main risks include negative incremental profits on some SKUs and a stockout probability of up to 7.7% in the West region."
+    "summary": "This promotion plan targets Snacks and Beverages categories in the North and West regions during weeks W108 to W109, focusing on families as the target segment. It aims to clear inventory for SKUs like SKU0002 and SKU0006 with clearance targets of 60%, but the plan is infeasible because SKU0006 in North narrowly misses its clearance target by 1 unit, selling through 59.9% instead of 60%. The plan expects a median gross profit of ₹2.9 lakh with a promotional spend of ₹1.88 lakh, but some lines show negative incremental profits, especially for SKU0006 with BOGO mechanisms. The main risks include stockout probabilities up to 7.7% in West and the binding clearance target for SKU0006 in North, which slightly limits the plan's feasibility."
   },
   "schema_name": "ExplainerAnswer",
   "usage": [
     {
       "input_tokens": 10945,
       "model": "gpt-4.1-mini",
-      "output_tokens": 1075
+      "output_tokens": 1192
     }
   ]
 }

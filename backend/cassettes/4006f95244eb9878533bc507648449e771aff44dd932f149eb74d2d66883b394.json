@@ -1166,7 +1166,7 @@
             "West"
           ]
         },
-        "id": "call_86dx5PH7eeh0Ctybijc11MHE",
+        "id": "call_11pnRUPNCvms6LeNVBYLtGc6",
         "name": "get_scope_data"
       },
       {
@@ -1175,14 +1175,16 @@
             "Snacks",
             "Beverages"
           ],
-          "overstocked_only": true,
           "regions": [
             "North",
             "West"
           ],
-          "sku_ids": null
+          "sku_ids": [
+            "SKU0002",
+            "SKU0006"
+          ]
         },
-        "id": "call_69Fmj7aQZpz7nIf3ncBoQ7yK",
+        "id": "call_easJdZeyVLseoVYaACjJwEy2",
         "name": "get_inventory_status"
       },
       {
@@ -1197,20 +1199,8 @@
             "West"
           ]
         },
-        "id": "call_xv327YgIw0RAByITokohXxnB",
+        "id": "call_yAbtOsXE8XpWuHoHqHXF9qCI",
         "name": "get_competitor_gaps"
-      },
-      {
-        "arguments": {
-          "end_week": 109,
-          "regions": [
-            "North",
-            "West"
-          ],
-          "start_week": 108
-        },
-        "id": "call_fSphGUzk97X8c6SJ4du8m6th",
-        "name": "get_holidays"
       }
     ]
   },
@@ -1219,7 +1209,7 @@
     {
       "input_tokens": 5147,
       "model": "gpt-4.1-mini",
-      "output_tokens": 149
+      "output_tokens": 121
     }
   ]
 }
