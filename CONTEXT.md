@@ -260,7 +260,7 @@ One conversation from brief to decision: brief, amendments, clarifications, plan
 _Avoid_: run, conversation, job
 
 **Amendment**:
-A free-text change to the planning request made while a plan revision waits for a decision, or after it is rejected (e.g. "cut budget to ₹6 lakh", "drop West"). The context agent reads the brief again with every amendment, oldest first, and a new plan revision is planned. Accepting a relaxation is an amendment that states each change exactly (ADR 0052).
+A free-text change to the planning request made while a plan revision waits for a decision, or after it is rejected (e.g. "cut budget to ₹6 lakh", "drop West"). The context agent reads the brief again with every amendment, oldest first, and a new plan revision is planned. Accepting a relaxation is an amendment whose text states each change exactly (ADR 0052). The LLM never reads that text: code applies the relaxation's own values after every reading, so a change for one SKU touches no other, and a later amendment that states another value for the field wins (ADR 0083).
 _Avoid_: edit, update, revision (which is the resulting plan)
 
 **Approval**:
@@ -282,7 +282,7 @@ The deterministic planning path with no LLM: generate every promo option, optimi
 _Avoid_: fallback planner, naive planner
 
 **Fallback reading**:
-The Context agent's reading of the brief, answers and amendments by strict deterministic rules when the LLM is unavailable or replay has no cassette: exact catalogue and holiday names, rupees and percentages only where the text states them, placed by their cue words. What it reads is a low-confidence assumption (0.7); what it cannot read is asked (SF-03, ADR 0053).
+The Context agent's reading of the brief, answers and amendments by strict deterministic rules when the LLM is unavailable or replay has no cassette: exact catalogue and holiday names, rupees and percentages only where the text states them, placed by their cue words. What it reads is a low-confidence assumption (0.7); what it cannot read is asked (SF-03, ADR 0053). An accepted relaxation is applied after it, as after any reading (ADR 0083).
 _Avoid_: fallback parser, rule-based context
 
 **Open issue**:
