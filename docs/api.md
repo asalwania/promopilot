@@ -1084,6 +1084,7 @@ One numbered version of the promo plan within a planning session.
 | `open_issues` | array of [OpenIssue](#openissue) | no | default `[]` |  |
 | `policy_findings` | array of [PolicyFinding](#policyfinding) | no | default `[]` |  |
 | `relaxation` | [Relaxation](#relaxation) or null | no |  |  |
+| `safety_margin` | [PlanSafetyMargin](#plansafetymargin) or null | no |  |  |
 | `simulation` | [PlanSimulation](#plansimulation) or null | no |  |  |
 | `solver_status` | [SolveStatus](#solvestatus) or null | no |  |  |
 
@@ -1103,6 +1104,18 @@ A plan line with the expected numbers the planning tool computed for it (rupees)
 | `segments` | array of [SegmentUplift](#segmentuplift) | no | default `[]` |  |
 | `uplift_pct` | number or null | no |  |  |
 | `why_chosen` | [WhyChosen](#whychosen) or null | no |  |  |
+
+### PlanSafetyMargin
+
+The safety margin a plan revision was planned with, and its promo cost as budgeted.
+
+| Field | Type | Required | Constraints | Description |
+| --- | --- | --- | --- | --- |
+| `budget_margin_waived` | boolean | no | default `false` |  |
+| `budget_quantile` | number | no | minimum 0.5, exclusiveMaximum 1, default `0.5` |  |
+| `margin_quantile` | number | no | exclusiveMinimum 0, maximum 0.5, default `0.5` |  |
+| `planned_promo_cost` | number | yes | minimum 0 |  |
+| `stock_sigmas` | number | no | minimum 1.2816, default `1.2816` |  |
 
 ### PlanSimulation
 
