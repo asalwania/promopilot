@@ -198,6 +198,7 @@ Select the promo plan from a candidate set made by generate_candidates: at most 
 | `objective` | number | yes |  | The lines' values less what selected substitute pairs lose together. |
 | `lines` | array of [OptimizedLine](#optimizedline) | yes |  |  |
 | `total_promo_cost` | number | yes |  |  |
+| `planned_promo_cost` | number | yes |  | The promo cost the budget constraint counted: each line's at the safety margin's budget quantile (ADR 0080). |
 | `marketing_budget` | number | yes |  |  |
 | `blended_margin` | number or null | yes |  | None when no line is selected. |
 | `min_margin` | number | yes |  | The minimum margin applied: the request's, never below the margin floor. |
@@ -210,6 +211,7 @@ Select the promo plan from a candidate set made by generate_candidates: at most 
 | `clearance_shortfalls` | array of [ClearanceShortfall](#clearanceshortfall) | yes |  | Clearance targets no plan reaches, and by how much this plan misses them. |
 | `policy_findings` | array of [PolicyFinding](#policyfinding) | yes |  | Request values that would have loosened company policy; policy was kept. |
 | `relaxation` | [Relaxation](#relaxation) or null | yes |  | When no plan reaches every clearance target, the smallest change to the request's constraints that makes it feasible; null otherwise. |
+| `safety_margin` | [PlanSafetyMargin](#plansafetymargin) | yes |  | The margin the plan keeps from its limits (ADR 0080): promo cost at the budget quantile, expected units plus stock_sigmas std within stock, and the minimum margin with units at the margin quantile; budget_margin_waived when the clearance targets need the budget at expected cost. |
 
 ### `relax_constraints`
 
@@ -576,6 +578,18 @@ A promo option selected into a promo plan: one (SKU, region) decision (ADR 0004)
 | `start_week` | integer | yes | minimum 0 |  |
 | `target_segment` | [TargetSegment](#targetsegment) | yes |  |  |
 | `bundle_partner_sku_id` | string or null | no | default `null` |  |
+
+### PlanSafetyMargin
+
+The safety margin a plan revision was planned with, and its promo cost as budgeted.
+
+| Field | Type | Required | Constraints | Description |
+| --- | --- | --- | --- | --- |
+| `budget_quantile` | number | no | minimum 0.5, exclusiveMaximum 1, default `0.5` |  |
+| `stock_sigmas` | number | no | minimum 1.2816, default `1.2816` |  |
+| `margin_quantile` | number | no | exclusiveMinimum 0, maximum 0.5, default `0.5` |  |
+| `planned_promo_cost` | number | yes | minimum 0 |  |
+| `budget_margin_waived` | boolean | no | default `false` |  |
 
 ### PlanSimulation
 
