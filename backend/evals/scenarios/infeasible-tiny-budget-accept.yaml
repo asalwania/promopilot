@@ -1,0 +1,26 @@
+# Infeasible, then accepted: clearing 95% of the 400g namkeen stock cannot be paid for with
+# ₹10k, so revision 1 is infeasible; accepting its relaxation re-plans a feasible revision 2
+# (ADR 0076, ADR 0086). The brief is infeasible-clearance-tiny-budget's, so it replays the
+# app's `infeasible` session.
+name: infeasible-tiny-budget-accept
+group: mid_plan_amendments
+brief: >-
+  Plan a Diwali promotion for Snacks in North for weeks 108-109, with a marketing budget of
+  ₹10k. We are overstocked on 400g namkeen packs — clear at least 95% of that stock.
+as_of_week: 104
+seed: 0
+amendments:
+  - accept_relaxation: true
+labels:                         # as stated; the accepted relaxation is applied when scored
+  regions: [North]
+  categories: [Snacks]
+  promo_window: {start_week: 108, end_week: 109}
+  marketing_budget: 10000
+  clearance_targets:
+    - {sku_id: SKU0002, sell_through: 0.95}
+    - {sku_id: SKU0006, sell_through: 0.95}
+expect:
+  - declares_infeasible: false  # approvable (ADR 0046 D10)
+  - meets_clearance: SKU0002    # against the relaxed targets the final request holds
+  - meets_clearance: SKU0006
+  - diff_changes: clearance_targets

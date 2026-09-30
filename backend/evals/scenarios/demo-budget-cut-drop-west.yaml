@@ -1,6 +1,6 @@
-# The demo brief (SPEC §3.2), amended twice and its relaxation accepted, as the demo session is
-# (ADR 0054, ADR 0070). Revision 3 misses SKU0006's 60% target by a fraction of a point; accepting
-# its relaxation re-plans a feasible revision 4, which the manager can approve (ADR 0076).
+# The demo brief (SPEC §3.2), amended twice, as the demo session is (ADR 0054). Narrowing to
+# "families" never limits the namkeen clearance targets (ADR 0086), so every revision reaches
+# both 60% targets and revision 3 can be approved.
 name: demo-budget-cut-drop-west
 group: mid_plan_amendments
 brief: >-
@@ -12,8 +12,7 @@ seed: 0
 amendments:
   - "Budget cut to ₹6 lakh"
   - "Drop West"
-  - accept_relaxation: true
-labels:                         # as stated; the accepted relaxation is applied when scored
+labels:
   regions: [North]
   categories: [Snacks, Beverages]
   marketing_budget: 600000
@@ -25,5 +24,5 @@ expect:
   - declares_infeasible: false  # approvable (ADR 0046 D10)
   - excludes_region: West
   - meets_clearance: SKU0002
-  - meets_clearance: SKU0006    # against the relaxed target the final request holds
-  - diff_changes: clearance_targets
+  - meets_clearance: SKU0006
+  - diff_changes: scope.regions
