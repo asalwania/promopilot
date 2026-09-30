@@ -86,4 +86,6 @@ Every decision PromoPilot made that SPEC.md did not settle, oldest first. Each r
 - [ADR 0083: Code applies an accepted relaxation to the Context agent's reading, and the LLM never reads it](0083-accepted-relaxations-are-applied-in-code.md)
 - [ADR 0084: SKU limits let the Critic loop promote a flagged SKU more gently: `generate_candidates`' `sku_limits` caps one SKU's depth or mechanisms, only ever tightening, and the Critic's feedback leads with it](0084-sku-limits-let-the-critic-loop-promote-a-flagged-sku-more-gently.md)
 - [ADR 0085: Every log line names its request and session; the API logs one `http.request` line per request, redacts secrets at every level, and shows a manager's text only at debug (`LOG_LEVEL`)](0085-structured-safe-logging.md)
+- [ADR 0086: Narrowing candidates never limits a clearance target; the demo brief plans feasibly, and accepting a relaxation moves to an infeasible session](0086-narrowing-never-limits-a-clearance-target.md)
+- [ADR 0087: Demand prediction computes each store-invariant term once, and every number is unchanged bit for bit](0087-demand-prediction-reads-store-invariant-terms-once.md)
 - [ADR 0088: The README is a short entry point for judges, the reference moves to docs/, and the tool contracts and agent-graph diagram are checked against the code](0088-readme-for-judges-and-docs-checked-against-code.md)

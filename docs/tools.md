@@ -152,15 +152,15 @@ List the detected substitutes and complements of each SKU. A substitute is a SKU
 
 ### `generate_candidates`
 
-Generate every promo option for the planning request: each in-scope SKU and region, mechanism, depth, duration, start week inside the promo window, and target segment (one segment or All customers); a BUNDLE pairs a SKU with a detected complement. Options deeper than the company-policy maximum discount, below unit cost (unless overstocked), or whose P90 units exceed available stock are pruned. The rest are predicted, with cannibalisation, halo and clearance value. A KVI the competitor undercuts also gets a price-match option: PCT_OFF at the smallest whole-percent depth that reaches the competitor's price. SKUs the request names for clearance count as overstocked. Returns counts, pruned counts per reason, counts per region and mechanism, the price matches offered, the top options by value, and a candidate_set_id to pass to the optimiser. Narrow by mechanisms, target segments or SKU ids to generate fewer, leave SKUs out with exclude_sku_ids, or cap a SKU's depth or mechanisms with sku_limits.
+Generate every promo option for the planning request: each in-scope SKU and region, mechanism, depth, duration, start week inside the promo window, and target segment (one segment or All customers); a BUNDLE pairs a SKU with a detected complement. Options deeper than the company-policy maximum discount, below unit cost (unless overstocked), or whose P90 units exceed available stock are pruned. The rest are predicted, with cannibalisation, halo and clearance value. A KVI the competitor undercuts also gets a price-match option: PCT_OFF at the smallest whole-percent depth that reaches the competitor's price. SKUs the request names for clearance count as overstocked. Returns counts, pruned counts per reason, counts per region and mechanism, the price matches offered, the top options by value, and a candidate_set_id to pass to the optimiser. Narrow by mechanisms, target segments or SKU ids to generate fewer, leave SKUs out with exclude_sku_ids, or cap a SKU's depth or mechanisms with sku_limits. Mechanisms and target segments never narrow a SKU the request names for clearance: it keeps every mechanism and segment, so the narrowing cannot put its clearance target out of reach.
 
 **Input**
 
 | Field | Type | Required | Constraints | Description |
 | --- | --- | --- | --- | --- |
 | `request` | [PlanningRequest](#planningrequest) | yes |  |  |
-| `mechanisms` | array of [Mechanism](#mechanism) or null | no | default `null` | Omit for all four. |
-| `target_segments` | array of [TargetSegment](#targetsegment) or null | no | default `null` | Omit for every segment and All customers. |
+| `mechanisms` | array of [Mechanism](#mechanism) or null | no | default `null` | Omit for all four. A SKU named for clearance keeps all four. |
+| `target_segments` | array of [TargetSegment](#targetsegment) or null | no | default `null` | Omit for every segment and All customers. A SKU named for clearance keeps them all. |
 | `sku_ids` | array of string or null | no | default `null` | Only these SKUs of the request's scope; omit for all. |
 | `exclude_sku_ids` | array of string or null | no | default `null` | SKUs of the request's scope to leave out, in every region: the lever for a SKU the Critic flags. Not a clearance target of the brief; omit to leave none out. |
 | `sku_limits` | array of [SkuLimit](#skulimit) or null | no | default `null` | Caps on how SKUs of the request's scope are promoted, in every region and as a BUNDLE partner: at most max_depth_pct deep, and only by mechanisms. The lever to promote a SKU the Critic flags more gently instead of leaving it out. Each may only tighten: max_depth_pct at most the policy's maximum discount, mechanisms among the call's. Not a clearance target of the brief; omit to cap none. |
@@ -179,6 +179,7 @@ Generate every promo option for the planning request: each in-scope SKU and regi
 | `by_region_and_mechanism` | array of [RegionMechanismCount](#regionmechanismcount) | yes |  |  |
 | `price_matches` | array of [PriceMatchOffer](#pricematchoffer) | yes |  | Undercut KVIs in scope and the depth that matches the competitor's price. |
 | `top` | array of [CandidateOption](#candidateoption) | yes |  | Up to 20 options, best value first. |
+| `not_narrowed` | array of string | no |  | SKUs named for clearance that kept every mechanism and segment although the call narrowed mechanisms or target segments (ADR 0086). |
 
 ### `run_optimizer`
 
