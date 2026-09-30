@@ -405,3 +405,113 @@ async def test_a_narrowing_of_a_stored_set_is_read_off_it_and_prices_pairs_once(
     assert narrowed.output.model_dump(exclude=registered) == fresh.output.model_dump(
         exclude=registered
     )
+
+
+# The planner's lever to promote a flagged SKU more gently instead (ADR 0084).
+
+
+async def test_the_planner_can_cap_a_skus_depth_and_mechanisms(
+    tools: ToolRegistry, store: CandidateStore, small_history: DemandHistory
+) -> None:
+    capped, only_pct = first_category_skus(small_history)[:2]
+    limits = [
+        {"sku_id": capped, "max_depth_pct": 15},
+        {"sku_id": only_pct, "mechanisms": ["PCT_OFF"]},
+    ]
+
+    result = await tools.call("generate_candidates", arguments(small_history, sku_limits=limits))
+
+    assert isinstance(result, ToolOk), result
+    assert isinstance(result.output, GenerateCandidatesOutput)
+    stored = store.get(result.output.candidate_set_id)
+    assert stored is not None
+    lines = stored.options.lines
+    assert {line.depth_pct for line in lines if line.sku_id == capped} <= set(range(1, 16))
+    assert {line.mechanism for line in lines if line.sku_id == only_pct} == {Mechanism.PCT_OFF}
+    assert any(line.sku_id == capped for line in lines), "a capped SKU stays in the set"
+
+
+async def test_a_sku_limit_changes_the_candidate_set_id(
+    tools: ToolRegistry, small_history: DemandHistory
+) -> None:
+    async def set_id(**changes: Any) -> object:
+        result = await tools.call("generate_candidates", arguments(small_history, **changes))
+        assert isinstance(result, ToolOk), result
+        assert isinstance(result.output, GenerateCandidatesOutput)
+        return result.output.candidate_set_id
+
+    capped = [{"sku_id": first_category_skus(small_history)[0], "max_depth_pct": 20}]
+    assert await set_id(sku_limits=capped) != await set_id()
+
+
+def limit_errors(small_history: DemandHistory) -> list[tuple[dict[str, Any], str]]:
+    skus = first_category_skus(small_history)
+    target = [{"sku_id": skus[0], "sell_through": 0.5}]
+    return [
+        (
+            {"sku_limits": [{"sku_id": skus[0], "max_depth_pct": 60}]},
+            f"loosens company policy: {skus[0]}'s max_depth_pct 60",
+        ),
+        (
+            {
+                "mechanisms": ["PCT_OFF"],
+                "sku_limits": [{"sku_id": skus[0], "mechanisms": ["BOGO"]}],
+            },
+            f"loosens the call: {skus[0]}'s mechanisms name BOGO",
+        ),
+        (
+            {
+                "request": {"clearance_targets": target},
+                "sku_limits": [{"sku_id": skus[0], "max_depth_pct": 10}],
+            },
+            f"may not limit a clearance target of the brief: {skus[0]}",
+        ),
+        (
+            {"sku_limits": [{"sku_id": skus[0], "max_depth_pct": 2}]},
+            f"leaves {skus[0]} no option",
+        ),
+    ]
+
+
+@pytest.mark.parametrize("case", range(4), ids=["policy", "call", "clearance", "no-option"])
+async def test_a_sku_limit_that_loosens_or_cannot_hold_is_invalid_input(
+    tools: ToolRegistry, small_history: DemandHistory, case: int
+) -> None:
+    changes, message = limit_errors(small_history)[case]
+
+    result = await tools.call("generate_candidates", arguments(small_history, **changes))
+
+    assert isinstance(result, ToolError)
+    assert result.code == "invalid_input"
+    assert message in result.message
+
+
+async def test_a_capped_narrowing_of_a_stored_set_is_read_off_it(
+    small_models: tuple[DemandModel, Relations],
+    small_dataset: GeneratedDataset,
+    tools: ToolRegistry,
+    store: CandidateStore,
+    small_history: DemandHistory,
+) -> None:
+    capped = [{"sku_id": first_category_skus(small_history)[0], "max_depth_pct": 20}]
+    whole = await tools.call("generate_candidates", arguments(small_history))
+    narrowed = await tools.call("generate_candidates", arguments(small_history, sku_limits=capped))
+
+    assert isinstance(whole, ToolOk)
+    assert isinstance(narrowed, ToolOk)
+    assert isinstance(whole.output, GenerateCandidatesOutput)
+    assert isinstance(narrowed.output, GenerateCandidatesOutput)
+    first = store.get(whole.output.candidate_set_id)
+    second = store.get(narrowed.output.candidate_set_id)
+    assert first is not None
+    assert second is not None
+    assert second.facts is first.facts
+    fresh = await build(small_models, small_dataset, CandidateStore()).call(
+        "generate_candidates", arguments(small_history, sku_limits=capped)
+    )
+    assert isinstance(fresh, ToolOk)
+    assert isinstance(fresh.output, GenerateCandidatesOutput)
+    registered = {"demand_model", "relations_model"}
+    assert narrowed.output.model_dump(exclude=registered) == fresh.output.model_dump(
+        exclude=registered
+    )

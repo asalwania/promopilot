@@ -7,7 +7,9 @@ per region and mechanism, the top options by value, and the candidate set's id, 
 versions, so the same call gets the same id (ADR 0049). The latest demand model and the live
 relations model are resolved on every call, and the as-of week is bound when the tool is built
 (ADR 0025, ADR 0032); the planning request must be for that week. The competitor gaps at that
-week give each undercut KVI a price-match option, listed in the summary (ADR 0040).
+week give each undercut KVI a price-match option, listed in the summary (ADR 0040). The
+planner narrows the set to answer the Critic: `exclude_sku_ids` leaves a SKU out (ADR 0059), and
+`sku_limits` caps its depth or mechanisms instead, only ever tightening (ADR 0084).
 """
 
 import asyncio
@@ -32,6 +34,7 @@ from promopilot.domain import (
     PlanLine,
     PlanningRequest,
     Region,
+    SkuLimit,
     TargetSegment,
 )
 from promopilot.optimizer import (
@@ -55,8 +58,8 @@ DESCRIPTION = (
     "that reaches the competitor's price. SKUs the request names for clearance count as "
     "overstocked. Returns counts, pruned counts per reason, counts per region and mechanism, "
     "the price matches offered, the top options by value, and a candidate_set_id to pass to "
-    "the optimiser. Narrow by mechanisms, target segments or SKU ids to generate fewer, or "
-    "leave SKUs out with exclude_sku_ids."
+    "the optimiser. Narrow by mechanisms, target segments or SKU ids to generate fewer, "
+    "leave SKUs out with exclude_sku_ids, or cap a SKU's depth or mechanisms with sku_limits."
 )
 
 
@@ -76,6 +79,16 @@ class GenerateCandidatesInput(BaseModel):
         description=(
             "SKUs of the request's scope to leave out, in every region: the lever for a SKU "
             "the Critic flags. Not a clearance target of the brief; omit to leave none out."
+        ),
+    )
+    sku_limits: list[SkuLimit] | None = Field(
+        default=None,
+        description=(
+            "Caps on how SKUs of the request's scope are promoted, in every region and as a "
+            "BUNDLE partner: at most max_depth_pct deep, and only by mechanisms. The lever to "
+            "promote a SKU the Critic flags more gently instead of leaving it out. Each may "
+            "only tighten: max_depth_pct at most the policy's maximum discount, mechanisms "
+            "among the call's. Not a clearance target of the brief; omit to cap none."
         ),
     )
 
@@ -168,6 +181,7 @@ def generate_candidates_tool(
                 target_segments=arguments.target_segments,
                 sku_ids=arguments.sku_ids,
                 exclude_sku_ids=arguments.exclude_sku_ids,
+                sku_limits=arguments.sku_limits,
                 unnarrowed=None if whole is None else whole[0],
             )
         except ValueError as error:
