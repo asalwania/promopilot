@@ -1,5 +1,5 @@
 {
-  "hash": "9c09ff09410e3bbb29f6d8a58f7e1356dbf713bc85b341e0c8ddf65ce7404fa5",
+  "hash": "8b6afc03a5a6f0337d6b2e39576a24e9cdfcf13783ddf09de4ec5878eaf5c9c3",
   "request": {
     "messages": [
       {
@@ -7,7 +7,7 @@
         "role": "system"
       },
       {
-        "content": "Risk findings (JSON from PromoPilot's deterministic review):\n[{\"finding\": 1, \"code\": \"OVER_CONCENTRATION\", \"message\": \"SKU0002 in North: its promo cost ₹31,464 is 32% of the plan's promo spend ₹98,473, above the 25% limit for one plan line\", \"template_feedback\": \"SKU0002 is a clearance target of the brief, so it stays in the plan, and this finding stays open.\", \"sku_id\": \"SKU0002\", \"region\": \"North\"}]",
+        "content": "Risk findings (JSON from PromoPilot's deterministic review):\n[{\"finding\": 1, \"code\": \"OVER_CONCENTRATION\", \"message\": \"Beverages takes 80.6% of the plan's promo spend (₹1.07 lakh of ₹1.33 lakh), above the 80% limit for one category of several in scope\", \"template_feedback\": \"Balance the plan across categories: set a lower max_promoted_skus_per_category_per_region, or leave some Beverages SKUs out with generate_candidates' exclude_sku_ids, so Beverages takes at most 80% of the spend.\", \"category\": \"Beverages\"}]",
         "role": "user"
       }
     ],
@@ -56,7 +56,7 @@
   "response": {
     "feedback": [
       {
-        "feedback": "SKU0002 in North is a clearance target and must remain in the plan, so this finding stays open as per the brief's constraints. No changes to exclude SKU0002 are possible, but consider tightening the optimiser options such as lowering the regional budget cap or reducing the cap on promoted SKUs per category in North to better distribute promo spend.",
+        "feedback": "Balance the plan across categories by setting a lower max_promoted_skus_per_category_per_region for Beverages, or exclude some Beverages SKUs using generate_candidates' exclude_sku_ids, so that Beverages takes at most 80% of the promo spend.",
         "finding": 1
       }
     ]
@@ -64,9 +64,9 @@
   "schema_name": "CriticFeedback",
   "usage": [
     {
-      "input_tokens": 536,
+      "input_tokens": 557,
       "model": "gpt-4.1-mini",
-      "output_tokens": 81
+      "output_tokens": 65
     }
   ]
 }

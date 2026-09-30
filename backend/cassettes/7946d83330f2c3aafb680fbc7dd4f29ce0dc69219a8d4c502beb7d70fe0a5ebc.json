@@ -1166,8 +1166,40 @@
             "West"
           ]
         },
-        "id": "call_qilJMXK8ww9OVn2Dc5AezfWn",
+        "id": "call_92IdN2d6cRqY08nTrd1PwflA",
         "name": "get_scope_data"
+      },
+      {
+        "arguments": {
+          "categories": [
+            "Snacks"
+          ],
+          "regions": [
+            "North",
+            "West"
+          ],
+          "sku_ids": [
+            "SKU0002"
+          ]
+        },
+        "id": "call_ZMbU8HFAQ2HGPsDV7KOrhaUA",
+        "name": "get_inventory_status"
+      },
+      {
+        "arguments": {
+          "categories": [
+            "Snacks"
+          ],
+          "regions": [
+            "North",
+            "West"
+          ],
+          "sku_ids": [
+            "SKU0006"
+          ]
+        },
+        "id": "call_yLhogSMDZxSLom3AsUTQEmkZ",
+        "name": "get_inventory_status"
       }
     ]
   },
@@ -1176,7 +1208,7 @@
     {
       "input_tokens": 5147,
       "model": "gpt-4.1-mini",
-      "output_tokens": 28
+      "output_tokens": 108
     }
   ]
 }

@@ -1166,7 +1166,7 @@
             "West"
           ]
         },
-        "id": "call_eL480HAy3naWjBoYRqznnJpm",
+        "id": "call_RVcnyofvjmmrhcveJBmU9S4d",
         "name": "get_scope_data"
       },
       {
@@ -1181,20 +1181,23 @@
             "West"
           ]
         },
-        "id": "call_oDK0rIBxE8bk5UrMqt6olBiF",
+        "id": "call_Ly579c0yHhhqfUOdfMN7NC8M",
         "name": "get_inventory_status"
       },
       {
         "arguments": {
-          "end_week": 109,
+          "categories": [
+            "Snacks",
+            "Beverages"
+          ],
+          "kvi_only": true,
           "regions": [
             "North",
             "West"
-          ],
-          "start_week": 108
+          ]
         },
-        "id": "call_CIKwAKkY0vvCQn79ZSfgVgwc",
-        "name": "get_holidays"
+        "id": "call_o4DwDsrcnafCnLJogfBjjEOr",
+        "name": "get_competitor_gaps"
       }
     ]
   },
@@ -1203,7 +1206,7 @@
     {
       "input_tokens": 5146,
       "model": "gpt-4.1-mini",
-      "output_tokens": 107
+      "output_tokens": 116
     }
   ]
 }
