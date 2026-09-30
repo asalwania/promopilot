@@ -12,7 +12,9 @@ import pytest
 from langgraph.checkpoint.memory import InMemorySaver
 
 from promopilot.agents import (
+    AcceptedRelaxation,
     BriefReading,
+    ClearanceAsk,
     GraphTools,
     PlannedRevision,
     Planner,
@@ -23,6 +25,7 @@ from promopilot.agents import (
     graph_state,
     plan_data,
     relaxation_amendment,
+    resume_with_acceptance,
     resume_with_amendment,
     resume_with_answers,
     resume_with_decision,
@@ -638,6 +641,140 @@ def test_a_relaxation_is_accepted_as_an_amendment_stating_each_change_exactly() 
         "lower the clearance target for SKU0029 to 70.27% sell-through; "
         "drop the clearance target for SKU0030."
     )
+
+
+# Accepting a relaxation in code (ADR 0083).
+
+NAMKEEN = ClearanceAsk(products="150g namkeen packs", sell_through=0.6)
+"""SKU0001 and SKU0002 on the small world, as "400g namkeen packs" is two SKUs in the demo."""
+SKU0002 = Relaxation(
+    changes=(
+        RelaxedConstraint(
+            kind=ConstraintKind.CLEARANCE_TARGET,
+            sku_id="SKU0002",
+            current=0.6,
+            relaxed=0.5986,
+            change=0.0023,
+        ),
+    ),
+    policy_binds=True,
+    proven=True,
+)
+
+
+def clearing(regions: list[Region], budget: float) -> BriefReading:
+    return reading(regions, budget).model_copy(update={"clearance": [NAMKEEN]})
+
+
+def targets_of(request: PlanningRequest | None) -> list[tuple[str, float]]:
+    assert request is not None
+    return [(t.sku_id, t.sell_through) for t in request.clearance_targets]
+
+
+async def test_accepting_a_relaxation_for_one_sku_leaves_every_other_sku_target_unchanged(
+    data: InMemoryRetailData,
+) -> None:
+    planning = await session(
+        data,
+        PoolPlanner(),
+        [
+            clearing(BOTH, 10_00_000.0),
+            explainer_down(),
+            clearing(BOTH, 10_00_000.0),
+            explainer_down(),
+        ],
+    )
+    assert targets_of((await planning.state()).request) == [("SKU0001", 0.6), ("SKU0002", 0.6)]
+
+    route = await resume_with_acceptance(planning.graph, str(planning.id), SKU0002)
+
+    assert route == REPLANNED
+    state = await planning.state()
+    assert targets_of(state.request) == [("SKU0001", 0.6), ("SKU0002", 0.5986)]
+    assert state.amendments == ()
+    assert state.accepted == (AcceptedRelaxation(revision_number=1, relaxation=SKU0002),)
+    # The LLM never reads the accepted text (#165): with no other amendment the brief is asked
+    # exactly as the first time, so its recorded answer replays.
+    context_calls = [call for call in planning.llm.calls if call.schema is BriefReading]
+    assert len(context_calls) == 2
+    assert context_calls[1].messages == context_calls[0].messages
+    [_, second] = planning.saved.revisions
+    assert second.number == 2
+    assert second.diff is not None
+    assert [change.field for change in second.diff.request_changes] == ["clearance_targets"]
+    assumed = [a.value for a in state.assumptions if a.field == "clearance_targets"]
+    assert assumed[-1] == "59.86% sell-through for SKU0002"
+    decisions = [e.payload for e in planning.trace.events if isinstance(e.payload, DecisionMade)]
+    assert [d.summary for d in decisions if d.decision == "amended"] == [
+        "Plan revision 1 was amended: Accept the smallest relaxation: lower the clearance "
+        "target for SKU0002 to 59.86% sell-through."
+    ]
+
+
+async def test_a_later_amendment_is_read_by_the_llm_and_the_accepted_relaxation_still_holds(
+    data: InMemoryRetailData,
+) -> None:
+    planning = await session(
+        data,
+        PoolPlanner(),
+        [
+            clearing(BOTH, 10_00_000.0),
+            explainer_down(),
+            clearing(BOTH, 10_00_000.0),
+            explainer_down(),
+            clearing(BOTH, 6_00_000.0),
+            explainer_down(),
+        ],
+    )
+    await resume_with_acceptance(planning.graph, str(planning.id), SKU0002)
+
+    await resume_with_amendment(planning.graph, str(planning.id), "cut budget to ₹6 lakh")
+
+    state = await planning.state()
+    assert state.request is not None
+    assert state.request.marketing_budget == 6_00_000.0
+    assert targets_of(state.request) == [("SKU0001", 0.6), ("SKU0002", 0.5986)]
+    context_calls = [call for call in planning.llm.calls if call.schema is BriefReading]
+    read = context_calls[-1].messages[-1].content
+    assert "cut budget to ₹6 lakh" in read
+    assert "Accept the smallest relaxation" not in read
+
+
+async def test_with_the_llm_down_an_accepted_relaxation_is_still_applied(
+    data: InMemoryRetailData,
+) -> None:
+    # The rules cannot read an accepted relaxation's text (ADR 0076 D8); they no longer need to.
+    budget = Relaxation(
+        changes=(
+            RelaxedConstraint(
+                kind=ConstraintKind.MARKETING_BUDGET,
+                current=10_00_000.0,
+                relaxed=12_00_000.0,
+                change=0.2,
+            ),
+        ),
+        policy_binds=False,
+        proven=True,
+    )
+    planning = await session(
+        data,
+        PoolPlanner(),
+        [
+            reading(BOTH, 10_00_000.0),
+            explainer_down(),
+            LLMError("the Context agent's LLM is down for the accepted relaxation"),
+            explainer_down(),
+        ],
+    )
+
+    route = await resume_with_acceptance(planning.graph, str(planning.id), budget)
+
+    assert route == REPLANNED
+    state = await planning.state()
+    assert state.context_degraded is not None
+    assert state.questions == ()
+    assert state.request is not None
+    assert state.request.marketing_budget == 12_00_000.0
 
 
 # What the API and the recorder refuse alike (ADR 0046 D10, ADR 0052 D7, ADR 0070).

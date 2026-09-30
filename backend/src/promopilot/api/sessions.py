@@ -40,6 +40,7 @@ from promopilot.agents import (
     build_graph,
     graph_state,
     relaxation_amendment,
+    resume_with_acceptance,
     resume_with_amendment,
     resume_with_answers,
     resume_with_decision,
@@ -291,12 +292,17 @@ class SessionService:
                     amendment_chars=len(text),
                 )
                 log.debug("sessions.amendment", amendment=text)
-                amendment = text
+                amendment, accepted = text, relaxation
                 self._spawn(
                     self._drive(
                         graph,
                         session_id,
-                        lambda: resume_with_amendment(graph, thread_id, amendment),
+                        # An accepted relaxation is applied in code, not read (ADR 0083).
+                        lambda: (
+                            resume_with_amendment(graph, thread_id, amendment)
+                            if accepted is None
+                            else resume_with_acceptance(graph, thread_id, accepted)
+                        ),
                     )
                 )
                 amended = await self._store.get(session_id)

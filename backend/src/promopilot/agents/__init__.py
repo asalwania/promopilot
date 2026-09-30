@@ -11,6 +11,7 @@ the Approval interrupt waits for a decision.
 
 from promopilot.agents.amendments import (
     acceptable_relaxation,
+    apply_accepted,
     approval_refusal,
     relaxation_amendment,
 )
@@ -36,6 +37,7 @@ from promopilot.agents.graph import (
     build_graph,
     checkpoint_serializer,
     graph_state,
+    resume_with_acceptance,
     resume_with_amendment,
     resume_with_answers,
     resume_with_decision,
@@ -80,6 +82,7 @@ from promopilot.agents.stack import (
     planning_stack,
 )
 from promopilot.agents.state import (
+    AcceptedRelaxation,
     AmendAnswer,
     ApprovalAnswer,
     ApprovalRequest,
@@ -105,6 +108,7 @@ __all__ = [
     "FALLBACK_CONFIDENCE",
     "MANIFEST",
     "MAX_ATTEMPTS",
+    "AcceptedRelaxation",
     "AgentTools",
     "AmendAnswer",
     "ApprovalAnswer",
@@ -157,6 +161,7 @@ __all__ = [
     "TracedProvider",
     "TracedToolRegistry",
     "acceptable_relaxation",
+    "apply_accepted",
     "approval_refusal",
     "build_graph",
     "check_cassettes",
@@ -177,6 +182,7 @@ __all__ = [
     "read_planning_request",
     "record_cassettes",
     "relaxation_amendment",
+    "resume_with_acceptance",
     "resume_with_amendment",
     "resume_with_answers",
     "resume_with_decision",

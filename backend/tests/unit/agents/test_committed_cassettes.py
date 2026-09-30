@@ -71,7 +71,7 @@ async def test_every_context_reading_of_a_session_replays_over_the_default_world
     # As the graph reads it: the brief, then again after each answer or amendment (ADR 0048,
     # ADR 0052). A miss raises, as the reading is strict here (ADR 0053).
     # An accepted relaxation's text comes from the plan, so it is read from the manifest
-    # (ADR 0070).
+    # (ADR 0070), and is not read by the LLM (ADR 0083).
     manifest = read_manifest(CASSETTE_DIR)
     recorded = None if manifest is None else manifest.sessions.get(script.name)
     assert recorded is not None, f"session {script.name!r} was never recorded"
@@ -98,9 +98,11 @@ async def test_every_context_reading_of_a_session_replays_over_the_default_world
             assert amendment is not None, f"no amendment recorded for {step}"
             if step.amend is not None:
                 assert amendment == step.amend
+                amendments += (amendment,)
             else:
+                # Code applies an accepted relaxation; the LLM never reads its text, so the
+                # round asks what the round before it asked (ADR 0083).
                 assert amendment.startswith("Accept the smallest relaxation: ")
-            amendments += (amendment,)
         reading = await read_context(
             script.brief,
             replay,

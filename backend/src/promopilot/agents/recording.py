@@ -3,8 +3,9 @@
 
 A **session script** names a brief and what the manager does after it: answer the Clarify
 interrupt's questions, amend the plan, accept its relaxation, approve it. Accepting and
-approving follow the API's rules (ADR 0070): the amendment is the relaxation's own text, and an
-infeasible revision is never approved. `record_cassettes` plays each script through
+approving follow the API's rules (ADR 0070): the relaxation is accepted as the API accepts it,
+its text recorded and its values applied in code (ADR 0083), and an infeasible revision is
+never approved. `record_cassettes` plays each script through
 the full agent graph (Context, Clarify, Planner, Critic, Explainer, Approval) on a live
 provider, recording every LLM request as a cassette, and writes a manifest of what each
 session called. `check_cassettes` plays the same scripts on the cassettes alone and reports
@@ -43,6 +44,7 @@ from promopilot.agents.graph import (
     build_graph,
     checkpoint_serializer,
     graph_state,
+    resume_with_acceptance,
     resume_with_amendment,
     resume_with_answers,
     resume_with_decision,
@@ -342,9 +344,8 @@ async def _play(
                         "has no relaxation to accept"
                     )
                     break
-                accepted = relaxation_amendment(relaxation)
-                amendments.append(accepted)
-                route.extend(await resume_with_amendment(graph, thread, accepted))
+                amendments.append(relaxation_amendment(relaxation))
+                route.extend(await resume_with_acceptance(graph, thread, relaxation))
                 snapshot = await _snapshot(graph, thread)
                 problems.extend(_fallbacks(snapshot))
                 revisions = _revisions(revisions, snapshot)

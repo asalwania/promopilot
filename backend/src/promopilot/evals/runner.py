@@ -3,12 +3,12 @@ score each final plan revision.
 
 Each session runs the agent graph in process through the entry points the API's session
 service drives it with (`start_planning`, `resume_with_answers`, `resume_with_amendment`,
-`graph_state`), on an in-memory checkpointer, with the planning stack the API plans with
-(`planning_stack`) but on the eval's own world at the scenario's as-of week. The Context
-agent's questions are answered from the scenario when asked, and its amendments are made in
-order once a plan waits for approval. An amendment that accepts the waiting revision's
-relaxation sends the relaxation's own text, as `POST /amend {accept_relaxation: true}` does,
-and fails the run when the revision has no relaxation to accept (ADR 0076). The final plan
+`resume_with_acceptance`, `graph_state`), on an in-memory checkpointer, with the planning stack
+the API plans with (`planning_stack`) but on the eval's own world at the scenario's as-of week.
+The Context agent's questions are answered from the scenario when asked, and its amendments are
+made in order once a plan waits for approval. An amendment that accepts the waiting revision's
+relaxation accepts it as `POST /amend {accept_relaxation: true}` does, and fails the run when
+the revision has no relaxation to accept (ADR 0076, ADR 0083). The final plan
 revision is then checked on its plan-time numbers by `validate_plan` and scored by the oracle
 on the true demand (ADR 0012).
 
@@ -42,7 +42,7 @@ from promopilot.agents import (
     checkpoint_serializer,
     graph_state,
     planning_stack,
-    relaxation_amendment,
+    resume_with_acceptance,
     resume_with_amendment,
     resume_with_answers,
     start_planning,
@@ -334,17 +334,20 @@ async def _play(
             if session.amendments == len(scenario.amendments):
                 return RunOutcome.PLANNED
             amendment = scenario.amendments[session.amendments]
-            if not isinstance(amendment, str):
-                amendment = _accept(session, waiting)
-            session.amendments += 1
-            session.route += await resume_with_amendment(graph, thread, amendment)
+            if isinstance(amendment, str):
+                session.amendments += 1
+                session.route += await resume_with_amendment(graph, thread, amendment)
+            else:
+                relaxation = _accept(session, waiting)
+                session.amendments += 1
+                session.route += await resume_with_acceptance(graph, thread, relaxation)
         else:
             raise RuntimeError(f"the session stopped at {snapshot.paused_at or 'its end'}")
 
 
-def _accept(session: _Session, waiting: PlanRevision | None) -> str:
-    """The amendment that accepts the waiting revision's relaxation, as `POST /amend
-    {accept_relaxation: true}` writes it (ADR 0052 D7, ADR 0070 D2)."""
+def _accept(session: _Session, waiting: PlanRevision | None) -> Relaxation:
+    """The waiting revision's relaxation, accepted as `POST /amend {accept_relaxation: true}`
+    accepts it (ADR 0052 D7, ADR 0070 D2, ADR 0083)."""
     if waiting is None:
         raise RuntimeError("the session awaits a decision without a plan revision")
     relaxation = acceptable_relaxation(waiting)
@@ -354,7 +357,7 @@ def _accept(session: _Session, waiting: PlanRevision | None) -> str:
             f"{waiting.number} has no relaxation to accept"
         )
     session.accepted.append(relaxation)
-    return relaxation_amendment(relaxation)
+    return relaxation
 
 
 async def _snapshot(graph: PlanningGraph, thread: str) -> GraphSnapshot:
