@@ -196,6 +196,15 @@ BEHAVED = REPORT.model_copy(
         "metrics": (
             *REPORT.metrics,
             Metric(
+                name="open_issues",
+                label="Open issues per plan (median)",
+                value=1.5,
+                count=2,
+                of=3,
+                unit="count",
+                direction="at_most",
+            ),
+            Metric(
                 name="session_latency_p50",
                 label="P50 session time",
                 value=12.34,
@@ -222,6 +231,7 @@ def test_the_markdown_shows_latency_and_cost_in_their_units() -> None:
 
     assert "| P50 session time | 12.3 s (1 of 1) | report | — |" in markdown
     assert "| P50 session cost | ₹4.50 (1 of 1) | report | — |" in markdown
+    assert "| Open issues per plan (median) | 1.5 (2 of 3) | report | — |" in markdown
 
 
 def test_the_markdown_has_an_agent_behaviour_row_per_run_and_its_failures() -> None:

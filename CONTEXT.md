@@ -302,8 +302,12 @@ One of the up to five best promo options, one per SKU and region, that the optim
 _Avoid_: rejected option, alternative
 
 **Risk finding**:
-A risk the critic's risk review flags in a plan that may break no hard constraint: over-concentration (one plan line, category or region takes too much of the promo spend), heavy cannibalisation (a line's substitutes lose too much of its incremental profit) or stock-out risk (a line runs out in too many simulated runs). It carries feedback for the planner. Found deterministically; the LLM only words the feedback (ADR 0051).
+A risk the critic's risk review flags in a plan that may break no hard constraint: over-concentration (one plan line, category or region takes too much of the promo spend), heavy cannibalisation (a line's substitutes lose too much of its incremental profit) or stock-out risk (a line runs out in too many simulated runs). It carries feedback for the planner; a finding about one SKU names its mechanism and depth and leads with a **SKU limit** below it (ADR 0084). Found deterministically; the LLM only words the feedback (ADR 0051).
 _Avoid_: warning, risk score
+
+**SKU limit**:
+The planner's cap on how one SKU of the scope is promoted, in every region and as a BUNDLE partner: at most a nominal depth, only certain mechanisms, or both. It only removes promo options and may never loosen company policy or the planner's own call; a clearance target of the brief cannot be limited. It is the planner's first lever for a risk finding about one SKU, before leaving the SKU out (ADR 0084).
+_Avoid_: SKU cap (the promoted-SKU cap counts SKUs per category), depth override
 
 **Planner attempt**:
 One plan the planner produces within a planning round. The critic reviews each attempt and sends its findings back at most 3 times, and stops early when an attempt's findings repeat the previous attempt's exactly; only the best attempt becomes a plan revision: the fewest violations, then the fewest risk findings among the attempts within the objective tolerance (5%) of the best plan-time objective, then the highest objective (ADR 0051, ADR 0059, ADR 0078).

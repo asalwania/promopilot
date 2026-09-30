@@ -200,6 +200,7 @@ def test_a_line_taking_more_than_a_quarter_of_the_spend_is_over_concentrated() -
     assert finding.actual == 4_000.0 / 11_000.0
     assert finding.limit == 0.25
     assert "36.4%" in finding.message
+    assert finding.message.startswith("S0 in West (PCT_OFF at 20%): ")
     assert "S0" in finding.feedback
 
 
@@ -273,6 +274,7 @@ def test_a_line_losing_half_its_incremental_profit_to_cannibalisation_is_flagged
     assert finding.limit == 0.5
     assert "86.4%" in finding.message
     assert "₹2,489" in finding.message
+    assert finding.message.startswith("S3 in North (PCT_OFF at 20%): ")
 
 
 def test_exactly_half_is_heavy_cannibalisation() -> None:
@@ -304,6 +306,7 @@ def test_a_line_that_runs_out_in_a_fifth_of_the_runs_is_a_stockout_risk() -> Non
     assert (finding.sku_id, finding.region) == ("S2", Region.WEST)
     assert finding.actual == 0.2
     assert "20%" in finding.message
+    assert finding.message.startswith("S2 in West (PCT_OFF at 20%) runs out of stock")
 
 
 def test_an_unsimulated_plan_has_no_stockout_findings() -> None:
@@ -352,7 +355,8 @@ def test_every_number_in_the_feedback_is_one_its_message_shows() -> None:
 
 
 def test_feedback_names_the_lever_the_planner_has_for_each_finding() -> None:
-    # The planner has no per-SKU mechanism or depth: it leaves a SKU out (ADR 0059).
+    # A SKU's finding leads with capping its depth below the plan line's, and falls back to
+    # leaving it out (ADR 0084, ADR 0059).
     lines = balanced()
     lines[0] = Line("S0", Region.WEST, promo_cost=4_000.0, stockout_probability=0.37)
     lines[1] = Line("S1", Region.NORTH, incremental_profit=1_234.0, cannibalised_profit=987.0)
@@ -362,8 +366,13 @@ def test_feedback_names_the_lever_the_planner_has_for_each_finding() -> None:
     assert {finding.code for finding in findings} == set(RiskCode)
     for finding in findings:
         if finding.sku_id is not None:
-            lever = f"{finding.sku_id} out with generate_candidates' exclude_sku_ids"
-            assert lever in finding.feedback
+            feedback = finding.feedback.lower()
+            cap = f"cap {finding.sku_id.lower()}'s depth below 20%"
+            lever = f"{finding.sku_id.lower()} out with generate_candidates' exclude_sku_ids"
+            assert cap in feedback
+            assert "generate_candidates' sku_limits" in feedback
+            assert lever in feedback
+            assert feedback.index(cap) < feedback.index(lever)
         assert "compare_mechanisms" not in finding.feedback
         assert "generate_candidates' sku_ids" not in finding.feedback
 
@@ -387,5 +396,6 @@ def test_a_clearance_target_is_not_sent_out_of_the_plan() -> None:
     assert {finding.sku_id for finding in findings} == {"S0", "S1"}
     for finding in findings:
         assert "exclude_sku_ids" not in finding.feedback
+        assert "sku_limits" not in finding.feedback  # it refuses a clearance target too
         assert f"{finding.sku_id} is a clearance target of the brief" in finding.feedback
         assert check_numeric_grounding(finding.feedback, finding.message).grounded

@@ -31,6 +31,7 @@ We chose these with the owner (D1–D13 on #47; every recommended option).
   - `loosening(given, proposed)` names each change that breaks this. The planner refuses such a `generate_candidates` or `compare_mechanisms` call with a structured `invalid_input` error before it reaches the tool.
   - The session keeps the Context agent's request, and the Critic validates against it.
   - We rejected letting the LLM pass only the request as read, which leaves the issue's optimiser options out. We also rejected accepting any change: the Critic would catch a budget breach but not a changed scope or window.
+  - **Amended by ADR 0084:** besides the request, the planner may cap one SKU's depth or mechanisms with `generate_candidates`' `sku_limits`. The tool refuses a limit that would loosen company policy or the call as `invalid_input`.
 - **D3. No new undercut lever.**
   - Price matches are always offered (ADR 0040), and the optimiser takes one when it pays for itself.
   - The LLM's levers are the KVI price tolerance and the generation filters.

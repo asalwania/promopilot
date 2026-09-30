@@ -5,7 +5,7 @@ from typing import Self
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from promopilot.domain.vocabulary import Region, Week
+from promopilot.domain.vocabulary import Mechanism, Region, Week
 
 
 class Scope(BaseModel):
@@ -86,4 +86,27 @@ class PlanningRequest(BaseModel):
             raise ValueError(f"regional budget caps for regions not in the scope: {outside}")
         if any(cap <= 0 for cap in self.regional_budget_caps.values()):
             raise ValueError("a regional budget cap must be positive")
+        return self
+
+
+class SkuLimit(BaseModel):
+    """The planner's cap on how one SKU of the scope is promoted, in every region, as anchor
+    or as a BUNDLE partner: never deeper than `max_depth_pct` (a plan line's nominal
+    `depth_pct`) and only by `mechanisms`. It only removes promo options; it is the planner's
+    lever for a SKU the Critic flags, not part of the brief (ADR 0084)."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    sku_id: str
+    max_depth_pct: int | None = Field(
+        default=None, ge=1, le=100, description="The deepest depth_pct allowed; omit for any."
+    )
+    mechanisms: tuple[Mechanism, ...] | None = Field(
+        default=None, min_length=1, description="The only mechanisms allowed; omit for any."
+    )
+
+    @model_validator(mode="after")
+    def _limits_something(self) -> Self:
+        if self.max_depth_pct is None and self.mechanisms is None:
+            raise ValueError("a SKU limit sets max_depth_pct, mechanisms or both")
         return self

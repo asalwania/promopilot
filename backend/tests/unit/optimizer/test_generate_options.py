@@ -4,6 +4,7 @@ The fakes pin the demand model's predictions and the detected relations, so each
 rule can be checked by hand.
 """
 
+import re
 from collections.abc import Iterable, Sequence
 from dataclasses import replace
 from typing import Any
@@ -22,6 +23,7 @@ from promopilot.domain import (
     Region,
     Scope,
     Segment,
+    SkuLimit,
     TargetSegment,
 )
 from promopilot.economics import effective_unit_price
@@ -719,6 +721,16 @@ NARROWINGS: list[dict[str, Any]] = [
         "target_segments": [TargetSegment.YOUNG_URBAN],
     },
     {"sku_ids": ["B"], "mechanisms": [Mechanism.BUNDLE]},
+    {"sku_limits": [SkuLimit(sku_id="A", max_depth_pct=10)]},
+    {
+        "sku_limits": [
+            SkuLimit(
+                sku_id="A", mechanisms=[Mechanism.PCT_OFF, Mechanism.BUNDLE], max_depth_pct=15
+            ),
+            SkuLimit(sku_id="B", mechanisms=[Mechanism.FIXED_PRICE]),
+        ],
+        "mechanisms": [Mechanism.PCT_OFF, Mechanism.BUNDLE, Mechanism.FIXED_PRICE],
+    },
 ]
 
 
@@ -775,6 +787,7 @@ def test_narrowing_a_fitted_set_is_exact(
     for narrowing in (
         {"exclude_sku_ids": left_out},
         {"mechanisms": [Mechanism.PCT_OFF], "target_segments": [TargetSegment.ALL_CUSTOMERS]},
+        {"sku_limits": [SkuLimit(sku_id=left_out[0], max_depth_pct=20)]},
     ):
         narrowed = generate_options(planning, fitted, unnarrowed=unnarrowed, **narrowing)
         assert_same_options(narrowed, generate_options(planning, fitted, **narrowing))
@@ -837,3 +850,158 @@ def test_the_facts_price_each_option_pair_once() -> None:
     alone = FittedOptionFacts(context(PathDemand())).pairwise_cannibalisation([third])
     assert list(mixed) == [priced[0], alone[0]]
     assert (np.asarray(priced) != 0).any()
+
+
+# --- SKU limits (ADR 0084) ----------------------------------------------------------------
+
+
+SNACKS_AND_BEVERAGES = Scope(
+    regions=(Region.NORTH, Region.SOUTH), categories=("Snacks", "Beverages")
+)
+
+
+def test_a_sku_limit_caps_the_skus_depth_in_every_region() -> None:
+    options = generate_options(
+        request(), context(), sku_limits=[SkuLimit(sku_id="A", max_depth_pct=15)]
+    )
+
+    limited = lines_of(options, sku_id="A")
+    assert {line.region for line in limited} == {Region.NORTH, Region.SOUTH}
+    assert {
+        line.depth_pct for line in lines_of(options, sku_id="A", mechanism=Mechanism.PCT_OFF)
+    } == {
+        5,
+        10,
+        15,
+    }
+    assert not lines_of(options, sku_id="A", mechanism=Mechanism.BOGO)  # BOGO is 50% deep
+    assert max(line.depth_pct for line in limited) == 15
+    # The other SKUs keep every depth.
+    assert 50 in {line.depth_pct for line in lines_of(options, sku_id="D")}
+
+
+def test_a_sku_limit_keeps_only_the_mechanisms_it_names() -> None:
+    options = generate_options(
+        request(), context(), sku_limits=[SkuLimit(sku_id="A", mechanisms=[Mechanism.BUNDLE])]
+    )
+
+    assert {line.mechanism for line in lines_of(options, sku_id="A")} == {Mechanism.BUNDLE}
+    assert {line.mechanism for line in lines_of(options, sku_id="D")} == set(Mechanism) - {
+        Mechanism.BUNDLE
+    }
+
+
+def test_a_sku_limit_holds_where_the_sku_is_a_bundle_partner() -> None:
+    # C is A's complement: A's BUNDLE discounts C too, at the same depth.
+    planning = request(scope=SNACKS_AND_BEVERAGES)
+
+    capped = generate_options(
+        planning, context(), sku_limits=[SkuLimit(sku_id="C", max_depth_pct=15)]
+    )
+    no_bundle = generate_options(
+        planning, context(), sku_limits=[SkuLimit(sku_id="C", mechanisms=[Mechanism.PCT_OFF])]
+    )
+
+    bundles = lines_of(capped, sku_id="A", mechanism=Mechanism.BUNDLE)
+    assert {line.depth_pct for line in bundles} == {10, 15}
+    assert not lines_of(no_bundle, sku_id="A", mechanism=Mechanism.BUNDLE)
+    assert not lines_of(no_bundle, sku_id="C", mechanism=Mechanism.BUNDLE)
+
+
+def test_a_price_match_deeper_than_the_cap_is_not_offered() -> None:
+    # The competitor's ₹87.50 needs 13% off A: a 10% cap leaves no match.
+    found = gaps(("A", Region.NORTH, 87.5, True))
+
+    options = generate_options(
+        request(),
+        replace(context(), competitor_gaps=found),
+        sku_limits=[SkuLimit(sku_id="A", max_depth_pct=10)],
+    )
+
+    assert options.price_matches == ()
+    assert not lines_of(options, sku_id="A", depth_pct=13)
+
+
+@pytest.mark.parametrize(
+    ("changes", "message"),
+    [
+        (
+            {"sku_limits": [SkuLimit(sku_id="C", max_depth_pct=10)]},
+            "not in the planning request's scope: C",
+        ),
+        (
+            {"sku_ids": ["A"], "sku_limits": [SkuLimit(sku_id="B", max_depth_pct=10)]},
+            "limits a SKU the call does not keep: B",
+        ),
+        (
+            {"exclude_sku_ids": ["A"], "sku_limits": [SkuLimit(sku_id="A", max_depth_pct=10)]},
+            "both limited and left out: A",
+        ),
+        (
+            {
+                "sku_limits": [
+                    SkuLimit(sku_id="A", max_depth_pct=10),
+                    SkuLimit(sku_id="A", max_depth_pct=20),
+                ]
+            },
+            "limits a SKU twice: A",
+        ),
+        (
+            {"sku_limits": [SkuLimit(sku_id="A", max_depth_pct=60)]},
+            "loosens company policy: A's max_depth_pct 60 is above the 50% maximum discount",
+        ),
+        (
+            {
+                "mechanisms": [Mechanism.PCT_OFF],
+                "sku_limits": [
+                    SkuLimit(sku_id="A", mechanisms=[Mechanism.PCT_OFF, Mechanism.BOGO])
+                ],
+            },
+            "loosens the call: A's mechanisms name BOGO, which the call leaves out",
+        ),
+        (
+            {"sku_limits": [SkuLimit(sku_id="A", max_depth_pct=4)]},
+            "leaves A no option: leave it out with exclude_sku_ids instead",
+        ),
+        (
+            {"sku_limits": [SkuLimit(sku_id="A", mechanisms=[Mechanism.BOGO], max_depth_pct=40)]},
+            "leaves A no option: leave it out with exclude_sku_ids instead",
+        ),
+        (
+            {"sku_limits": [SkuLimit(sku_id="D", max_depth_pct=20)]},
+            "may not limit a clearance target of the brief: D",
+        ),
+    ],
+)
+def test_a_sku_limit_that_loosens_or_cannot_hold_is_refused(
+    changes: dict[str, Any], message: str
+) -> None:
+    planning = request(clearance_targets=cleared("D"))
+
+    with pytest.raises(ValueError, match=re.escape(message)):
+        generate_options(planning, context(), **changes)
+
+
+def test_a_sku_limit_needs_a_depth_or_mechanisms() -> None:
+    with pytest.raises(ValueError, match="max_depth_pct, mechanisms or both"):
+        SkuLimit(sku_id="A")
+    with pytest.raises(ValueError, match="at least 1 item"):
+        SkuLimit(sku_id="A", mechanisms=[])
+
+
+def test_narrowing_a_generated_set_by_a_bundle_partners_limit_is_exact() -> None:
+    planning = request(scope=SNACKS_AND_BEVERAGES)
+    unnarrowed = generate_options(planning, context(PathDemand()))
+    fresh = PathDemand()
+
+    for limits in (
+        [SkuLimit(sku_id="C", max_depth_pct=15)],
+        [SkuLimit(sku_id="C", mechanisms=[Mechanism.PCT_OFF, Mechanism.FIXED_PRICE])],
+    ):
+        narrowed = generate_options(
+            planning, context(fresh), unnarrowed=unnarrowed, sku_limits=limits
+        )
+        assert_same_options(
+            narrowed, generate_options(planning, context(PathDemand()), sku_limits=limits)
+        )
+    assert fresh.predicted == []

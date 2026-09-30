@@ -468,7 +468,7 @@ async def test_feedback_the_llm_cannot_word_falls_back_to_the_template(
     assert run.route == loops(1)
     [finding] = run.state.attempts[0].findings
     assert isinstance(finding, RiskFinding)
-    assert finding.feedback.startswith("Leave SKU0001 out with generate_candidates'")
+    assert finding.feedback.startswith("Cap SKU0001's depth below ")
     assert check_numeric_grounding(finding.feedback, finding.message).grounded
 
 
@@ -747,7 +747,10 @@ async def test_the_risk_thresholds_come_from_the_graph_tools(
 def test_the_critic_prompt_is_versioned() -> None:
     from promopilot.agents.critic import critic_prompt
 
-    assert critic_prompt().startswith("<!-- prompt: critic v2")
+    prompt = critic_prompt()
+    assert prompt.startswith("<!-- prompt: critic v3")
+    assert "sku_limits" in prompt  # the levers it names (ADR 0084)
+    assert "cannot choose a mechanism or depth" not in prompt
 
 
 # The planner acts on a finding with the tools (ADR 0059).
@@ -832,3 +835,84 @@ async def test_a_finding_goes_away_when_the_next_attempt_leaves_its_sku_out(
     assert fixed.plan.objective is not None
     assert 0.06 < 1 - fixed.plan.objective / flagged.plan.objective < 0.07
     assert snapshot.values.plan == flagged.plan
+
+
+async def test_a_finding_goes_away_when_the_next_attempt_caps_its_skus_depth(
+    data: InMemoryRetailData,
+    small_models: tuple[DemandModel, Relations],
+    request_read: PlanningRequest,
+) -> None:
+    # On the small world, SKU0008 at 20% off takes 80.9% of the plan's promo spend: over a
+    # 60% limit for one line. At most 10% off it takes 54.8%, and stays in the plan
+    # (ADR 0084). The safety margin (ADR 0080) prices promo cost at P90, so the capped line
+    # keeps more than half of a smaller plan. The tools compute every number; the LLM only
+    # chooses the calls.
+    store = CandidateStore()
+    demand = Fixed((entry(ModelKind.DEMAND, 1), small_models[0]))
+    relations = Fixed((entry(ModelKind.RELATIONS, 1), small_models[1]))
+    week = fixed_as_of_week(HISTORY_WEEKS)
+    registry = ToolRegistry(
+        [
+            get_competitor_gaps_tool(data, week, policy=FREE),
+            generate_candidates_tool(demand, relations, data, week, policy=FREE, store=store),
+            run_optimizer_tool(store, policy=FREE, settings=SolverSettings(), seed=0),
+        ]
+    )
+    capped = [{"sku_id": "SKU0008", "max_depth_pct": 10}]
+
+    async def preview(**changes: Any) -> UUID:
+        arguments = {"request": request_read.model_dump(mode="json"), **changes}
+        result = await registry.call("generate_candidates", arguments)
+        assert isinstance(result, ToolOk), result
+        assert isinstance(result.output, GenerateCandidatesOutput)
+        return result.output.candidate_set_id
+
+    first, second = await preview(), await preview(sku_limits=capped)
+    llm_down: BaseModel | Exception = LLMError("the Critic's LLM is down")
+    llm = FakeProvider(
+        [
+            READING,
+            generate(request_read),
+            call("run_optimizer", candidate_set_id=str(first)),
+            finish(),
+            llm_down,
+            generate(request_read, sku_limits=capped),
+            call("run_optimizer", candidate_set_id=str(second)),
+            finish(),
+            explainer_down(),
+        ]
+    )
+    graph_tools = GraphTools(
+        brief_data=data,
+        planner=planner_of(small_models, data),
+        sessions=Saved(),
+        policy=FREE,
+        agent=AgentTools(
+            tools=registry,
+            revisions=StoredRevisions(store, planner_of(small_models, data)),
+            sleep=Sleeps(),
+        ),
+        # The capped plan gives up 12.9% of the objective: within this tolerance (ADR 0078).
+        risk_thresholds=RiskThresholds(line_spend_share=0.6, objective_tolerance=0.15),
+        trace=MemoryTrace(),
+    )
+    graph = build_graph(graph_tools, llm, InMemorySaver(serde=checkpoint_serializer()))
+    session_id = uuid4()
+
+    route = await start_planning(graph, str(session_id), session_id, BRIEF)
+
+    assert route == loops(1)
+    snapshot = await graph_state(graph, str(session_id))
+    assert snapshot is not None
+    flagged, fixed = snapshot.values.attempts
+    [finding] = flagged.findings
+    assert isinstance(finding, RiskFinding)
+    assert (finding.code, finding.sku_id) == (RiskCode.OVER_CONCENTRATION, "SKU0008")
+    assert "(PCT_OFF at 20%)" in finding.message
+    assert "cap SKU0008's depth below 20% with generate_candidates' sku_limits" in finding.feedback
+    assert fixed.findings == ()
+    [before] = [line.line for line in flagged.plan.lines if line.line.sku_id == "SKU0008"]
+    [after] = [line.line for line in fixed.plan.lines if line.line.sku_id == "SKU0008"]
+    assert before.depth_pct == 20
+    assert after.depth_pct <= 10  # still promoted, more gently: not left out
+    assert snapshot.values.plan == fixed.plan

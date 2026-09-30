@@ -12,7 +12,9 @@ built in process from the stored candidate set (`StoredRevisions`), never from t
   caps, the KVI price tolerance, the promoted-SKU cap), never the brief's constraints: a call
   that loosens them is refused as `invalid_input` before it reaches the tool. An analysis
   (`compare_mechanisms`) may narrow the scope, as its result cannot change the plan; to plan
-  fewer SKUs, the LLM leaves them out with `generate_candidates`' `exclude_sku_ids` (ADR 0059).
+  fewer SKUs, the LLM leaves them out with `generate_candidates`' `exclude_sku_ids` (ADR 0059),
+  and to promote a SKU more gently it caps its depth or mechanisms with `sku_limits`, which
+  the tool refuses when they would loosen anything (ADR 0084).
 - If the LLM fails after its retries and fallback provider (a mid-round failure restarts the
   conversation once, ADR 0027), replay has no cassette, or no optimiser plan is reached within
   the step and tool-call limits, the deterministic default sequence plans instead (SF-03).
@@ -336,7 +338,9 @@ class _Planner:
                 "Pass the planning request as given; only regional_budget_caps, "
                 "kvi_price_tolerance and max_promoted_skus_per_category_per_region may be added "
                 "or tightened. To plan fewer SKUs, keep the scope and pass generate_candidates' "
-                "exclude_sku_ids (SKUs to leave out) or sku_ids (the only SKUs to keep)."
+                "exclude_sku_ids (SKUs to leave out) or sku_ids (the only SKUs to keep); to "
+                "promote a SKU more gently, pass its sku_limits (a lower max_depth_pct or fewer "
+                "mechanisms)."
             ),
         )
 

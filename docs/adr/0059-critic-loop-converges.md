@@ -20,6 +20,7 @@ We chose these with the owner (D1–D7 on #135; every recommended option).
     - a clearance target of the brief, which would make the plan infeasible.
   - It only removes options, so the LLM can only tighten the plan with it, and `loosening()` does not look at it. The candidate set id covers it, like every other argument.
   - We rejected per-(SKU, region) pairs. They are more precise (SKU0006 is flagged only in West) but add a new argument shape, and the issue named a SKU list. We also rejected letting a clearance target be left out and the solver report the plan infeasible, which wastes an attempt.
+  - **Amended by ADR 0084:** exclusion is no longer the only lever for one SKU. `sku_limits` caps a SKU's depth or mechanisms instead, only ever tightening, and keeps it in the plan.
 - **D2. An analysis may narrow the scope; planning may not.**
   - `loosening(given, proposed, *, scope_may_narrow=False)` lets a proposed scope covering only the given regions, categories and SKUs through when `scope_may_narrow` is set. A wider scope is "widens scope".
   - The planner sets it for `compare_mechanisms` only (`ANALYSES`). A test proves its comparison is the same for the full scope and for a scope narrowed to its SKU and region: cannibalisation and halo reach the whole catalogue, and the tool already narrows to one region. A narrowing that leaves out a clearance target's SKU gets the tool's existing `invalid_input`.
@@ -41,6 +42,7 @@ We chose these with the owner (D1–D7 on #135; every recommended option).
   - The mechanism-and-depth hint is gone.
   - The prompts change. Critic v2 lists the levers the planner actually has. Planner v3 says to drop a SKU with `exclude_sku_ids` (never by listing the others in `sku_ids`) and that the planner cannot choose one SKU's mechanism or depth. It also says `compare_mechanisms` compares the SKU and region it names, may take a narrowed scope, and does not change the plan.
   - We rejected template-only feedback, which drops the Critic's LLM call. It is cheaper and fully deterministic, but it departs from SPEC §9.6 and ADR 0051 D1.
+  - **Amended by ADR 0084:** a SKU's finding message names its mechanism and depth, and its feedback leads with capping the depth below it with `sku_limits`, then leaving the SKU out. The prompts are planner v4 and critic v3.
 - **D6. Cost: the worst case stands, and the typical case falls.**
   - ADR 0051 D9's worst case (4 different attempts: about ₹16 on `gpt-4.1-mini`, about ₹88 if the `claude-sonnet-5` fallback answers every step) is unchanged.
   - A round whose findings repeat now stops after 2 attempts. In the #51 recording, e2e's planner input was about 15k tokens for attempt 1 and about 80k for each later attempt. So a live session drops from about 255k to about 95k planner input tokens. Narrowed `compare_mechanisms` calls no longer cost a refused step.

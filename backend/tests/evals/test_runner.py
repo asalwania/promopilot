@@ -155,6 +155,13 @@ async def test_every_final_plan_is_checked_and_scored_with_answers_and_amendment
     assert amend.revision.regions == (Region.NORTH,)
     assert [p.passed for p in amend.properties] == [True, True]
 
+    # The final plans' open issues, as the Critic left them (ADR 0084).
+    issues = metric(report, "open_issues")
+    runs = [only_run(report, name) for name in ("plain", "clarify", "amend")]
+    assert (issues.of, issues.unit) == (3, "count")
+    assert issues.count == sum(bool(run.open_issues) for run in runs)
+    assert issues.breakdown["total"] == sum(len(run.open_issues) for run in runs)
+
 
 async def test_every_scored_plan_is_compared_with_the_rule_based_baseline_and_the_best_plan(
     world: EvalWorld,

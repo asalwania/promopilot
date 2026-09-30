@@ -17,7 +17,10 @@ const GROUPS: { title: string; names: string[] }[] = [
       "grounding",
     ],
   },
-  { title: "Plan quality", names: ["plan_quality", "regret", "consistency"] },
+  {
+    title: "Plan quality",
+    names: ["plan_quality", "regret", "consistency", "open_issues"],
+  },
   {
     title: "Model recovery",
     names: [
@@ -63,8 +66,10 @@ export function metricStatus(metric: EvalMetric): MetricStatus {
 }
 
 // An amount in the metric's unit: a share as a signed percentage, a P50 in
-// seconds as a duration, and rupees with their paise (a session costs a few).
+// seconds as a duration, rupees with their paise (a session costs a few), and a
+// median count as a plain number.
 export function formatMetricAmount(metric: EvalMetric, amount: number): string {
+  if (metric.unit === "count") return String(amount);
   if (metric.unit === "seconds") return formatDuration(amount * 1000);
   if (metric.unit === "rupees") return formatPrice(amount);
   return formatShare(amount);

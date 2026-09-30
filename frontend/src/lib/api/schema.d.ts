@@ -1087,7 +1087,7 @@ export interface components {
              * @default share
              * @enum {string}
              */
-            unit: "share" | "seconds" | "rupees";
+            unit: "share" | "seconds" | "rupees" | "count";
             /** Value */
             value: number | null;
         };
@@ -1853,6 +1853,11 @@ export interface components {
              * @default 0
              */
             llm_s: number;
+            /**
+             * Open Issues
+             * @default []
+             */
+            open_issues: string[];
             oracle?: components["schemas"]["OracleScore"] | null;
             outcome: components["schemas"]["RunOutcome"];
             /**

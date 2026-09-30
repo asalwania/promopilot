@@ -20,6 +20,7 @@ from promopilot.evals.metrics import (
     check_constraints,
     check_property,
     constraint_satisfaction,
+    open_issues,
     oracle_breach_rate,
     oracle_breaches,
 )
@@ -271,3 +272,37 @@ def test_meets_clearance_holds_when_the_final_revision_has_no_shortfall_for_the_
     assert not missed.passed
     assert missed.detail == "North reaches 40.00% of a 60% target, 20 units short"
     assert not check_property(prop, asked=(), revision=None).passed
+
+
+# ---------------------------------------------------------------- open issues (ADR 0084)
+
+
+def test_open_issues_are_the_median_per_final_plan_with_the_total_by_code() -> None:
+    runs = [
+        run().model_copy(update={"open_issues": ("OVER_CONCENTRATION", "HEAVY_CANNIBALISATION")}),
+        run().model_copy(update={"open_issues": ("OVER_CONCENTRATION",)}),
+        run(),
+        run(ConstraintCheck.NO_PLAN).model_copy(update={"outcome": RunOutcome.FAILED}),
+    ]
+
+    metric = open_issues(runs)
+
+    assert metric.name == "open_issues"
+    assert metric.unit == "count"
+    assert metric.value == 1.0  # the median of 2, 1 and 0: a run with no plan is left out
+    assert (metric.count, metric.of) == (2, 3)  # final plans with an open issue
+    assert metric.target is None
+    assert metric.passed is None
+    assert metric.direction == "at_most"
+    assert metric.breakdown == {
+        "total": 3,
+        "OVER_CONCENTRATION": 2,
+        "HEAVY_CANNIBALISATION": 1,
+    }
+
+
+def test_open_issues_are_unscored_with_no_final_plan() -> None:
+    metric = open_issues([run(ConstraintCheck.NO_PLAN)])
+
+    assert metric.value is None
+    assert (metric.count, metric.of) == (0, 0)
