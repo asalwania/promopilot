@@ -27,7 +27,7 @@ from promopilot.economics import (
     gross_profit,
     incremental_profit,
 )
-from promopilot.models.response import TERM_NAMES, TERMS, PromoResponse, design
+from promopilot.models.response import MECHANISMS, TERM_NAMES, TERMS, PromoResponse, design
 
 HOLDOUT_WEEKS = 12
 """Baseline WAPE is measured on the last 12 weeks before the as-of week (SPEC §9.1)."""
@@ -501,46 +501,82 @@ class _Response:
     def line_paths(
         self, options: list[PlanLine], context: PredictionContext, baseline: _Baseline
     ) -> pd.DataFrame:
-        rows, promoted, unpromoted = self._paths(options, context, baseline)
-        paths = rows[["promo", "week_id", "sku_id", "segment", "price"]].assign(
-            units=promoted, baseline_units=unpromoted
+        grid = self._grid(options, context, baseline)
+        promoted, unpromoted = grid.units()
+        # Group on codes that sort as the names do, then name them: the same groups, in the
+        # same order and summed the same way as grouping the names (ADR 0087).
+        sku_rank = grid.sku_rank()
+        segment_rank = np.argsort(np.argsort(SEGMENTS))
+        paths = pd.DataFrame(
+            {
+                "promo": grid.option,
+                "week_id": grid.week,
+                "sku_id": sku_rank[grid.sku],
+                "segment": segment_rank[grid.segment],
+                "price": grid.cells["price"].to_numpy()[grid.cell],
+                "units": promoted,
+                "baseline_units": unpromoted,
+            }
         )
         paths = paths.groupby(["promo", "week_id", "sku_id", "segment"], sort=True).agg(
             units=("units", "sum"),
             baseline_units=("baseline_units", "sum"),
             price=("price", "first"),
         )
-        return paths.reset_index().rename(columns={"promo": "option"})
+        paths = paths.reset_index().rename(columns={"promo": "option"})
+        sku_names = np.asarray(sorted(grid.sku_ids), dtype=object)
+        segment_names = np.asarray(sorted(SEGMENTS), dtype=object)
+        return paths.assign(
+            sku_id=pd.array(sku_names[paths["sku_id"].to_numpy()], dtype="str"),
+            segment=pd.array(segment_names[paths["segment"].to_numpy()], dtype="str"),
+        )
 
     def response_rows(
         self, options: list[PlanLine], context: PredictionContext, baseline: _Baseline
     ) -> ResponseRows:
-        rows, store_baseline = self._rows(options, context, baseline)
-        in_promo = (rows["week_id"] < rows["start_week"] + rows["duration"]).to_numpy()
-        rows = rows[in_promo].reset_index(drop=True)
-        sku_ids = sorted(set(rows["sku_id"]))
-        table = rows.rename(columns={"promo": "option"}).assign(
-            unit_cost=self.products["unit_cost"].reindex(rows["sku_id"]).to_numpy(),
-            baseline_units=store_baseline[in_promo],
+        grid = self._grid(options, context, baseline)
+        rows = np.flatnonzero(grid.in_promo)
+        cell = grid.cell[rows]
+        sku_ids = np.asarray(grid.sku_ids, dtype=object)[grid.sku[rows]]
+        names = sorted(set(sku_ids))
+        table = pd.DataFrame(
+            {
+                "option": grid.option[rows],
+                "sku_id": pd.array(sku_ids, dtype="str"),
+                "anchor": grid.anchor[rows],
+                "store_id": pd.array(
+                    self.stores["store_id"].to_numpy(dtype=object)[grid.store[rows]], dtype="str"
+                ),
+                "segment": pd.array(
+                    np.asarray(SEGMENTS, dtype=object)[grid.segment[rows]], dtype="str"
+                ),
+                "week_id": grid.week[rows],
+                "price": grid.cells["price"].to_numpy()[cell],
+                "base_price": grid.cells["base_price"].to_numpy()[cell],
+                "unit_cost": self.products["unit_cost"].reindex(sku_ids).to_numpy(),
+                "baseline_units": grid.store_baseline[rows],
+            }
         )
         return ResponseRows(
             rows=table[RESPONSE_ROW_COLUMNS],
-            design=pd.DataFrame(design(rows), columns=TERM_NAMES),
-            estimate=self.model.wide("estimate").loc[sku_ids],
-            std_error=self.model.wide("std_error").loc[sku_ids],
-            dispersion=self.model.dispersion.loc[sku_ids].astype(float),
+            design=pd.DataFrame(grid.design()[cell], columns=TERM_NAMES),
+            estimate=self.model.wide("estimate").loc[names],
+            std_error=self.model.wide("std_error").loc[names],
+            dispersion=self.model.dispersion.loc[names].astype(float),
         )
 
     def predict(
         self, options: list[PlanLine], context: PredictionContext, baseline: _Baseline
     ) -> Prediction:
-        rows, promoted, unpromoted = self._paths(options, context, baseline)
-        base_price = rows["base_price"].to_numpy()
-        unit_cost = self.products["unit_cost"].reindex(rows["sku_id"]).to_numpy()
-        price = rows["price"].to_numpy()
-        option = rows["promo"].to_numpy()
-        anchor = rows["anchor"].to_numpy(dtype=bool)
-        in_promo = (rows["week_id"] < rows["start_week"] + rows["duration"]).to_numpy()
+        grid = self._grid(options, context, baseline)
+        promoted, unpromoted = grid.units()
+        base_price = grid.cells["base_price"].to_numpy()[grid.cell]
+        unit_cost = self.products["unit_cost"].reindex(grid.sku_ids).to_numpy()[grid.sku]
+        price = grid.cells["price"].to_numpy()[grid.cell]
+        option = grid.option
+        anchor = grid.anchor
+        in_promo = grid.in_promo
+        everywhere = np.full(len(option), True)
 
         def total(values: np.ndarray, where: np.ndarray) -> np.ndarray:
             return np.bincount(option[where], weights=values[where], minlength=len(options))
@@ -556,9 +592,12 @@ class _Response:
             ]
         )
         partner = ~anchor & in_promo
+        design_matrix = grid.design()
 
         def std(where: np.ndarray) -> np.ndarray:
-            variance = self.model.variance(rows[where], promoted[where], option[where])
+            variance = self.model.variance(
+                grid.skus(where), design_matrix[grid.cell[where]], promoted[where], option[where]
+            )
             return np.sqrt(np.pad(variance, (0, len(options) - len(variance))))
 
         discount = (base_price - price) * promoted
@@ -574,10 +613,8 @@ class _Response:
                 "margin": np.divide(profit, revenue, out=np.zeros_like(profit), where=revenue > 0),
                 "promo_cost": total(discount, in_promo) + fixed,
                 "incremental_profit": incremental_profit(
-                    total(gross_profit(promoted, price, unit_cost), np.full(len(rows), True)),
-                    total(
-                        gross_profit(unpromoted, base_price, unit_cost), np.full(len(rows), True)
-                    ),
+                    total(gross_profit(promoted, price, unit_cost), everywhere),
+                    total(gross_profit(unpromoted, base_price, unit_cost), everywhere),
                     fixed,
                 ),
                 "anchor_discount_funding": total(discount, counted),
@@ -588,29 +625,149 @@ class _Response:
             },
             columns=OPTION_COLUMNS,
         )
-        return Prediction(
-            options=table,
-            segments=self._by_segment(rows[counted], promoted[counted], unpromoted[counted]),
+        groups = option[counted] * len(SEGMENTS) + grid.segment[counted]
+        size = int(groups.max()) + 1 if len(groups) else 0
+        segments = pd.DataFrame(
+            {
+                "option": np.arange(size) // len(SEGMENTS),
+                "segment": [SEGMENTS[g % len(SEGMENTS)] for g in range(size)],
+                "units": np.bincount(groups, weights=promoted[counted], minlength=size),
+                "units_std": np.sqrt(
+                    self.model.variance(
+                        grid.skus(counted),
+                        design_matrix[grid.cell[counted]],
+                        promoted[counted],
+                        groups,
+                    )
+                ),
+                "baseline_units": np.bincount(groups, weights=unpromoted[counted], minlength=size),
+            }
+        )
+        return Prediction(options=table, segments=segments)
+
+    def _grid(
+        self, options: list[PlanLine], context: PredictionContext, baseline: _Baseline
+    ) -> "_Grid":
+        """Every store x segment week of each option's SKUs, through the pull-forward weeks.
+
+        Rows run option, SKU (the anchor, then a BUNDLE's partner), week, store and segment,
+        as a merge of the promotions with the weeks, the region's stores and the segments
+        lists them. What a row's promo response reads does not depend on the store, so it is
+        computed once per option, SKU, week and segment (a cell), and the baseline is
+        forecast once per store x SKU x segment week (ADR 0087).
+        """
+        self._check(options)
+        sku_ids = list(self.products.index)
+        series = _Series.of(options, sku_ids, self.products["base_price"].to_numpy(dtype=float))
+        segments = len(SEGMENTS)
+
+        # Cells: each series' weeks, then its segments.
+        weeks = np.minimum(series.end + PULL_FORWARD_WEEKS, self.last_week + 1) - series.start
+        series_of_week = np.repeat(np.arange(len(series.sku)), weeks)
+        week = series.start[series_of_week] + _ranks(weeks)
+        of = np.repeat(series_of_week, segments)
+        cell_week = np.repeat(week, segments)
+        cell_segment = np.tile(np.arange(segments), len(week))
+        targeted = (series.target[of] < 0) | (series.target[of] == cell_segment)
+        exposed = targeted & (cell_week < series.end[of])
+        # The share of the four weeks before each week the series was promoted (ADR 0016).
+        promoted_before = np.minimum(cell_week, series.end[of]) - np.maximum(
+            cell_week - PULL_FORWARD_WEEKS, series.start[of]
+        )
+        share = np.where(targeted, np.maximum(promoted_before, 0), 0) / PULL_FORWARD_WEEKS
+        reference, competitor = self._competitor_terms(context, series, sku_ids)
+        cells = pd.DataFrame(
+            {
+                "sku_id": pd.Categorical.from_codes(series.sku[of], categories=pd.Index(sku_ids)),
+                "segment": pd.Categorical.from_codes(cell_segment, categories=pd.Index(SEGMENTS)),
+                "price": np.where(exposed, series.promo_price[of], series.base_price[of]),
+                "base_price": series.base_price[of],
+                "mechanism": pd.Categorical.from_codes(
+                    np.where(exposed & series.anchor[of], series.mechanism[of], -1),
+                    categories=pd.Index(MECHANISMS),
+                ),
+                "pull_forward_share": share.astype(float),
+                "reference_index": reference[of],
+                "competitor_price": competitor[of],
+            }
         )
 
-    def _paths(
-        self, options: list[PlanLine], context: PredictionContext, baseline: _Baseline
-    ) -> tuple[pd.DataFrame, np.ndarray, np.ndarray]:
-        """Every store x segment week of each option's SKUs, through the pull-forward weeks,
-        with the units it sells promoted and unpromoted."""
-        rows, store_baseline = self._rows(options, context, baseline)
-        plain = _with_ratios(
-            rows.assign(price=rows["base_price"], mechanism=None, pull_forward_share=0.0)
-        )
-        promoted = store_baseline * np.exp(self.model.log_effect(rows))
-        unpromoted = store_baseline * np.exp(self.model.log_effect(plain))
-        return rows, promoted, unpromoted
+        # Rows: each week's cells once per store of the region, the stores in table order.
+        stores = self.stores.reset_index(drop=True)
+        by_region = [
+            np.flatnonzero(stores["region"].to_numpy(dtype=object) == name)
+            for name in series.regions
+        ]
+        store_count = np.array([len(positions) for positions in by_region], dtype=np.int64)
+        region_of_week = series.region[series_of_week]
+        week_of_row = np.repeat(np.arange(len(week)), store_count[region_of_week] * segments)
+        within = _ranks(store_count[region_of_week] * segments)
+        slot, segment = within // segments, within % segments
+        store = np.zeros(len(within), dtype=np.int64)
+        for code, positions in enumerate(by_region):
+            at = region_of_week[week_of_row] == code
+            store[at] = positions[slot[at]]
+        series_of_row = series_of_week[week_of_row]
 
-    def _rows(
-        self, options: list[PlanLine], context: PredictionContext, baseline: _Baseline
-    ) -> tuple[pd.DataFrame, np.ndarray]:
-        """Every store x segment week of each option's SKUs, through the pull-forward weeks,
-        with its price terms and the store's baseline at the reference competitor index."""
+        # The baseline once per store x SKU x segment week, at the series' reference index:
+        # the distinct region x SKU weeks, each with its region's stores and the segments.
+        week_key = (region_of_week * len(sku_ids) + series.sku[series_of_week]) * (
+            self.last_week + 1
+        ) + week
+        _, first_week, distinct_week = np.unique(week_key, return_index=True, return_inverse=True)
+        distinct_week = distinct_week.ravel()
+        distinct_rows = store_count[region_of_week[first_week]] * segments
+        offset = np.cumsum(distinct_rows) - distinct_rows
+        key_week = np.repeat(first_week, distinct_rows)
+        key_within = _ranks(distinct_rows)
+        key_store = np.zeros(len(key_week), dtype=np.int64)
+        for code, positions in enumerate(by_region):
+            at = region_of_week[key_week] == code
+            key_store[at] = positions[key_within[at] // segments]
+        keys = pd.DataFrame(
+            {
+                "week_id": week[key_week],
+                "store_id": stores["store_id"].to_numpy(dtype=object)[key_store],
+                "sku_id": np.asarray(sku_ids, dtype=object)[series.sku[series_of_week[key_week]]],
+                "segment": np.asarray(SEGMENTS, dtype=object)[key_within % segments],
+            }
+        )
+        forecast = baseline.predict(keys, competitor_index=reference[series_of_week[key_week]])
+        return _Grid(
+            model=self.model,
+            sku_ids=sku_ids,
+            option=series.option[series_of_row],
+            anchor=series.anchor[series_of_row],
+            in_promo=week[week_of_row] < series.end[series_of_row],
+            week=week[week_of_row],
+            sku=series.sku[series_of_row],
+            segment=segment,
+            store=store,
+            cell=week_of_row * segments + segment,
+            cells=_with_ratios(cells),
+            store_baseline=forecast[offset[distinct_week[week_of_row]] + within],
+        )
+
+    def _competitor_terms(
+        self, context: PredictionContext, series: "_Series", sku_ids: list[str]
+    ) -> tuple[np.ndarray, np.ndarray]:
+        """Each series' reference competitor index (1 with no competitor history) and its
+        competitor price over the promo (the base price when none is known)."""
+        competitors = self._competitors(context)
+        key = pd.MultiIndex.from_arrays(
+            [
+                np.asarray(series.regions, dtype=object)[series.region],
+                np.asarray(sku_ids, dtype=object)[series.sku],
+            ]
+        )
+        reference = competitors["reference_index"].reindex(key).to_numpy(dtype=float)
+        competitor = competitors["competitor_price"].reindex(key).to_numpy(dtype=float)
+        return (
+            np.where(np.isnan(reference), 1.0, reference),
+            np.where(np.isnan(competitor), series.base_price, competitor),
+        )
+
+    def _check(self, options: list[PlanLine]) -> None:
         regions = set(self.stores["region"])
         for line in options:
             for sku_id in line.skus:
@@ -625,47 +782,137 @@ class _Response:
                 )
             if line.start_week + line.duration_weeks > self.last_week + 1:
                 raise ValueError(f"{line.sku_id} in {line.region} runs past the calendar")
-        promotions = _as_promotions(options)
-        exposure = _exposure(promotions, self.products)
-        rows = exposure[["promo", "region", "sku_id", "anchor"]].drop_duplicates()
-        rows = rows.merge(promotions[["start_week", "duration"]], left_on="promo", right_index=True)
-        rows["week_id"] = [
-            list(range(start, min(start + duration + PULL_FORWARD_WEEKS, self.last_week + 1)))
-            for start, duration in zip(rows["start_week"], rows["duration"], strict=True)
-        ]
-        rows = rows.explode("week_id").astype({"week_id": int})
-        rows = rows.merge(self.stores, on="region")
-        rows = rows.merge(pd.DataFrame({"segment": SEGMENTS}), how="cross")
-        rows = _priced(rows, exposure, ["promo", *SERIES], self.products)
-        rows = _with_reference(rows, self._competitors(context))
-        rows["competitor_price"] = rows["competitor_price"].fillna(rows["base_price"])
-        rows = _with_ratios(rows)
-        store_baseline = baseline.predict(
-            rows[KEYS], competitor_index=rows["reference_index"].to_numpy()
-        )
-        return rows, store_baseline
-
-    def _by_segment(
-        self, rows: pd.DataFrame, promoted: np.ndarray, unpromoted: np.ndarray
-    ) -> pd.DataFrame:
-        segment = rows["segment"].map({name: g for g, name in enumerate(SEGMENTS)}).to_numpy()
-        groups = rows["promo"].to_numpy() * len(SEGMENTS) + segment
-        size = int(groups.max()) + 1 if len(groups) else 0
-        return pd.DataFrame(
-            {
-                "option": np.arange(size) // len(SEGMENTS),
-                "segment": [SEGMENTS[g % len(SEGMENTS)] for g in range(size)],
-                "units": np.bincount(groups, weights=promoted, minlength=size),
-                "units_std": np.sqrt(self.model.variance(rows, promoted, groups)),
-                "baseline_units": np.bincount(groups, weights=unpromoted, minlength=size),
-            }
-        )
 
     def _competitors(self, context: PredictionContext) -> pd.DataFrame:
         competitors = self.competitors.copy()
         for (region, sku_id), price in context.competitor_prices.items():
             competitors.loc[(region.value, sku_id), "competitor_price"] = price
         return competitors
+
+
+@dataclass(frozen=True)
+class _Series:
+    """Each promo option's SKUs, the anchor then a BUNDLE's partner, as arrays of codes."""
+
+    option: np.ndarray
+    sku: np.ndarray
+    """Position in the products table."""
+    anchor: np.ndarray
+    region: np.ndarray
+    """Position in `regions`."""
+    regions: list[str]
+    start: np.ndarray
+    end: np.ndarray
+    """The first week after the promotion."""
+    target: np.ndarray
+    """The targeted segment's position in SEGMENTS, or -1 for All customers."""
+    mechanism: np.ndarray
+    """Position in MECHANISMS."""
+    base_price: np.ndarray
+    promo_price: np.ndarray
+    """The price the promotion charges for the SKU (ADR 0005)."""
+
+    @classmethod
+    def of(cls, options: list[PlanLine], sku_ids: list[str], base_prices: np.ndarray) -> "_Series":
+        sku_code = {sku_id: k for k, sku_id in enumerate(sku_ids)}
+        lines = [(n, k, line) for n, line in enumerate(options) for k in range(len(line.skus))]
+        regions = sorted({line.region.value for line in options})
+        sku = np.array([sku_code[line.skus[k]] for _, k, line in lines], dtype=np.int64)
+        mechanism = np.array(
+            [MECHANISMS.index(line.mechanism.value) for _, _, line in lines], dtype=np.int64
+        )
+        depth = np.array([line.depth_pct for _, _, line in lines], dtype=np.int64)
+        start = np.array([line.start_week for _, _, line in lines], dtype=np.int64)
+        base_price = base_prices[sku]
+        promo_price = base_price.copy()
+        for code, level in set(zip(mechanism.tolist(), depth.tolist(), strict=True)):
+            at = (mechanism == code) & (depth == level)
+            promo_price[at] = effective_unit_price(
+                Mechanism(MECHANISMS[code]), base_price[at], level
+            )
+        return cls(
+            option=np.array([n for n, _, _ in lines], dtype=np.int64),
+            sku=sku,
+            anchor=np.array([k == 0 for _, k, _ in lines], dtype=bool),
+            region=np.array(
+                [regions.index(line.region.value) for _, _, line in lines], dtype=np.int64
+            ),
+            regions=regions,
+            start=start,
+            end=start + np.array([line.duration_weeks for _, _, line in lines], dtype=np.int64),
+            target=np.array(
+                [
+                    -1
+                    if line.target_segment is TargetSegment.ALL_CUSTOMERS
+                    else SEGMENTS.index(line.target_segment.value)
+                    for _, _, line in lines
+                ],
+                dtype=np.int64,
+            ),
+            mechanism=mechanism,
+            base_price=base_price,
+            promo_price=promo_price,
+        )
+
+
+@dataclass(frozen=True)
+class _Grid:
+    """Promo options' store x segment weeks as arrays, with their response read off cells.
+
+    A cell is an option's SKU, week and segment: everything its promo response reads (price,
+    mechanism, pull-forward share, competitor terms) is the same in every store, so it is
+    computed once per cell and each row reads its cell's. Each row's numbers are the ones
+    computed row by row, and every total adds the rows in the same order (ADR 0087).
+    """
+
+    model: PromoResponse
+    sku_ids: list[str]
+    """SKU codes' names: the products in table order."""
+    option: np.ndarray
+    anchor: np.ndarray
+    in_promo: np.ndarray
+    week: np.ndarray
+    sku: np.ndarray
+    segment: np.ndarray
+    """Each row's position in SEGMENTS."""
+    store: np.ndarray
+    """Each row's position in the stores table."""
+    cell: np.ndarray
+    cells: pd.DataFrame
+    """Per cell: sku_id, segment, price, base_price, mechanism, pull_forward_share,
+    reference_index, competitor_price and the price ratios (`_with_ratios`)."""
+    store_baseline: np.ndarray
+    """Each row's store baseline at the series' reference competitor index."""
+
+    def units(self) -> tuple[np.ndarray, np.ndarray]:
+        """Each row's units promoted, and with no promotion."""
+        plain = _with_ratios(
+            self.cells.assign(
+                price=self.cells["base_price"], mechanism=None, pull_forward_share=0.0
+            )
+        )
+        promoted = self.store_baseline * np.exp(self.model.log_effect(self.cells))[self.cell]
+        unpromoted = self.store_baseline * np.exp(self.model.log_effect(plain))[self.cell]
+        return promoted, unpromoted
+
+    def design(self) -> np.ndarray:
+        """Each cell's covariate for each term (`design`); a row's is its cell's."""
+        return design(self.cells)
+
+    def skus(self, where: np.ndarray) -> "pd.Categorical[str]":
+        """The SKUs of the rows `where` selects."""
+        return pd.Categorical.from_codes(self.sku[where], categories=pd.Index(self.sku_ids))
+
+    def sku_rank(self) -> np.ndarray:
+        """Each SKU code's position among the SKU names sorted."""
+        ranks = np.argsort(np.argsort(np.asarray(self.sku_ids, dtype=str), kind="stable"))
+        return np.asarray(ranks, dtype=np.int64)
+
+
+def _ranks(counts: np.ndarray) -> np.ndarray:
+    """0, 1, ..., count - 1 for each count in turn."""
+    starts = np.cumsum(counts) - counts
+    return np.asarray(np.arange(int(counts.sum())) - np.repeat(starts, counts), dtype=np.int64)
 
 
 def _history_rows(
@@ -690,35 +937,6 @@ def _history_rows(
     rows = _with_ratios(rows.merge(prices, on=["week_id", "region", "sku_id"]))
     rows["offset"] = np.log(rows["baseline"])
     return rows
-
-
-def _as_promotions(options: list[PlanLine]) -> pd.DataFrame:
-    """Promo options as rows shaped like the promotions history, one per option."""
-    return pd.DataFrame(
-        [
-            {
-                "sku_id": line.sku_id,
-                "region": line.region.value,
-                "mechanism": line.mechanism.value,
-                "depth": line.depth_pct,
-                "start_week": line.start_week,
-                "duration": line.duration_weeks,
-                "target_segment": line.target_segment.value,
-                "bundle_sku_id": line.bundle_partner_sku_id,
-            }
-            for line in options
-        ],
-        columns=[
-            "sku_id",
-            "region",
-            "mechanism",
-            "depth",
-            "start_week",
-            "duration",
-            "target_segment",
-            "bundle_sku_id",
-        ],
-    )
 
 
 def _priced(

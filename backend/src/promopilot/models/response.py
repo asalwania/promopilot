@@ -132,24 +132,42 @@ class PromoResponse:
         """log(units / baseline) for each row."""
         return np.asarray((design(rows) * self._matrix("estimate", rows)).sum(axis=1))
 
-    def variance(self, rows: pd.DataFrame, means: np.ndarray, groups: np.ndarray) -> np.ndarray:
+    def variance(
+        self,
+        sku_ids: "pd.Categorical[str]",
+        covariates: np.ndarray,
+        means: np.ndarray,
+        groups: np.ndarray,
+    ) -> np.ndarray:
         """Variance of the summed units of each group of store-level rows.
 
-        Parameter uncertainty by the delta method, treating terms as independent normals
-        (as the simulator samples them), plus negative binomial demand noise.
+        Each row is given by its SKU, its covariates (`design`) and its mean units. Parameter
+        uncertainty by the delta method, treating terms as independent normals (as the
+        simulator samples them), plus negative binomial demand noise.
         """
         size = int(groups.max()) + 1 if len(groups) else 0
-        noise = means + means**2 / self.dispersion.loc[rows["sku_id"]].to_numpy()
-        pairs, pair_index = np.unique(
-            np.column_stack([groups, pd.factorize(rows["sku_id"])[0]]), axis=0, return_inverse=True
+        codes = np.asarray(sku_ids.codes, dtype=np.int64)
+        known = pd.Index(sku_ids.categories)
+        dispersion = self.dispersion.loc[known].to_numpy()
+        noise = means + means**2 / dispersion[codes]
+        # Each (group, SKU) pair, sorted by group then by the SKU's first appearance.
+        order = pd.factorize(codes)[0]
+        width = int(order.max()) + 1 if len(order) else 1
+        pair_keys, first, pair_index = np.unique(
+            groups * width + order, return_index=True, return_inverse=True
         )
-        gradient = np.zeros((len(pairs), len(TERMS)))
-        np.add.at(gradient, pair_index.ravel(), design(rows) * means[:, None])
-        first = np.unique(pair_index.ravel(), return_index=True)[1]
-        errors = self._matrix("std_error", rows.iloc[first])
+        pair_index = pair_index.ravel()
+        # Summed row by row in order, term by term: the same sums as np.add.at, far faster.
+        gradient = np.column_stack(
+            [
+                np.bincount(pair_index, weights=covariates[:, k] * means, minlength=len(pair_keys))
+                for k in range(len(TERMS))
+            ]
+        )
+        errors = self.wide("std_error").loc[known].to_numpy(dtype=float)[codes[first]]
         parameter = ((gradient * errors) ** 2).sum(axis=1)
         return np.asarray(
-            np.bincount(pairs[:, 0], weights=parameter, minlength=size)
+            np.bincount(pair_keys // width, weights=parameter, minlength=size)
             + np.bincount(groups, weights=noise, minlength=size)
         )
 
