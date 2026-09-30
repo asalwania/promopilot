@@ -229,6 +229,9 @@ def test_the_planning_settings_a_recording_depends_on_come_from_the_environment(
         "critic_cannibalisation_share": 0.5,
         "critic_stockout_probability": 0.1,
         "critic_objective_tolerance": 0.05,
+        "optimizer_budget_quantile": 0.9,
+        "optimizer_stock_buffer_sigmas": 2.0,
+        "optimizer_margin_quantile": 0.1,
     }
     recorded = planning.recorded()
     assert recorded.settings == planning.recorded_settings
@@ -255,7 +258,58 @@ RECORDED = (
     "critic_stockout_probability",
     # The Critic's choice of the best attempt (ADR 0078).
     "critic_objective_tolerance",
+    # The safety margin decides the plan too (ADR 0080).
+    "optimizer_budget_quantile",
+    "optimizer_stock_buffer_sigmas",
+    "optimizer_margin_quantile",
 )
+
+
+def test_plans_keep_a_safety_margin_by_default(monkeypatch: pytest.MonkeyPatch) -> None:
+    for name in RECORDED[-3:]:
+        monkeypatch.delenv(name.upper(), raising=False)
+
+    settings = Settings()
+
+    # Promo cost at its P90, units plus 2 std within stock, the margin at units' P10 (ADR 0080).
+    assert settings.optimizer_budget_quantile == 0.9
+    assert settings.optimizer_stock_buffer_sigmas == 2.0
+    assert settings.optimizer_margin_quantile == 0.1
+
+
+def test_the_safety_margin_comes_from_the_environment_and_reaches_the_solver(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("OPTIMIZER_BUDGET_QUANTILE", "0.8")
+    monkeypatch.setenv("OPTIMIZER_STOCK_BUFFER_SIGMAS", "2.5")
+    monkeypatch.setenv("OPTIMIZER_MARGIN_QUANTILE", "0.2")
+    engine = create_async_engine("postgresql+asyncpg://unused@127.0.0.1:1/unused")
+
+    solver = build_planning(Settings(), engine).solver
+
+    assert (solver.budget_quantile, solver.stock_buffer_sigmas, solver.margin_quantile) == (
+        0.8,
+        2.5,
+        0.2,
+    )
+
+
+@pytest.mark.parametrize(
+    ("name", "value"),
+    [
+        ("OPTIMIZER_BUDGET_QUANTILE", "0.4"),
+        ("OPTIMIZER_BUDGET_QUANTILE", "1"),
+        ("OPTIMIZER_STOCK_BUFFER_SIGMAS", "1"),
+        ("OPTIMIZER_MARGIN_QUANTILE", "0.6"),
+        ("OPTIMIZER_MARGIN_QUANTILE", "0"),
+    ],
+)
+def test_a_safety_margin_below_expectation_is_refused(
+    monkeypatch: pytest.MonkeyPatch, name: str, value: str
+) -> None:
+    monkeypatch.setenv(name, value)
+    with pytest.raises(ValidationError):
+        Settings()
 
 
 def test_the_api_serves_the_eval_report_make_eval_writes_by_default(

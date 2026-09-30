@@ -39,6 +39,7 @@ import pandas as pd
 
 from promopilot.competitors import CompetitorGaps
 from promopilot.domain import (
+    P90_Z,
     CompanyPolicy,
     Mechanism,
     PlanLine,
@@ -57,9 +58,6 @@ from promopilot.models.relations import (
     line_effect_totals,
     pairwise_cannibalisations,
 )
-
-P90_Z = 1.2816
-"""P90 = mean + 1.2816 x std: the normal approximation to the predicted units (ADR 0035)."""
 
 MAX_DURATION_WEEKS = 4
 DEPTHS: Mapping[Mechanism, tuple[int, ...]] = {
