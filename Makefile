@@ -100,10 +100,14 @@ test-integration: ## Backend integration tests (testcontainers; needs Docker)
 test-e2e: ## Playwright against a running stack (make dev or make up)
 	$(FRONTEND) pnpm test:e2e
 
-.PHONY: api-types
-api-types: ## Export OpenAPI and regenerate frontend API types
+.PHONY: api-types api-docs
+api-types: ## Export OpenAPI, regenerate frontend API types and the API docs (docs/api.md)
 	$(BACKEND) uv run python -m promopilot.api.openapi > ../docs/openapi.json
 	$(FRONTEND) pnpm exec openapi-typescript ../docs/openapi.json -o src/lib/api/schema.d.ts
+	$(MAKE) api-docs
+
+api-docs: ## Regenerate the API docs (docs/api.md) from the committed docs/openapi.json
+	$(BACKEND) uv run python -m tools.api_docs ../docs/openapi.json ../docs/api.md
 
 # ---------------------------------------------------------------- data + later epics
 

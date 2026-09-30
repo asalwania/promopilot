@@ -108,7 +108,7 @@ jobs:
       - run: pnpm build
 
   contract:
-    name: API contract (generated types up to date)
+    name: API contract (generated types and docs up to date)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -130,6 +130,17 @@ jobs:
       - run: make api-types
       - name: Fail if OpenAPI or generated types are stale
         run: git diff --exit-code -- docs/openapi.json frontend/src/lib/api/schema.d.ts
+      # `make api-types` also rewrote docs/api.md from the contract (ADR 0082).
+      - name: Fail if the API docs are stale
+        run: |
+          if ! git diff --exit-code -- docs/api.md; then
+            echo "::error file=docs/api.md::docs/api.md is out of date with the API contract: run make api-types and commit docs/api.md"
+            exit 1
+          fi
+          if [ -n "$(git ls-files --others --exclude-standard -- docs/api.md)" ]; then
+            echo "::error file=docs/api.md::docs/api.md is not committed: run make api-types and commit it"
+            exit 1
+          fi
 
   demo:
     name: make demo from a clean checkout (no key, Playwright)

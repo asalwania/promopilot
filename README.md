@@ -116,7 +116,8 @@ docker compose exec api python -m promopilot.models   # train and register the d
 | `make test-e2e` | Playwright against a running stack with data loaded: health, brief to plan table with the live trace, a clarifying question answered through to a plan, the demo amended twice with its diffs, and a plan approved and one rejected |
 | `make lint` / `make format` | ruff, ESLint, Prettier |
 | `make typecheck` | mypy strict, tsc strict |
-| `make api-types` | Export OpenAPI to `docs/openapi.json` and regenerate frontend types |
+| `make api-types` | Export OpenAPI to `docs/openapi.json`, regenerate the frontend types and the [API reference](docs/api.md) |
+| `make api-docs` | Regenerate only the [API reference](docs/api.md) from the committed `docs/openapi.json` |
 | `make data` | Generate the seeded synthetic dataset into `data/generated/` (Parquet) and its hidden ground truth into `data/ground_truth/`, then load the tables into Postgres (starts it if needed) |
 | `make record-cassettes` | Record every scripted session's LLM calls with a live OpenAI key; `ONLY=name` re-records one session (see [Recording cassettes](#recording-cassettes)) |
 | `make check-cassettes` | Replay every scripted session through the full agent graph from the cassettes alone, with no key |
@@ -307,6 +308,8 @@ A request asked again, in the same session or another, is answered from the cass
 
 ## API
 
+The full reference, generated from the OpenAPI contract, is **[docs/api.md](docs/api.md)** (see the end of this section). The table below is a summary.
+
 | Method | Path | Response |
 |---|---|---|
 | POST | `/api/sessions` | Start a planning session from `{"brief": "..."}` (1–2000 characters, not blank; otherwise `422`). Returns `202 {"session_id"}` at once; the session's agent graph runs in the background until it waits for a clarification or approval (ADR 0046, ADR 0048). `503` if the graph's checkpoints could not be opened |
@@ -369,7 +372,7 @@ A client over a rate limit gets `429 rate_limited` with the error schema, a sent
 
 A brief, an amendment, an answer or a reason is data, never instructions (ADR 0079). The agents' prompts carry it only as a quoted JSON string. Whatever the LLM makes of it, the tools check every call on their own: an unknown tool is `unknown_tool`, and arguments that break a tool's input schema are `invalid_input` before the tool runs, a key the schema does not declare included, at any depth. A brief value that would loosen company policy is flagged and the policy value applies, the planner may not loosen the brief's constraints, and `estimate_demand` and `simulate_plan` refuse a line deeper than the company-policy maximum discount. The integration tests in `backend/tests/integration/test_adversarial_briefs_api.py` play prompt-injection briefs through the API against an LLM scripted to obey them.
 
-Interactive docs are at http://localhost:8000/docs. The machine-readable contract is [docs/openapi.json](docs/openapi.json).
+The API reference is [docs/api.md](docs/api.md): every endpoint, its parameters, request and response bodies, error statuses and headers, and every schema with its fields and limits. It is generated from the machine-readable contract, [docs/openapi.json](docs/openapi.json), by `make api-types` (or `make api-docs` from the committed contract alone), so do not edit it by hand. CI's contract job fails when the committed page, the contract or the frontend types drift from the code, and `make test` fails when the page drifts from the committed contract (ADR 0082). Interactive docs are at http://localhost:8000/docs while the API runs.
 
 ## Evals
 
@@ -474,6 +477,7 @@ The ratio metrics (plan quality, regret, extraction, grounding, model recovery) 
 backend/    FastAPI app (src/promopilot), tests, uv project
 frontend/   Next.js App Router app, Vitest unit tests, Playwright e2e
 docs/adr/   Architecture decision records
+docs/api.md The API reference, generated from docs/openapi.json (make api-types)
 docs/agents/ Agent workflow config (issue tracker, triage labels, domain docs)
 ```
 
@@ -554,6 +558,7 @@ docs/agents/ Agent workflow config (issue tracker, triage labels, domain docs)
 - [ADR 0075: Strong substitutes are never promoted together: a hard, always-on company-policy rule on the relations model's estimated θ, at most one option per pair, region, week and segment](docs/adr/0075-never-promote-strong-substitutes-together.md)
 - [ADR 0076: An eval scenario's amendment can accept the waiting revision's relaxation, sent as the API sends it; the labels stay as stated and the accepted values replace them when scored](docs/adr/0076-eval-scenarios-accept-a-relaxation.md)
 - [ADR 0077: The performance pass reuses work within a session: one baseline forecast per region, a loop-back read off the first candidate set, each option pair priced once, and session time that ends with the session](docs/adr/0077-performance-pass-reuses-work-within-a-session.md)
+- [ADR 0082: The API docs are Markdown generated from the OpenAPI contract by a small stdlib script that `make api-types` runs, and CI fails when the committed page drifts](docs/adr/0082-api-docs-generated-from-the-contract.md)
 
 The domain glossary is [CONTEXT.md](CONTEXT.md).
 
