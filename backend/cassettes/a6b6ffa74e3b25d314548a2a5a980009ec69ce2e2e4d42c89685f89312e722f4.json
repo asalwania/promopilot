@@ -1166,7 +1166,7 @@
             "West"
           ]
         },
-        "id": "call_7mgUHOFhWcFxbfK4YbcIZVNM",
+        "id": "call_uh9r2JHg9DJ5WlIK4hm5BOIl",
         "name": "get_scope_data"
       },
       {
@@ -1181,7 +1181,7 @@
             "West"
           ]
         },
-        "id": "call_dJaP2tqA1ZDSVdtffJfXYAIX",
+        "id": "call_l9IWk8LVTuFz6SKHYgdoXVZW",
         "name": "get_inventory_status"
       },
       {
@@ -1196,7 +1196,7 @@
             "West"
           ]
         },
-        "id": "call_tkenjgAv85iEC3ZgDV9ghPki",
+        "id": "call_SWruJHyk1dfRd9wiGBD2WZpp",
         "name": "get_competitor_gaps"
       }
     ]

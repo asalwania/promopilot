@@ -21,7 +21,7 @@ grounded against the findings alone.
 """
 
 from collections import defaultdict
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from typing import Final
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -54,6 +54,23 @@ class RiskThresholds(BaseModel):
     """Cannibalisation at or above this share of a line's incremental profit is heavy."""
     stockout_probability: float = Field(default=0.20, gt=0, le=1)
     """A line that runs out in at least this share of the simulated runs is a stock-out risk."""
+    objective_tolerance: float = Field(default=0.05, ge=0, le=1)
+    """The Critic's best attempt has fewer risk findings only when it keeps its plan-time
+    objective within this share of the best objective among the attempts (ADR 0078)."""
+
+
+def within_objective_tolerance(
+    objectives: Sequence[float | None], tolerance: float
+) -> tuple[bool, ...]:
+    """For each plan-time objective, whether it is within `tolerance` (a share of the best
+    objective's size) of the best one (ADR 0078). No objective is never ruled out, and rules
+    nothing out."""
+    known = [objective for objective in objectives if objective is not None]
+    if not known:
+        return tuple(True for _ in objectives)
+    best = max(known)
+    floor = best - tolerance * abs(best)
+    return tuple(objective is None or objective >= floor for objective in objectives)
 
 
 def review_risks(

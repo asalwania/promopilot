@@ -32,16 +32,20 @@ from promopilot.evals.quality import (
     assess,
     best_plan,
     consistency,
+    default_plan,
     jaccard,
     mean_pairwise_jaccard,
     plan_quality,
     regret,
+    regret_breakdown,
     regret_metric,
     rule_based_plan,
 )
 from promopilot.evals.report import (
     BestPlanSummary,
+    DefaultPlanSummary,
     PlanQuality,
+    RegretBreakdown,
     RevisionSummary,
     RuleBasedSummary,
     RunOutcome,
@@ -100,6 +104,76 @@ def test_when_the_best_plan_earns_nothing_matching_it_is_no_regret_and_losing_is
     assert regret(best=0.0, ours=-500.0) == 1.0
     assert regret(best=-300.0, ours=-300.0) == 0.0
     assert regret(best=-300.0, ours=-400.0) == 1.0
+
+
+# ---------------------------------------------------------------- regret by cause (ADR 0078)
+
+OPT, FEAS, INF = SolveStatus.OPTIMAL, SolveStatus.FEASIBLE, SolveStatus.INFEASIBLE
+
+
+def breakdown(
+    best: float,
+    default: float,
+    ours: float,
+    statuses: tuple[SolveStatus, SolveStatus, SolveStatus] = (OPT, OPT, OPT),
+) -> RegretBreakdown | None:
+    best_status, default_status, ours_status = statuses
+    return regret_breakdown(
+        best=best,
+        default=default,
+        ours=ours,
+        best_status=best_status,
+        default_status=default_status,
+        ours_status=ours_status,
+    )
+
+
+def test_regret_splits_into_model_error_and_the_planners_choices() -> None:
+    # Best ₹100k, the default sequence on the fitted models ₹80k, ours ₹50k: regret 50%, of
+    # which (100 - 80) / 100 = 20% is model error and (80 - 50) / 100 = 30% the planner's.
+    parts = breakdown(best=100_000.0, default=80_000.0, ours=50_000.0)
+
+    assert parts == RegretBreakdown(model_error=0.20, planner=0.30, timeouts=0.0)
+
+
+def test_the_parts_are_signed_and_sum_to_the_regret() -> None:
+    # The planner beat the default sequence, and the fitted models beat the best plan.
+    parts = breakdown(best=100_000.0, default=110_000.0, ours=120_000.0)
+
+    assert parts is not None
+    assert parts.model_error == pytest.approx(-0.10)
+    assert parts.planner == pytest.approx(-0.10)
+    total = parts.model_error + parts.planner + parts.timeouts
+    assert total == pytest.approx(regret(best=100_000.0, ours=120_000.0))
+
+
+@pytest.mark.parametrize(
+    ("statuses", "expected"),
+    [
+        # The best plan timed out: the model-error part is the timeout's.
+        ((FEAS, OPT, OPT), (0.0, 0.30, 0.20)),
+        # Ours timed out: the planner part is.
+        ((OPT, OPT, FEAS), (0.20, 0.0, 0.30)),
+        # The default sequence timed out: both parts are.
+        ((OPT, FEAS, OPT), (0.0, 0.0, 0.50)),
+        ((FEAS, OPT, FEAS), (0.0, 0.0, 0.50)),
+    ],
+    ids=["best", "ours", "default", "best_and_ours"],
+)
+def test_a_part_whose_either_plan_timed_out_is_the_timeouts(
+    statuses: tuple[SolveStatus, SolveStatus, SolveStatus], expected: tuple[float, ...]
+) -> None:
+    parts = breakdown(best=100_000.0, default=80_000.0, ours=50_000.0, statuses=statuses)
+
+    assert parts is not None
+    assert (parts.model_error, parts.planner, parts.timeouts) == pytest.approx(expected)
+
+
+def test_there_is_no_breakdown_when_the_best_plan_earns_nothing_or_a_side_is_infeasible() -> None:
+    assert breakdown(best=0.004, default=0.0, ours=0.0) is None
+    assert breakdown(best=-500.0, default=-100.0, ours=-800.0) is None
+    assert breakdown(best=100.0, default=80.0, ours=50.0, statuses=(INF, OPT, OPT)) is None
+    assert breakdown(best=100.0, default=80.0, ours=50.0, statuses=(OPT, INF, OPT)) is None
 
 
 # ---------------------------------------------------------------- the rule-based baseline
@@ -268,9 +342,18 @@ def test_a_scope_naming_skus_ranks_only_those() -> None:
 # ---------------------------------------------------------------- the three metrics
 
 
-def quality(ours: float, rule_based: float, best: float | None) -> PlanQuality:
+def quality(
+    ours: float,
+    rule_based: float,
+    best: float | None,
+    *,
+    default: float | None = None,
+    best_status: SolveStatus = SolveStatus.OPTIMAL,
+    ours_status: SolveStatus = SolveStatus.OPTIMAL,
+) -> PlanQuality:
     return assess(
         objective=ours,
+        status=ours_status,
         rule_based=RuleBasedSummary(
             sku_ids=("A",),
             dropped_sku_ids=(),
@@ -279,10 +362,16 @@ def quality(ours: float, rule_based: float, best: float | None) -> PlanQuality:
             objective=rule_based,
         ),
         best=BestPlanSummary(
-            solver_status=SolveStatus.OPTIMAL if best is not None else SolveStatus.INFEASIBLE,
+            solver_status=best_status if best is not None else SolveStatus.INFEASIBLE,
             lines=1,
             sku_ids=("A",),
             objective=best,
+        ),
+        default=DefaultPlanSummary(
+            solver_status=SolveStatus.OPTIMAL,
+            lines=1,
+            sku_ids=("A",),
+            objective=ours if default is None else default,
         ),
     )
 
@@ -320,6 +409,16 @@ def test_a_run_beats_ties_or_loses_to_the_baseline_by_more_than_a_paisa() -> Non
     assert quality(100.0, 50.0, None).regret is None
 
 
+def test_a_scored_run_carries_its_breakdown_and_which_plans_timed_out() -> None:
+    q = quality(50.0, 0.0, 100.0, default=80.0)
+
+    assert q.breakdown == RegretBreakdown(model_error=0.20, planner=0.30, timeouts=0.0)
+    assert q.timed_out == ()
+    timed_out = quality(50.0, 0.0, 100.0, best_status=FEAS, ours_status=FEAS)
+    assert timed_out.timed_out == ("best", "ours")
+    assert quality(50.0, 0.0, None).breakdown is None
+
+
 def test_plan_quality_is_the_share_of_scenarios_whose_every_scored_run_beats_the_baseline() -> None:
     metric = plan_quality(
         [
@@ -344,6 +443,9 @@ def test_regret_is_the_median_over_scored_runs_against_at_most_10_percent() -> N
         planned(4, quality(92, 0, 100)),  # 8%
         planned(5, quality(92, 0, None)),  # the best plan is infeasible
         planned(6, None),
+        # The best plan timed out: a win against it is not a win (#157, ADR 0078).
+        planned(7, quality(900, 0, 100, best_status=FEAS)),
+        planned(8, quality(0, 0, 100, best_status=FEAS)),
     ]
 
     metric = regret_metric(runs)
@@ -351,7 +453,30 @@ def test_regret_is_the_median_over_scored_runs_against_at_most_10_percent() -> N
     assert metric.value == pytest.approx((0.05 + 0.08) / 2)
     assert (metric.count, metric.of) == (3, 4)
     assert (metric.target, metric.direction, metric.passed) == (0.10, "at_most", True)
-    assert metric.breakdown == {"best_infeasible": 1}
+    assert metric.breakdown == {
+        "best_infeasible": 1,
+        "best_timed_out": 2,
+        "largest_model_error": 1,
+        "largest_planner": 0,
+        "largest_timeouts": 0,
+    }
+
+
+def test_the_regret_metric_counts_the_largest_part_of_each_run_over_the_target() -> None:
+    runs = [
+        planned(1, quality(50, 0, 100, default=60)),  # model 40%, planner 10%
+        planned(2, quality(50, 0, 100, default=90)),  # model 10%, planner 40%
+        planned(3, quality(50, 0, 100, default=95, ours_status=FEAS)),  # timeouts 45%
+        planned(4, quality(95, 0, 100)),  # within the target
+    ]
+
+    metric = regret_metric(runs)
+
+    assert {k: v for k, v in metric.breakdown.items() if k.startswith("largest")} == {
+        "largest_model_error": 1,
+        "largest_planner": 1,
+        "largest_timeouts": 1,
+    }
 
 
 def test_consistency_is_the_mean_scenario_jaccard_and_needs_two_runs() -> None:
@@ -431,26 +556,41 @@ async def test_the_best_plan_beats_the_plan_the_fitted_models_choose(world: Eval
         return world.oracle.evaluate(plan, SMALL_AS_OF, FREE).objective
 
     assert true(best.plan) > true(fitted.plan)
+    # The default plan is exactly that: the default sequence on the fitted models.
+    default = await default_plan(SNACKS_NORTH, world=world, settings=SETTINGS, seed=1, policy=FREE)
+    assert default.plan == fitted.plan
+    assert default.status is fitted.status
 
 
 async def test_both_plans_are_computed_once_per_seed_and_request(
     world: EvalWorld, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    calls: list[int] = []
-    real = quality_module.best_plan
+    calls: list[tuple[str, int]] = []
+    real_best, real_default = quality_module.best_plan, quality_module.default_plan
 
-    async def counted(*args: Any, **kwargs: Any) -> OptimisationResult:
-        calls.append(kwargs["seed"])
-        return await real(*args, **kwargs)
+    async def counted_best(*args: Any, **kwargs: Any) -> OptimisationResult:
+        calls.append(("best", kwargs["seed"]))
+        return await real_best(*args, **kwargs)
 
-    monkeypatch.setattr(quality_module, "best_plan", counted)
+    async def counted_default(*args: Any, **kwargs: Any) -> OptimisationResult:
+        calls.append(("default", kwargs["seed"]))
+        return await real_default(*args, **kwargs)
+
+    monkeypatch.setattr(quality_module, "best_plan", counted_best)
+    monkeypatch.setattr(quality_module, "default_plan", counted_default)
     benchmarks = Benchmarks(world, SETTINGS, FREE)
 
-    first = await benchmarks.assess(SNACKS_NORTH, 1, objective=100.0)
-    second = await benchmarks.assess(SNACKS_NORTH, 1, objective=50.0)
+    first = await benchmarks.assess(SNACKS_NORTH, 1, objective=100.0, status=SolveStatus.OPTIMAL)
+    second = await benchmarks.assess(SNACKS_NORTH, 1, objective=50.0, status=SolveStatus.OPTIMAL)
 
-    assert calls == [1]
+    assert sorted(calls) == [("best", 1), ("default", 1)]
     assert first.best == second.best
+    assert first.default == second.default
+    assert first.default is not None
+    assert first.breakdown is not None
+    assert first.regret is not None
+    parts = first.breakdown
+    assert parts.model_error + parts.planner + parts.timeouts == pytest.approx(first.regret)
     assert first.rule_based == second.rule_based
     assert first.best.objective is not None
     assert first.regret == pytest.approx(regret(first.best.objective, 100.0))

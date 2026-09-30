@@ -1161,8 +1161,6 @@
     "tool_calls": [
       {
         "arguments": {
-          "exclude_sku_ids": null,
-          "mechanisms": null,
           "request": {
             "as_of_week": 104,
             "clearance_targets": [
@@ -1184,7 +1182,7 @@
               "start_week": 108
             },
             "regional_budget_caps": {
-              "North": 30000
+              "North": 31464
             },
             "scope": {
               "categories": [
@@ -1196,13 +1194,9 @@
               ],
               "sku_ids": []
             }
-          },
-          "sku_ids": null,
-          "target_segments": [
-            "Families"
-          ]
+          }
         },
-        "id": "call_jdUKUlPyK1ZsaGjfojFO6dzP",
+        "id": "call_Sz3uleqNczlJgbb4dZVapNtA",
         "name": "generate_candidates"
       }
     ]
@@ -1212,7 +1206,7 @@
     {
       "input_tokens": 5295,
       "model": "gpt-4.1-mini",
-      "output_tokens": 156
+      "output_tokens": 133
     }
   ]
 }

@@ -73,105 +73,105 @@
     "temperature": 0.0
   },
   "response": {
-    "changes": "The only change from the previous plan revision is a reduction in the marketing budget from ₹8 lakh to ₹6 lakh. This budget tightening did not lead to any changes in the plan lines, their counts, or the objective and promo cost, which remain the same. The plan remains infeasible due to the clearance target for SKU0006 in North, which is just 1 unit short of the 60% sell-through target.",
+    "changes": "The only change from the previous plan revision is a reduction in the marketing budget from ₹8 lakh to ₹6 lakh. This budget tightening did not lead to any changes in plan lines, objective, or promo cost, indicating the plan was adjusted within existing constraints without altering promotional activities.",
     "rationales": [
       {
         "line": 1,
-        "rationale": "Line 1 uses a 30% fixed price discount on SKU0002 in North as it offers the best clearance value and meets the clearance target, despite a negative incremental profit; stockout risk is low at 1.5%."
+        "rationale": "Line 1 uses a 30% fixed price discount on SKU0002 in North as it offers the best clearance value and meets the clearance target, despite a negative incremental profit and a low stockout risk of 1.5%."
       },
       {
         "line": 2,
-        "rationale": "Line 2 applies a 40% percentage off on SKU0002 in West, chosen for its clearance value though it has a higher stockout probability of 6.4% and negative incremental profit, balancing volume and margin."
+        "rationale": "Line 2 applies a 40% percentage-off on SKU0002 in West, chosen for its clearance value though it has a higher stockout probability of 6.4% and negative incremental profit, balancing clearance needs with margin."
       },
       {
         "line": 3,
-        "rationale": "Line 3 selects a 50% BOGO on SKU0006 in North to meet clearance targets despite a significant negative incremental profit and a small stockout risk, as other mechanisms yield lower clearance value."
+        "rationale": "Line 3 selects a 50% BOGO on SKU0006 in North to meet clearance targets despite its negative incremental profit and low stockout risk, reflecting the binding clearance constraint for this SKU and region."
       },
       {
         "line": 4,
-        "rationale": "Line 4 also uses a 50% BOGO on SKU0006 in West for clearance, accepting negative incremental profit and moderate stockout risk to maximize sell-through."
+        "rationale": "Line 4 also uses a 50% BOGO on SKU0006 in West, chosen for clearance despite negative incremental profit and a low stockout probability, supporting clearance goals in that region."
       },
       {
         "line": 5,
-        "rationale": "Line 5 offers a 20% fixed price discount on SKU0017 in North, chosen for its positive clearance value and halo effect, with zero stockout risk and moderate incremental profit loss."
+        "rationale": "Line 5 offers a 20% fixed price discount on SKU0017 in North, chosen for its positive clearance value and halo effect, with zero stockout risk and moderate negative incremental profit."
       },
       {
         "line": 6,
-        "rationale": "Line 6 applies a 20% fixed price discount on SKU0017 in West, selected for similar reasons as line 5, balancing clearance and profit with no stockout risk."
+        "rationale": "Line 6 applies a 20% fixed price discount on SKU0017 in West, selected for positive clearance value and halo, zero stockout risk, and manageable incremental profit loss."
       },
       {
         "line": 7,
-        "rationale": "Line 7 uses a 5% fixed price discount on SKU0025 in North, chosen for positive incremental profit and low stockout risk, maximizing margin with a short one-week promotion."
+        "rationale": "Line 7 uses a 5% fixed price discount on SKU0025 in North, chosen for its positive incremental profit and zero stockout risk, maximizing margin on a smaller discount."
       },
       {
         "line": 8,
-        "rationale": "Line 8 applies a 5% fixed price discount on SKU0025 in West, mirroring line 7's rationale with positive profit and zero stockout risk."
+        "rationale": "Line 8 applies a 5% fixed price discount on SKU0025 in West, selected for similar reasons as line 7, balancing profit and volume with zero stockout risk."
       },
       {
         "line": 9,
-        "rationale": "Line 9 selects a 40% percentage off on SKU0029 in North to achieve clearance and halo benefits despite negative incremental profit, with no stockout risk."
+        "rationale": "Line 9 offers a 40% percentage-off on SKU0029 in North, chosen for clearance value and halo despite negative incremental profit, with zero stockout risk, supporting volume growth."
       },
       {
         "line": 10,
-        "rationale": "Line 10 uses a 40% percentage off on SKU0029 in West for similar clearance and halo reasons as line 9, maintaining zero stockout risk."
+        "rationale": "Line 10 applies a 40% percentage-off on SKU0029 in West, selected for clearance and halo benefits, zero stockout risk, and acceptable incremental profit loss."
       },
       {
         "line": 11,
-        "rationale": "Line 11 offers a 10% fixed price discount on SKU0030 in North, chosen for a marginal positive incremental profit and zero stockout risk during a one-week promotion."
+        "rationale": "Line 11 uses a 10% fixed price discount on SKU0030 in North, chosen for a marginal positive incremental profit and zero stockout risk, optimizing margin on a small discount."
       },
       {
         "line": 12,
-        "rationale": "Line 12 applies a 5% percentage off on SKU0031 in North, selected for positive incremental profit and halo effect, with no stockout risk."
+        "rationale": "Line 12 applies a 5% percentage-off on SKU0031 in North, selected for positive incremental profit and halo effect, with zero stockout risk, enhancing profitability."
       },
       {
         "line": 13,
-        "rationale": "Line 13 uses a 5% percentage off on SKU0031 in West, mirroring line 12's rationale with positive profit and zero stockout risk."
+        "rationale": "Line 13 offers a 5% percentage-off on SKU0031 in West, chosen for similar positive profit and halo reasons as line 12, with zero stockout risk."
       },
       {
         "line": 14,
-        "rationale": "Line 14 offers a 5% fixed price discount on SKU0035 in North, chosen for its clearance value and halo despite a slight negative incremental profit, with zero stockout risk."
+        "rationale": "Line 14 uses a 5% fixed price discount on SKU0035 in North, selected for clearance value and halo despite a slight negative incremental profit, with zero stockout risk."
       },
       {
         "line": 15,
-        "rationale": "Line 15 applies a 5% fixed price discount on SKU0035 in West, selected for similar clearance and halo benefits as line 14, with no stockout risk."
+        "rationale": "Line 15 applies a 5% fixed price discount on SKU0035 in West, chosen for clearance and halo benefits, slight negative incremental profit, and zero stockout risk."
       },
       {
         "line": 16,
-        "rationale": "Line 16 uses a 25% percentage off on SKU0040 in North to meet clearance targets and gain halo benefits, accepting negative incremental profit but zero stockout risk."
+        "rationale": "Line 16 offers a 25% percentage-off on SKU0040 in North, selected for clearance and strong halo effects despite negative incremental profit, with zero stockout risk."
       },
       {
         "line": 17,
-        "rationale": "Line 17 applies a 25% percentage off on SKU0040 in West for clearance and halo reasons, balancing profit loss with no stockout risk."
+        "rationale": "Line 17 applies a 25% percentage-off on SKU0040 in West, chosen for clearance and halo benefits, negative incremental profit, and zero stockout risk."
       },
       {
         "line": 18,
-        "rationale": "Line 18 offers a 5% percentage off on SKU0041 in West, chosen for positive incremental profit and halo effect, with zero stockout risk during a one-week promotion."
+        "rationale": "Line 18 uses a 5% percentage-off on SKU0041 in West, selected for positive incremental profit and halo, with zero stockout risk, supporting margin."
       },
       {
         "line": 19,
-        "rationale": "Line 19 uses a 5% fixed price discount on SKU0049 in North, selected for strong positive incremental profit and low stockout risk, maximizing margin."
+        "rationale": "Line 19 offers a 5% fixed price discount on SKU0049 in North, chosen for strong positive incremental profit and low stockout risk, maximizing margin."
       },
       {
         "line": 20,
-        "rationale": "Line 20 applies a 5% fixed price discount on SKU0049 in West, mirroring line 19's rationale with positive profit and zero stockout risk."
+        "rationale": "Line 20 applies a 5% fixed price discount on SKU0049 in West, selected for similar strong profit and margin benefits as line 19, with zero stockout risk."
       },
       {
         "line": 21,
-        "rationale": "Line 21 offers a 5% fixed price discount on SKU0050 in North, chosen for positive incremental profit and zero stockout risk during a one-week promotion."
+        "rationale": "Line 21 uses a 5% fixed price discount on SKU0050 in North, chosen for positive incremental profit and zero stockout risk, optimizing margin on a small discount."
       },
       {
         "line": 22,
-        "rationale": "Line 22 applies a 5% fixed price discount on SKU0050 in West, selected for positive profit and zero stockout risk, complementing line 21."
+        "rationale": "Line 22 applies a 5% fixed price discount on SKU0050 in West, selected for positive incremental profit and zero stockout risk, supporting profitability."
       }
     ],
-    "summary": "This promotion plan targets Snacks and Beverages categories in the North and West regions over weeks W108 to W109, focusing on Families as the target segment. It aims to generate an expected gross profit of ₹2.9 lakh with a promotional spend of ₹1.88 lakh, but it is infeasible due to the clearance target for SKU0006 in North not being fully met, missing the 60% sell-through target by 1 unit. The plan balances various discount mechanisms, mostly fixed price and percentage off, to optimize profit while respecting company policies like a minimum margin of 15% and a maximum discount of 50%. Main risks include stockout probabilities up to 7.7% in West and some lines with negative incremental profits, especially for SKU0006 with BOGO offers."
+    "summary": "This promotion plan targets Snacks and Beverages categories in the North and West regions over weeks W108 to W109, focusing on Families as the target segment. It aims to generate an expected gross profit of ₹2.9 lakh with a promotional spend of ₹1.88 lakh, but it is infeasible due to the clearance target for SKU0006 in North not being fully met, missing the 60% sell-through target by 1 unit. The plan balances fixed price and percentage-off mechanisms, with some lines incurring negative incremental profits to meet clearance goals. Main risks include stockout probabilities up to 7.7% in West and low or negative incremental profits on some SKUs, especially SKU0006 with a high clearance constraint."
   },
   "schema_name": "ExplainerAnswer",
   "usage": [
     {
       "input_tokens": 11089,
       "model": "gpt-4.1-mini",
-      "output_tokens": 1230
+      "output_tokens": 1215
     }
   ]
 }

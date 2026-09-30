@@ -44,6 +44,7 @@ from promopilot.guardrails import (
     check_numeric_grounding,
     review_risks,
     validate_plan,
+    within_objective_tolerance,
 )
 from promopilot.llm import LLMError, LLMProvider, Message
 
@@ -136,20 +137,36 @@ def _found_issues(attempt: PlanAttempt) -> Counter[tuple[str | None, ...]]:
     )
 
 
-def best_attempt(attempts: tuple[PlanAttempt, ...]) -> PlanAttempt:
-    """The best feasible plan: fewest violations, then fewest risk findings, then the highest
-    objective; a tie goes to the later attempt."""
-    best = attempts[0]
-    for attempt in attempts[1:]:
+def best_attempt(attempts: tuple[PlanAttempt, ...], *, objective_tolerance: float) -> PlanAttempt:
+    """The best feasible plan (ADR 0051 D7, ADR 0078):
+
+    1. the fewest violations;
+    2. among those, the attempts whose plan-time objective is within `objective_tolerance`
+       (a share) of the highest one's, so fewer risk findings never cost more than that;
+    3. among those, the fewest risk findings, then the highest objective.
+
+    A tie goes to the later attempt. An attempt with no objective is never ruled out by it.
+    The tolerance's numbers are `within_objective_tolerance`'s (ADR 0049 D10)."""
+    fewest = [
+        attempt
+        for attempt in attempts
+        if not any(_counts(other)[0] < _counts(attempt)[0] for other in attempts)
+    ]
+    near = within_objective_tolerance(
+        [attempt.plan.objective for attempt in fewest], objective_tolerance
+    )
+    candidates = [attempt for attempt, kept in zip(fewest, near, strict=True) if kept]
+    best = candidates[0]
+    for attempt in candidates[1:]:
         if _at_least_as_good(attempt, best):
             best = attempt
     return best
 
 
 def _at_least_as_good(attempt: PlanAttempt, other: PlanAttempt) -> bool:
-    counts, other_counts = _counts(attempt), _counts(other)
-    if counts != other_counts:
-        return counts < other_counts
+    risks, other_risks = _counts(attempt)[1], _counts(other)[1]
+    if risks != other_risks:
+        return risks < other_risks
     objective, other_objective = attempt.plan.objective, other.plan.objective
     if objective is None or other_objective is None:
         return True

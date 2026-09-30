@@ -5,6 +5,8 @@ The JSON is `EvalReport` as it is, so `GET /api/evals/latest` (#57) can serve it
 frontend types can be generated from it.
 """
 
+import statistics
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
@@ -113,8 +115,37 @@ class BestPlanSummary(_Frozen):
     """The oracle's objective; None when the request is infeasible in truth."""
 
 
+class DefaultPlanSummary(_Frozen):
+    """The default sequence's plan for the same final request (ADR 0078): our optimiser on
+    the scenario's fitted models, as the best plan is on the true parameters."""
+
+    solver_status: SolveStatus
+    lines: int
+    sku_ids: tuple[str, ...]
+    objective: float
+    """The oracle's objective."""
+
+
+class RegretBreakdown(_Frozen):
+    """A run's regret by cause, each a signed share of the best plan's oracle objective; the
+    three sum to the regret (ADR 0078)."""
+
+    model_error: float
+    """(best - default) / best: the fitted models against the true parameters, both
+    optimised for the same request."""
+    planner: float
+    """(default - ours) / best: the planner agent's plan against the default sequence's."""
+    timeouts: float
+    """Either part whose two plans include one the solver stopped as FEASIBLE on its work
+    budget, rather than proved OPTIMAL."""
+
+
+TimedOutPlan = Literal["best", "default", "ours"]
+
+
 class PlanQuality(_Frozen):
-    """A scored final plan against the rule-based baseline and the best plan (ADR 0063)."""
+    """A scored final plan against the rule-based baseline and the best plan (ADR 0063), and
+    its regret by cause against the default sequence's plan (ADR 0078)."""
 
     objective: float
     """Our plan's oracle objective: incremental profit plus clearance value."""
@@ -127,6 +158,14 @@ class PlanQuality(_Frozen):
     plan earns nothing (a paisa or less), 0 if ours matches it and 1 if ours earns less."""
     regret_rupees: float | None
     """best - ours."""
+    default: DefaultPlanSummary | None = None
+    """None in a report written before ADR 0078."""
+    breakdown: RegretBreakdown | None = None
+    """None when the best plan earns a paisa or less, or it or the default plan is
+    infeasible."""
+    timed_out: tuple[TimedOutPlan, ...] = ()
+    """The plans the solver stopped as FEASIBLE. A run whose best plan timed out is flagged
+    and left out of the regret metric, whatever its sign."""
 
 
 class PropertyResult(_Frozen):
@@ -451,33 +490,56 @@ def _behaviour(run: RunResult) -> str:
 
 
 def _plan_quality(report: EvalReport) -> list[str]:
-    """Each scored plan against the rule-based baseline and the best plan, on the oracle's
-    objective, and each scenario's consistency (ADR 0063)."""
+    """Each scored plan against the rule-based baseline, the default plan and the best plan,
+    on the oracle's objective, its regret by cause (ADR 0078), and each scenario's
+    consistency (ADR 0063)."""
     lines = [
         "",
         "## Plan quality",
         "",
         "Oracle objective (incremental profit plus clearance value) of each scored plan, the "
-        "rule-based baseline and the best plan for its final request.",
+        "rule-based baseline, the default sequence's plan and the best plan for its final "
+        "request. Regret splits into model error (best - default) / best, the planner's "
+        "choices (default - ours) / best, and timeouts, a part whose plans include one the "
+        "solver stopped as FEASIBLE.",
         "",
-        "| Scenario | Run | Ours | Rule-based | Best | Regret | Against the baseline |",
-        "|---|---|---|---|---|---|---|",
+        "| Scenario | Run | Ours | Rule-based | Default sequence | Best | Regret | Model error "
+        "| Planner | Timeouts | Against the baseline |",
+        "|---|---|---|---|---|---|---|---|---|---|---|",
     ]
+    counted: list[PlanQuality] = []
     for scenario in report.scenarios:
         for run in scenario.runs:
             quality = run.quality
             if quality is None:
                 continue
-            rule, best = quality.rule_based, quality.best
+            rule, best, default = quality.rule_based, quality.best, quality.default
             sellers = len(rule.sku_ids) + len(rule.dropped_sku_ids)
             top = "infeasible" if best.objective is None else _rupees(best.objective)
             regret = "—" if quality.regret is None else f"{quality.regret:.1%}"
+            if quality.regret is not None and "best" in quality.timed_out:
+                regret += " (best timed out: not counted)"
+            elif quality.regret is not None:
+                counted.append(quality)
+            fallback = (
+                "—"
+                if default is None
+                else f"{_rupees(default.objective)} ({default.solver_status.value}, "
+                f"{default.lines} lines)"
+            )
+            parts = quality.breakdown
+            split = (
+                "— | — | —"
+                if parts is None
+                else f"{parts.model_error:.1%} | {parts.planner:.1%} | {parts.timeouts:.1%}"
+            )
             lines.append(
                 f"| {scenario.name} | {run.run} | {_rupees(quality.objective)} "
                 f"| {_rupees(rule.objective)} ({len(rule.sku_ids)} of {sellers} sellers kept) "
-                f"| {top} ({best.solver_status.value}, {best.lines} lines) | {regret} "
-                f"| {quality.versus_rule_based} |"
+                f"| {fallback} | {top} ({best.solver_status.value}, {best.lines} lines) "
+                f"| {regret} | {split} | {quality.versus_rule_based} |"
             )
+    lines += _regret_by_cause(counted)
     consistent = [(s.name, s.consistency) for s in report.scenarios if s.consistency is not None]
     lines.append("")
     if consistent:
@@ -488,6 +550,31 @@ def _plan_quality(report: EvalReport) -> list[str]:
             "replay provider a scenario's runs are identical: only a live LLM varies them."
         )
     return lines
+
+
+def _regret_by_cause(counted: list[PlanQuality]) -> list[str]:
+    """The median of each part over the runs the regret metric counts, and its rupees."""
+    split = [(q.breakdown, q.best.objective) for q in counted if q.breakdown is not None]
+    if not split:
+        return []
+
+    def part(name: str, share: Callable[[RegretBreakdown], float]) -> str:
+        median = statistics.median(share(parts) for parts, _ in split)
+        rupees = sum(share(parts) * (best or 0.0) for parts, best in split)
+        return f"{name} {median:.1%} ({_rupees(rupees)})"
+
+    return [
+        "",
+        f"Regret by cause over the {len(split)} counted runs (median, then ₹ in all): "
+        + ", ".join(
+            (
+                part("model error", lambda p: p.model_error),
+                part("planner", lambda p: p.planner),
+                part("timeouts", lambda p: p.timeouts),
+            )
+        )
+        + ".",
+    ]
 
 
 def _rupees(amount: float) -> str:

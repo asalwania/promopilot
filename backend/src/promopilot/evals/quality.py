@@ -12,10 +12,16 @@ request, never from anything a scenario author writes:
   promo cost, on the scenario's fitted demand model, fits the budget and every regional cap;
 - the **best plan**: our own option generation and optimiser, unchanged, on true-parameter
   predictions (`TrueForecast`, `TrueRelations`) with the session's deterministic budgets and
-  the scenario's seed, the binding analysis off.
+  the scenario's seed, the binding analysis off;
+- the **default plan**: the same, on the scenario's fitted models: the plan the default
+  sequence makes for the request (ADR 0078).
 
-The oracle scores all three on its objective, incremental profit plus clearance value
-(ADR 0005). Both plans are computed once per scenario seed and final request.
+The oracle scores them all on its objective, incremental profit plus clearance value
+(ADR 0005). The three are computed once per scenario seed and final request.
+
+Regret splits by cause (ADR 0078): model error (best - default) / best, the planner's choices
+(default - ours) / best, and timeouts, the part whose plans include one the solver stopped as
+FEASIBLE. The three sum to the regret.
 """
 
 import asyncio
@@ -42,11 +48,14 @@ from promopilot.domain import (
 )
 from promopilot.evals.report import (
     BestPlanSummary,
+    DefaultPlanSummary,
     Metric,
     PlanQuality,
+    RegretBreakdown,
     RuleBasedSummary,
     RunResult,
     ScenarioResult,
+    TimedOutPlan,
 )
 from promopilot.evals.truth_forecast import TrueForecast, TrueRelations
 from promopilot.evals.world import EvalWorld
@@ -96,13 +105,57 @@ def regret(best: float, ours: float) -> float:
     return (best - ours) / best
 
 
-def assess(*, objective: float, rule_based: RuleBasedSummary, best: BestPlanSummary) -> PlanQuality:
-    """Our plan's oracle objective against the rule-based baseline's and the best plan's."""
+def regret_breakdown(
+    *,
+    best: float,
+    default: float,
+    ours: float,
+    best_status: SolveStatus,
+    default_status: SolveStatus,
+    ours_status: SolveStatus | None,
+) -> RegretBreakdown | None:
+    """The regret (best - ours) / best by cause (ADR 0078), each part a signed share of the
+    best plan's oracle objective:
+
+    - model error, (best - default) / best: the same optimiser on the fitted models against
+      the true parameters;
+    - the planner's choices, (default - ours) / best: the planner agent's plan against the
+      default sequence's;
+    - timeouts: each of those two parts whose two plans include one the solver stopped as
+      FEASIBLE on its work budget.
+
+    They sum to the regret. None when the best plan earns a paisa or less (the regret is then
+    0 or 1, not a share) or the best or the default plan is infeasible."""
+    if best <= ONE_PAISA or SolveStatus.INFEASIBLE in (best_status, default_status):
+        return None
+    model_error, planner, timeouts = (best - default) / best, (default - ours) / best, 0.0
+    if SolveStatus.FEASIBLE in (best_status, default_status):
+        model_error, timeouts = 0.0, timeouts + model_error
+    if SolveStatus.FEASIBLE in (default_status, ours_status):
+        planner, timeouts = 0.0, timeouts + planner
+    return RegretBreakdown(model_error=model_error, planner=planner, timeouts=timeouts)
+
+
+def assess(
+    *,
+    objective: float,
+    status: SolveStatus | None,
+    rule_based: RuleBasedSummary,
+    best: BestPlanSummary,
+    default: DefaultPlanSummary,
+) -> PlanQuality:
+    """Our plan's oracle objective and solver status against the rule-based baseline's, the
+    best plan's and the default plan's."""
     gap = objective - rule_based.objective
     versus: Literal["beats", "ties", "loses"] = (
         "beats" if gap > ONE_PAISA else "loses" if gap < -ONE_PAISA else "ties"
     )
     top = best.objective
+    statuses: dict[TimedOutPlan, SolveStatus | None] = {
+        "best": best.solver_status,
+        "default": default.solver_status,
+        "ours": status,
+    }
     return PlanQuality(
         objective=objective,
         rule_based=rule_based,
@@ -110,6 +163,18 @@ def assess(*, objective: float, rule_based: RuleBasedSummary, best: BestPlanSumm
         versus_rule_based=versus,
         regret=None if top is None else regret(top, objective),
         regret_rupees=None if top is None else top - objective,
+        default=default,
+        breakdown=None
+        if top is None
+        else regret_breakdown(
+            best=top,
+            default=default.objective,
+            ours=objective,
+            best_status=best.solver_status,
+            default_status=default.solver_status,
+            ours_status=status,
+        ),
+        timed_out=tuple(plan for plan, s in statuses.items() if s is SolveStatus.FEASIBLE),
     )
 
 
@@ -237,18 +302,50 @@ async def best_plan(
 
     Stock, competitor gaps and the catalogue are what a session sees at the request's as-of
     week."""
+    return await _optimised(
+        request, world=world, settings=settings, seed=seed, policy=policy, truth=True
+    )
+
+
+async def default_plan(
+    request: PlanningRequest,
+    *,
+    world: EvalWorld,
+    settings: PlanningSettings,
+    seed: int,
+    policy: CompanyPolicy,
+) -> OptimisationResult:
+    """The default sequence's plan for the request (ADR 0078): `best_plan` on the scenario's
+    fitted models instead of the truth. The default sequence also runs the binding analysis,
+    which only explains the plan, so it stays off here."""
+    return await _optimised(
+        request, world=world, settings=settings, seed=seed, policy=policy, truth=False
+    )
+
+
+async def _optimised(
+    request: PlanningRequest,
+    *,
+    world: EvalWorld,
+    settings: PlanningSettings,
+    seed: int,
+    policy: CompanyPolicy,
+    truth: bool,
+) -> OptimisationResult:
     week = request.as_of_week
     data = world.data(week)
     models = await world.models(week)
     loaded = await load_option_context(
         request, models.demand, models.relations, data, fixed_as_of_week(week), policy
     )
-    truth = world.dataset.ground_truth
-    context = replace(
-        loaded.context,
-        demand_model=TrueForecast(truth, world.dataset.products, week),
-        relations=TrueRelations(truth),
-    )
+    context = loaded.context
+    if truth:
+        true = world.dataset.ground_truth
+        context = replace(
+            context,
+            demand_model=TrueForecast(true, world.dataset.products, week),
+            relations=TrueRelations(true),
+        )
     options = await asyncio.to_thread(generate_options, request, context)
     solver = replace(settings.solver, binding_deterministic_limit=0.0)
     return await asyncio.to_thread(
@@ -257,22 +354,34 @@ async def best_plan(
 
 
 class Benchmarks:
-    """The rule-based baseline and the best plan of each (seed, final request), computed the
-    first time a run asks, and every final plan assessed against them."""
+    """The rule-based baseline, the best plan and the default plan of each (seed, final
+    request), computed the first time a run asks, and every final plan assessed against
+    them."""
 
     def __init__(self, world: EvalWorld, settings: PlanningSettings, policy: CompanyPolicy):
         self._world = world
         self._settings = settings
         self._policy = policy
-        self._computed: dict[tuple[int, str], tuple[RuleBasedSummary, BestPlanSummary]] = {}
+        self._computed: dict[
+            tuple[int, str], tuple[RuleBasedSummary, BestPlanSummary, DefaultPlanSummary]
+        ] = {}
 
-    async def assess(self, request: PlanningRequest, seed: int, objective: float) -> PlanQuality:
-        """Our final plan's oracle objective against both plans for its request."""
+    async def assess(
+        self, request: PlanningRequest, seed: int, objective: float, status: SolveStatus | None
+    ) -> PlanQuality:
+        """Our final plan's oracle objective and solver status against the three plans for
+        its request."""
         key = (seed, request.model_dump_json())
         if key not in self._computed:
-            self._computed[key] = (await self._rule_based(request), await self._best(request, seed))
-        rule_based, best = self._computed[key]
-        return assess(objective=objective, rule_based=rule_based, best=best)
+            self._computed[key] = (
+                await self._rule_based(request),
+                await self._best(request, seed),
+                await self._default(request, seed),
+            )
+        rule_based, best, default = self._computed[key]
+        return assess(
+            objective=objective, status=status, rule_based=rule_based, best=best, default=default
+        )
 
     async def _rule_based(self, request: PlanningRequest) -> RuleBasedSummary:
         dataset = self._world.dataset
@@ -303,6 +412,17 @@ class Benchmarks:
             lines=len(result.plan.lines),
             sku_ids=tuple(sorted({sku for line in result.plan.lines for sku in line.skus})),
             objective=None if infeasible else self._objective(result.plan, request.as_of_week),
+        )
+
+    async def _default(self, request: PlanningRequest, seed: int) -> DefaultPlanSummary:
+        result = await default_plan(
+            request, world=self._world, settings=self._settings, seed=seed, policy=self._policy
+        )
+        return DefaultPlanSummary(
+            solver_status=result.status,
+            lines=len(result.plan.lines),
+            sku_ids=tuple(sorted({sku for line in result.plan.lines for sku in line.skus})),
+            objective=self._objective(result.plan, request.as_of_week),
         )
 
     def _objective(self, plan: PromoPlan, as_of_week: int) -> float:
@@ -340,10 +460,30 @@ def plan_quality(scenarios: Sequence[ScenarioResult]) -> Metric:
 
 
 def regret_metric(runs: Sequence[RunResult]) -> Metric:
-    """The median regret over scored runs whose best plan is feasible; target ≤ 10% (SPEC
-    §12.2). Its count is the runs within the target."""
-    regrets = [run.quality.regret for run in runs if run.quality and run.quality.regret is not None]
+    """The median regret over scored runs whose best plan is feasible and did not time out;
+    target ≤ 10% (SPEC §12.2). Its count is the runs within the target.
+
+    Its breakdown counts the runs left out, `best_infeasible` and `best_timed_out` (beating a
+    best plan that timed out is not a win, ADR 0078), and, for each counted run above the
+    target, its largest part: `largest_model_error`, `largest_planner` or `largest_timeouts`."""
+    counted = [
+        run.quality
+        for run in runs
+        if run.quality and run.quality.regret is not None and "best" not in run.quality.timed_out
+    ]
+    regrets = [quality.regret for quality in counted if quality.regret is not None]
     value = statistics.median(regrets) if regrets else None
+    largest = {"largest_model_error": 0, "largest_planner": 0, "largest_timeouts": 0}
+    for quality in counted:
+        parts = quality.breakdown
+        if parts is None or quality.regret is None or quality.regret <= REGRET_TARGET:
+            continue
+        by_part = {
+            "largest_model_error": parts.model_error,
+            "largest_planner": parts.planner,
+            "largest_timeouts": parts.timeouts,
+        }
+        largest[max(by_part, key=by_part.__getitem__)] += 1
     return Metric(
         name="regret",
         label="Regret (median, against the best plan)",
@@ -356,7 +496,14 @@ def regret_metric(runs: Sequence[RunResult]) -> Metric:
         breakdown={
             "best_infeasible": sum(
                 run.quality is not None and run.quality.regret is None for run in runs
-            )
+            ),
+            "best_timed_out": sum(
+                run.quality is not None
+                and run.quality.regret is not None
+                and "best" in run.quality.timed_out
+                for run in runs
+            ),
+            **largest,
         },
     )
 

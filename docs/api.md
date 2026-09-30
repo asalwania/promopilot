@@ -653,6 +653,18 @@ A decision taken in the graph: a route a node chose, or a human's approve or rej
 | `kind` | string | no | always `decision`, default `decision` |  |
 | `summary` | string | yes |  |  |
 
+### DefaultPlanSummary
+
+The default sequence's plan for the same final request (ADR 0078): our optimiser on
+the scenario's fitted models, as the best plan is on the true parameters.
+
+| Field | Type | Required | Constraints | Description |
+| --- | --- | --- | --- | --- |
+| `lines` | integer | yes |  |  |
+| `objective` | number | yes |  |  |
+| `sku_ids` | array of string | yes |  |  |
+| `solver_status` | [SolveStatus](#solvestatus) | yes |  |  |
+
 ### DemoRecording
 
 string, one of `recorded`, `not_in_demo_recordings`.
@@ -1040,15 +1052,19 @@ A promo option selected into a promo plan: one (SKU, region) decision (ADR 0004)
 
 ### PlanQuality
 
-A scored final plan against the rule-based baseline and the best plan (ADR 0063).
+A scored final plan against the rule-based baseline and the best plan (ADR 0063), and
+its regret by cause against the default sequence's plan (ADR 0078).
 
 | Field | Type | Required | Constraints | Description |
 | --- | --- | --- | --- | --- |
 | `best` | [BestPlanSummary](#bestplansummary) | yes |  |  |
+| `breakdown` | [RegretBreakdown](#regretbreakdown) or null | no |  |  |
+| `default` | [DefaultPlanSummary](#defaultplansummary) or null | no |  |  |
 | `objective` | number | yes |  |  |
 | `regret` | number or null | yes |  |  |
 | `regret_rupees` | number or null | yes |  |  |
 | `rule_based` | [RuleBasedSummary](#rulebasedsummary) | yes |  |  |
+| `timed_out` | array of string | no | items one of `best`, `default`, `ours`, default `[]` |  |
 | `versus_rule_based` | string | yes | one of `beats`, `ties`, `loses` |  |
 
 ### PlanRevision
@@ -1214,6 +1230,17 @@ string, one of `North`, `South`, `East`, `West`.
 | --- | --- | --- | --- | --- |
 | `region` | [Region](#region) | yes |  |  |
 | `stores` | array of [Store](#store) | yes |  |  |
+
+### RegretBreakdown
+
+A run's regret by cause, each a signed share of the best plan's oracle objective; the
+three sum to the regret (ADR 0078).
+
+| Field | Type | Required | Constraints | Description |
+| --- | --- | --- | --- | --- |
+| `model_error` | number | yes |  |  |
+| `planner` | number | yes |  |  |
+| `timeouts` | number | yes |  |  |
 
 ### RejectRequest
 

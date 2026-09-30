@@ -98,11 +98,13 @@ class Settings(BaseSettings):
     # spend, or a category or region above the group share when the scope has more than one,
     # is over-concentrated; cannibalisation at or above this share of a line's incremental
     # profit is heavy; a line that runs out in at least this share of simulated runs is a
-    # stock-out risk.
+    # stock-out risk. The best attempt has fewer risk findings only within the objective
+    # tolerance of the best plan-time objective (ADR 0078).
     critic_line_spend_share: float = Field(default=0.25, gt=0, le=1)
     critic_group_spend_share: float = Field(default=0.80, gt=0, le=1)
     critic_cannibalisation_share: float = Field(default=0.50, gt=0)
     critic_stockout_probability: float = Field(default=0.20, gt=0, le=1)
+    critic_objective_tolerance: float = Field(default=0.05, ge=0, le=1)
 
     @model_validator(mode="before")
     @classmethod
