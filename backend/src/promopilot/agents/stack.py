@@ -49,10 +49,13 @@ RECORDED_SETTINGS = {
     "critic_cannibalisation_share",
     "critic_stockout_probability",
     "critic_objective_tolerance",
+    "optimizer_budget_quantile",
+    "optimizer_stock_buffer_sigmas",
+    "optimizer_margin_quantile",
 }
 """What a plan, and so every Critic and Explainer request, depends on besides the data and the
-models (ADR 0054): the optimiser's work budgets decide it (ADR 0055), and its wall-clock nets
-only when one is hit."""
+models (ADR 0054): the optimiser's work budgets decide it (ADR 0055), and so does its safety
+margin (ADR 0080); its wall-clock nets only when one is hit."""
 
 
 @dataclass(frozen=True)
@@ -82,6 +85,9 @@ class PlanningSettings:
                 deterministic_limit=settings.optimizer_deterministic_limit,
                 binding_deterministic_limit=settings.optimizer_binding_deterministic_limit,
                 relaxation_deterministic_limit=settings.optimizer_relaxation_deterministic_limit,
+                budget_quantile=settings.optimizer_budget_quantile,
+                stock_buffer_sigmas=settings.optimizer_stock_buffer_sigmas,
+                margin_quantile=settings.optimizer_margin_quantile,
             ),
             seed=settings.optimizer_seed,
             simulation=SimulationSettings(

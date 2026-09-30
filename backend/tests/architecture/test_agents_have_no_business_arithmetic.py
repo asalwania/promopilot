@@ -29,6 +29,7 @@ ALLOWED = {
     ("explainer.py", "abs(amount)"): "the sign is written separately",
     ("explainer.py", "parts += _constraint_sentences(revision)"): "list building",
     ("explainer.py", "parts += notes"): "list building",
+    ("explainer.py", "parts += _safety_sentences(revision)"): "list building",
     ("graph.py", "state.iteration + 1"): "counts the Planner's runs, for the Critic loop cap",
     ("graph.py", "route + list(snapshot.next)"): "list building",
     ("graph.py", "previous.number + 1"): "numbers plan revisions, one per planning round "

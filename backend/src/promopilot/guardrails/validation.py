@@ -1,8 +1,10 @@
-"""Deterministic plan validation: every hard constraint on plan-time values (ADR 0012, 0028)."""
+"""Deterministic plan validation: every hard constraint on plan-time values (ADR 0012, 0028),
+with the safety margin the plan was made with (ADR 0080)."""
 
 from collections import Counter, defaultdict
 from typing import Self
 
+import numpy as np
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from promopilot.domain import (
@@ -11,12 +13,22 @@ from promopilot.domain import (
     PlanLine,
     PlanningRequest,
     Region,
+    SafetyMargin,
     TargetSegment,
     Violation,
     ViolationCode,
 )
 from promopilot.economics import blended_margin, effective_unit_price
+from promopilot.guardrails.formatting import format_percentile
 from promopilot.guardrails.limits import plan_limits
+from promopilot.guardrails.safety import (
+    budget_z,
+    margin_z,
+    planned_margin,
+    planned_promo_cost,
+    stock_units,
+    units_cv,
+)
 
 ONE_PAISA = 0.01
 _EPSILON = 1e-9
@@ -57,6 +69,10 @@ class LineFacts(BaseModel):
     expected_revenue: float = Field(ge=0)
     expected_gross_profit: float
     promo_cost: float = Field(ge=0)
+    units_std: float = Field(default=0.0, ge=0)
+    """The std of the anchor's units, as the demand model predicts it (ADR 0024)."""
+    promo_cost_std: float = Field(default=0.0, ge=0)
+    """The std of the promo cost: discount funding moves with units (ADR 0080)."""
 
     @model_validator(mode="after")
     def _partner_facts_for_a_bundle(self) -> Self:
@@ -100,6 +116,9 @@ class PlanFacts(BaseModel):
     """One per SKU with a clearance target and region with available stock."""
     substitutes: tuple[SubstituteFacts, ...] = ()
     """The detected substitute pairs among the plan's SKUs (ADR 0075)."""
+    safety: SafetyMargin = SafetyMargin()
+    """The safety margin the plan was made with: its budget, stock and margin are checked at
+    it (ADR 0080). The default checks expected values and P90 units."""
 
 
 def run_together(line: PlanLine, other: PlanLine) -> bool:
@@ -125,7 +144,8 @@ def validate_plan(
     Plan-level violations (budget, regional caps, margins) come first, then per-line ones in
     line order, then max promoted SKUs, duplicate lines, clearance targets and strong
     substitutes promoted together. The brief may only tighten company policy (`plan_limits`,
-    ADR 0007).
+    ADR 0007). The budget, stock and margin are checked at the plan's safety margin (ADR
+    0080), as the optimiser planned them.
     """
     limits = plan_limits(request, policy)
     cleared = {target.sku_id for target in request.clearance_targets}
@@ -135,7 +155,7 @@ def validate_plan(
         *_margins(plan, request, policy),
     ]
     for fact in plan.lines:
-        violations += _stock(fact)
+        violations += _stock(fact, plan.safety)
         violations += _discount_and_cost(fact, policy, cleared)
         violations += _window(fact, request)
         violations += _kvi_tolerance(fact, limits.kvi_price_tolerance)
@@ -146,15 +166,33 @@ def validate_plan(
     return tuple(violations)
 
 
+def _costs(plan: PlanFacts) -> list[float]:
+    """Each line's promo cost at the plan's budget quantile (ADR 0080)."""
+    if not plan.lines:
+        return []
+    costs = planned_promo_cost(
+        np.array([fact.promo_cost for fact in plan.lines]),
+        np.array([fact.promo_cost_std for fact in plan.lines]),
+        plan.safety,
+    )
+    return [float(cost) for cost in costs]
+
+
+def _cost_name(plan: PlanFacts) -> str:
+    if budget_z(plan.safety) <= 0:
+        return "promo cost"
+    return f"{format_percentile(plan.safety.budget_quantile)} promo cost"
+
+
 def _budget(plan: PlanFacts, request: PlanningRequest) -> list[Violation]:
-    total = sum(fact.promo_cost for fact in plan.lines)
+    total = sum(_costs(plan))
     if round(total - request.marketing_budget, 6) <= ONE_PAISA:
         return []
     return [
         Violation(
             code=ViolationCode.BUDGET,
             message=(
-                f"total promo cost {_rupees(total)} exceeds the marketing budget "
+                f"total {_cost_name(plan)} {_rupees(total)} exceeds the marketing budget "
                 f"{_rupees(request.marketing_budget)}"
             ),
             actual=total,
@@ -165,13 +203,13 @@ def _budget(plan: PlanFacts, request: PlanningRequest) -> list[Violation]:
 
 def _regional_budgets(plan: PlanFacts, request: PlanningRequest) -> list[Violation]:
     spent: defaultdict[Region, float] = defaultdict(float)
-    for fact in plan.lines:
-        spent[fact.line.region] += fact.promo_cost
+    for fact, cost in zip(plan.lines, _costs(plan), strict=True):
+        spent[fact.line.region] += cost
     return [
         Violation(
             code=ViolationCode.REGIONAL_BUDGET,
             message=(
-                f"promo cost in {region} {_rupees(spent[region])} exceeds the brief's "
+                f"{_cost_name(plan)} in {region} {_rupees(spent[region])} exceeds the brief's "
                 f"regional budget cap {_rupees(cap)}"
             ),
             region=region,
@@ -184,10 +222,19 @@ def _regional_budgets(plan: PlanFacts, request: PlanningRequest) -> list[Violati
 
 
 def _margins(plan: PlanFacts, request: PlanningRequest, policy: CompanyPolicy) -> list[Violation]:
-    blended = blended_margin(
-        [fact.expected_revenue for fact in plan.lines],
-        [fact.expected_gross_profit for fact in plan.lines],
-    )
+    revenue = [fact.expected_revenue for fact in plan.lines]
+    profit = [fact.expected_gross_profit for fact in plan.lines]
+    what = "blended expected margin"
+    if margin_z(plan.safety) > 0 and plan.lines:
+        # The least blend with each line's units within the margin quantile (ADR 0080).
+        cv = units_cv(
+            np.array([fact.expected_units for fact in plan.lines]),
+            np.array([fact.units_std for fact in plan.lines]),
+        )
+        blended = planned_margin(np.array(revenue), np.array(profit), cv, plan.safety)
+        what = f"blended margin at its {format_percentile(plan.safety.margin_quantile)}"
+    else:
+        blended = blended_margin(revenue, profit)
     if blended is None:
         return []
     limits = [(ViolationCode.MIN_MARGIN, "minimum margin", request.min_margin)]
@@ -195,7 +242,7 @@ def _margins(plan: PlanFacts, request: PlanningRequest, policy: CompanyPolicy) -
     return [
         Violation(
             code=code,
-            message=f"blended expected margin {blended:.1%} is below the {name} {limit:.1%}",
+            message=f"{what} {blended:.1%} is below the {name} {limit:.1%}",
             actual=blended,
             limit=limit,
         )
@@ -204,20 +251,26 @@ def _margins(plan: PlanFacts, request: PlanningRequest, policy: CompanyPolicy) -
     ]
 
 
-def _stock(fact: LineFacts) -> list[Violation]:
-    if fact.p90_units <= fact.available_stock + _EPSILON:
+def _stock(fact: LineFacts, safety: SafetyMargin) -> list[Violation]:
+    """P90 units, or with a stock buffer the expected units plus its standard deviations,
+    whichever is more, within available stock (ADR 0004, ADR 0080)."""
+    buffered = stock_units(np.array([fact.expected_units]), np.array([fact.units_std]), safety)
+    units, name = fact.p90_units, "P90 units"
+    if fact.units_std > 0 and float(buffered[0]) > fact.p90_units:
+        units, name = float(buffered[0]), f"expected units plus {safety.stock_sigmas:g} std"
+    if units <= fact.available_stock + _EPSILON:
         return []
     line = fact.line
     return [
         Violation(
             code=ViolationCode.STOCK,
             message=(
-                f"{line.sku_id} in {line.region}: P90 units {fact.p90_units:,.0f} exceed "
+                f"{line.sku_id} in {line.region}: {name} {units:,.0f} exceed "
                 f"available stock {fact.available_stock:,.0f}"
             ),
             sku_id=line.sku_id,
             region=line.region,
-            actual=fact.p90_units,
+            actual=units,
             limit=fact.available_stock,
         )
     ]

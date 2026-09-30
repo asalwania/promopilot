@@ -23,6 +23,7 @@ from promopilot.domain.revision import (
     uplift_pct,
 )
 from promopilot.domain.risk import OpenIssue, RiskCode, RiskFinding
+from promopilot.domain.safety import P90_Z, PlanSafetyMargin, SafetyMargin
 from promopilot.domain.selection import (
     BindingConstraint,
     BindingEvidence,
@@ -71,6 +72,7 @@ from promopilot.domain.violation import Violation, ViolationCode
 from promopilot.domain.vocabulary import Mechanism, Region, Segment, TargetSegment, Week
 
 __all__ = [
+    "P90_Z",
     "Amendment",
     "Assumption",
     "AssumptionSource",
@@ -108,6 +110,7 @@ __all__ = [
     "PlanLine",
     "PlanRevision",
     "PlanRevisionLine",
+    "PlanSafetyMargin",
     "PlanSimulation",
     "PlanningRequest",
     "PlanningSession",
@@ -124,6 +127,7 @@ __all__ = [
     "RevisionDiff",
     "RiskCode",
     "RiskFinding",
+    "SafetyMargin",
     "Scope",
     "Segment",
     "SegmentUplift",

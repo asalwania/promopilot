@@ -129,7 +129,7 @@ def test_the_demo_brief_with_its_optional_constraints_keeps_them_within_the_budg
     assert result.plan.lines
     assert result.objective > 0
     assert options.price_matches
-    plan = plan_facts(options, list(result.selected), facts)
+    plan = plan_facts(options, list(result.selected), facts, result.safety_margin)
     violations = validate_plan(plan, CONSTRAINED, demo_context.policy)
     # Every constraint holds but a clearance target no plan reaches, and that is reported.
     assert {(v.code, v.sku_id, v.region) for v in violations} == {

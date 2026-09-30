@@ -128,7 +128,7 @@ async def test_every_final_plan_is_checked_and_scored_with_answers_and_amendment
         3,
     )
     assert (satisfaction.target, satisfaction.passed) == (1.0, True)
-    assert (breaches.name, breaches.of, breaches.target) == ("oracle_breach_rate", 3, None)
+    assert (breaches.name, breaches.of, breaches.target) == ("oracle_breach_rate", 3, 0.15)
     assert [scenario.name for scenario in report.scenarios] == ["plain", "clarify", "amend"]
     assert all(scenario.passed for scenario in report.scenarios)
 

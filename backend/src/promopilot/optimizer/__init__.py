@@ -1,10 +1,9 @@
 """The optimiser (SPEC §9.3-9.4): promo option generation, then CP-SAT selection."""
 
-from promopilot.domain import PruneReason, SolveStatus
+from promopilot.domain import P90_Z, PruneReason, SolveStatus
 from promopilot.optimizer.facts import plan_facts
 from promopilot.optimizer.options import (
     DEPTHS,
-    P90_Z,
     TABLE_COLUMNS,
     ClearanceBaseline,
     FittedOptionFacts,

@@ -5,12 +5,14 @@ from typing import Any
 import pytest
 
 from promopilot.domain import (
+    P90_Z,
     CompanyPolicy,
     Mechanism,
     PlanLine,
     PlanningRequest,
     PromoWindow,
     Region,
+    SafetyMargin,
     Scope,
     TargetSegment,
 )
@@ -533,3 +535,73 @@ def test_a_bundle_partner_counts_as_promoted() -> None:
 
     assert codes(validate_plan(together, request(), POLICY)) == [ViolationCode.STRONG_SUBSTITUTES]
     assert codes(validate_plan(own_pair, request(), POLICY)) == [ViolationCode.STRONG_SUBSTITUTES]
+
+
+# ---------------------------------------------------------------- the safety margin (ADR 0080)
+
+MARGIN = SafetyMargin(budget_quantile=0.9, stock_sigmas=2.0, margin_quantile=0.1)
+
+
+def test_the_budget_counts_promo_cost_at_its_quantile() -> None:
+    # 90,000 expected, and 10,000 more at the P90 (7,803 x 1.2816).
+    lines = (fact("S1", promo_cost=90_000.0, promo_cost_std=7_803.0),)
+    expected_only = PlanFacts(lines=lines)
+    assert validate_plan(expected_only, request(budget=100_000.0), POLICY) == ()
+
+    (violation,) = validate_plan(
+        PlanFacts(lines=lines, safety=MARGIN), request(budget=99_000.0), POLICY
+    )
+    assert violation.code is ViolationCode.BUDGET
+    assert violation.actual == pytest.approx(90_000.0 + P90_Z * 7_803.0, rel=1e-4)
+    assert "P90 promo cost" in violation.message
+    within = validate_plan(PlanFacts(lines=lines, safety=MARGIN), request(budget=100_001.0), POLICY)
+    assert within == ()
+
+
+def test_a_regional_cap_counts_promo_cost_at_its_quantile_too() -> None:
+    capped = request().model_copy(update={"regional_budget_caps": {Region.NORTH: 25_000.0}})
+    plan = PlanFacts(
+        lines=(fact("S1", promo_cost=24_000.0, promo_cost_std=1_000.0),), safety=MARGIN
+    )
+
+    (violation,) = validate_plan(plan, capped, POLICY)
+
+    assert violation.code is ViolationCode.REGIONAL_BUDGET
+    assert violation.actual == pytest.approx(24_000.0 + P90_Z * 1_000.0, rel=1e-4)
+
+
+def test_stock_holds_expected_units_plus_the_buffer() -> None:
+    # P90 1,300 fits 1,350, but 1,000 + 2 x 200 = 1,400 does not.
+    line = fact("S1", p90_units=1_300.0, units_std=200.0, available_stock=1_350.0)
+    assert validate_plan(PlanFacts(lines=(line,)), request(), POLICY) == ()
+
+    (violation,) = validate_plan(PlanFacts(lines=(line,), safety=MARGIN), request(), POLICY)
+
+    assert violation.code is ViolationCode.STOCK
+    assert violation.actual == pytest.approx(1_400.0)
+    assert "2 std" in violation.message
+
+
+def test_the_minimum_margin_holds_at_the_margin_quantile() -> None:
+    # 20% and 30% lines blend to 25%; at their P10 the 20% line sells more and the 30% less.
+    lines = (
+        fact("S1", expected_revenue=100_000.0, expected_gross_profit=20_000.0, units_std=100.0),
+        fact("S2", expected_revenue=100_000.0, expected_gross_profit=30_000.0, units_std=100.0),
+    )
+    at_25 = request(min_margin=0.249)
+    assert validate_plan(PlanFacts(lines=lines), at_25, POLICY) == ()
+
+    (violation,) = validate_plan(PlanFacts(lines=lines, safety=MARGIN), at_25, POLICY)
+
+    assert violation.code is ViolationCode.MIN_MARGIN
+    high, low = 1 + P90_Z * 0.1, 1 - P90_Z * 0.1
+    assert violation.actual == pytest.approx(
+        (20 * high + 30 * low) / (100 * high + 100 * low), 1e-4
+    )
+    assert "P10" in violation.message
+
+
+def test_line_facts_default_to_no_spread() -> None:
+    line = fact("S1")
+    assert (line.units_std, line.promo_cost_std) == (0.0, 0.0)
+    assert PlanFacts(lines=(line,)).safety == SafetyMargin()

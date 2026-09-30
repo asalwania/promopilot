@@ -19,6 +19,7 @@ from promopilot.domain import (
     CompanyPolicy,
     NotSelectedOption,
     PlanLine,
+    PlanSafetyMargin,
     PolicyFinding,
     Relaxation,
     WhyChosen,
@@ -89,6 +90,12 @@ class RunOptimizerOutput(BaseModel):
     )
     lines: list[OptimizedLine]
     total_promo_cost: float
+    planned_promo_cost: float = Field(
+        description=(
+            "The promo cost the budget constraint counted: each line's at the safety margin's "
+            "budget quantile (ADR 0080)."
+        )
+    )
     marketing_budget: float
     blended_margin: float | None = Field(description="None when no line is selected.")
     min_margin: float = Field(
@@ -117,6 +124,14 @@ class RunOptimizerOutput(BaseModel):
     relaxation: Relaxation | None = Field(
         description="When no plan reaches every clearance target, the smallest change to the "
         "request's constraints that makes it feasible; null otherwise."
+    )
+    safety_margin: PlanSafetyMargin = Field(
+        description=(
+            "The margin the plan keeps from its limits (ADR 0080): promo cost at the budget "
+            "quantile, expected units plus stock_sigmas std within stock, and the minimum "
+            "margin with units at the margin quantile; budget_margin_waived when the clearance "
+            "targets need the budget at expected cost."
+        )
     )
 
 
@@ -164,6 +179,7 @@ def run_optimizer_tool(
             objective=result.objective,
             lines=lines,
             total_promo_cost=sum(line.promo_cost for line in lines),
+            planned_promo_cost=result.safety_margin.planned_promo_cost,
             marketing_budget=request.marketing_budget,
             blended_margin=blended_margin(
                 [line.revenue for line in lines], [line.gross_profit for line in lines]
@@ -178,6 +194,7 @@ def run_optimizer_tool(
             clearance_shortfalls=list(result.clearance_shortfalls),
             policy_findings=list(result.policy_findings),
             relaxation=result.relaxation,
+            safety_margin=result.safety_margin,
         )
 
     return Tool(

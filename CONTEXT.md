@@ -225,7 +225,11 @@ One fully specified possibility (SKU, region, mechanism, depth, duration, start 
 _Avoid_: candidate, option (bare)
 
 **P90 units**:
-The units a promo option sells at the 90th percentile of its prediction: mean + 1.2816 × std. They must fit within available stock.
+The units a promo option sells at the 90th percentile of its prediction: mean + 1.2816 × std. They must fit within available stock, and so must the expected units plus the safety margin's stock buffer (ADR 0080).
+
+**Safety margin**:
+How far a plan keeps its predicted numbers from its limits, because the oracle judges it on true demand (ADR 0080): each plan line's promo cost counts at its P90 against the marketing budget and regional caps (the plan's **planned promo cost**), its expected units plus 2 standard deviations must fit available stock, and the blended margin must reach the minimum with each line's units at their P10 on the side that lowers it. Configurable; when the budget margin alone puts a clearance target out of reach, the budget is planned at the expected promo cost instead (the margin is **waived**).
+_Avoid_: safety stock (the store's own reserve, already left out of available stock)
 
 **Plan line**:
 A promo option selected into a promo plan. A plan has at most one plan line per SKU per region.
@@ -358,7 +362,7 @@ The plan revision a scenario's session waits for approval with once every answer
 The share of final plan revisions that keep every hard constraint on their own plan-time numbers, checked by plan validation (ADR 0012). Target 100%.
 
 **Oracle breach rate**:
-The share of the same plans whose true outcome, by the oracle, breaks the budget, the minimum margin or the stock. Reported, with no target (ADR 0012).
+The share of the same plans whose true outcome, by the oracle, breaks the budget, the minimum margin or the stock. Target at most 15%, which plans reach by keeping a safety margin (ADR 0012, ADR 0080).
 
 **Extraction accuracy**:
 The share of a scenario's labelled planning-request fields that the final planning request reads right, by field matching rules. Target 95% (ADR 0062).

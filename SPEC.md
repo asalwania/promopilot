@@ -518,9 +518,9 @@ Incremental profit is net of pull-forward; halo and cannibalisation count for ev
 
 **Constraints:**
 - At most one option per (SKU, region).
-- Σ promo_cost ≤ budget (total and optional per-region caps).
-- Plan-level expected margin ≥ min_margin (linearised: Σ (revenue·min_margin − gross_profit) ≤ 0).
-- P90 units ≤ available stock (Σ over the region's stores of on_hand − safety_stock) for each selected option (ADR 0004).
+- Σ promo_cost ≤ budget (total and optional per-region caps), each option's promo cost at its P90 (safety margin, ADR 0080).
+- Plan-level margin ≥ min_margin (linearised: Σ (revenue·min_margin − gross_profit) ≤ 0), each option's units at their P10 on the side that lowers the blend (ADR 0080).
+- P90 units, and expected units + 2σ, ≤ available stock (Σ over the region's stores of on_hand − safety_stock) for each selected option (ADR 0004, ADR 0080).
 - For each overstocked SKU the brief names for clearance: expected sell-through ≥ clearance_target (hard), or soft with a large penalty if infeasible, reported as a violation. SKUs flagged only by days of cover get no target, only clearance value (ADR 0014).
 - Optional: max promoted SKUs per category/region; KVI price within competitor tolerance.
 - `y_ij ≥ x_i + x_j − 1` linking.
@@ -641,7 +641,7 @@ Each scenario: brief text, optional amendments, expected properties (not exact p
 | Complement detection | Precision / recall vs true complement pairs | ≥ 0.8 / ≥ 0.7 |
 | Baseline forecast | WAPE on 12-week holdout | Report (aim ≤ 25%) |
 | Constraint satisfaction | % of final plans passing all hard constraints on plan-time values, checked by `validate_plan` (ADR 0012) | 100% |
-| Oracle breach rate | % of plans whose true outcome (oracle) breaks a constraint (ADR 0012) | Report |
+| Oracle breach rate | % of plans whose true outcome (oracle) breaks a constraint (ADR 0012); plans keep a safety margin (ADR 0080) | ≤ 15% |
 | Plan quality | Oracle profit uplift vs rule-based baseline ("20% off top 10 sellers") | Beats baseline in ≥ 90% of scenarios |
 | Regret | Oracle regret vs optimiser run on true parameters | Median ≤ 10% |
 | Consistency | Same scenario × 5 runs → Jaccard overlap of selected SKUs | ≥ 0.9 |

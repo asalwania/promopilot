@@ -1185,12 +1185,11 @@
               "regions": [
                 "North",
                 "West"
-              ],
-              "sku_ids": []
+              ]
             }
           }
         },
-        "id": "call_ESogdGszD3NrXuoEa1u2Vy5C",
+        "id": "call_dpwsXykoJLd3bk5WrcMimzUp",
         "name": "generate_candidates"
       }
     ]
@@ -1200,7 +1199,7 @@
     {
       "input_tokens": 5475,
       "model": "gpt-4.1-mini",
-      "output_tokens": 111
+      "output_tokens": 106
     }
   ]
 }

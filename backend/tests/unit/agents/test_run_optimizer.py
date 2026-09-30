@@ -172,6 +172,31 @@ async def test_a_call_returns_the_selected_plan_with_its_numbers(store: Candidat
     ]
 
 
+async def test_the_promo_cost_as_budgeted_and_the_safety_margin_are_reported(
+    store: CandidateStore,
+) -> None:
+    # A's 600 of funding moves with a 50% cv: its P90 adds 1.2816 x 300 to the budget row.
+    options = hand_built()
+    options.table["units_std"] = [30.0, 0.0, 0.0]
+    options.table["anchor_discount_funding"] = [600.0, 0.0, 0.0]
+    stored = store.put(REQUEST, options, Facts())
+
+    result = await registry(store).call(
+        "run_optimizer", {"candidate_set_id": str(stored.candidate_set_id)}
+    )
+
+    assert isinstance(result, ToolOk), result
+    output = result.output
+    assert isinstance(output, RunOptimizerOutput)
+    # 700 + 384 + 600 is over 1,500 at the P90, so B no longer fits beside A.
+    assert [row.option for row in output.lines] == [line("A")]
+    assert output.total_promo_cost == pytest.approx(700.0)
+    assert output.planned_promo_cost == pytest.approx(700.0 + 1.2816 * 300.0, abs=0.1)
+    margin = output.safety_margin
+    assert (margin.budget_quantile, margin.stock_sigmas, margin.margin_quantile) == (0.9, 2.0, 0.1)
+    assert not margin.budget_margin_waived
+
+
 async def test_the_solution_is_kept_with_its_candidate_set_for_the_plan_revision(
     store: CandidateStore,
 ) -> None:

@@ -28,6 +28,11 @@ def format_percent(fraction: float) -> str:
     return f"{_sign(fraction, shown)}{shown}%"
 
 
+def format_percentile(quantile: float) -> str:
+    """A quantile as the percentile it names: 0.9 is P90, 0.1 is P10 (ADR 0080)."""
+    return f"P{round(quantile * 100)}"
+
+
 def format_units(units: float) -> str:
     """Whole units with Indian digit grouping: 1,23,456."""
     return _indian_grouping(round(units))

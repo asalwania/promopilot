@@ -224,8 +224,10 @@ class OptimisingPlanner:
             clearance_shortfalls=result.clearance_shortfalls,
             policy_findings=result.policy_findings,
             relaxation=result.relaxation,
+            safety_margin=result.safety_margin,
         )
-        return PlannedRevision(revision, plan_facts(options, result.selected, facts))
+        facts_of_plan = plan_facts(options, result.selected, facts, result.safety_margin)
+        return PlannedRevision(revision, facts_of_plan)
 
 
 def _line_details(

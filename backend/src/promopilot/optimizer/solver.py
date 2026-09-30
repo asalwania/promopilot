@@ -38,6 +38,14 @@ strong substitutes; a SKU named for clearance is overstocked. Costs are rounded 
 budgets down to whole paise, and units sold towards a target down, so every plan the solver
 accepts also passes `validate_plan` (ADR 0012).
 
+The plan keeps a safety margin from its limits (ADR 0080), set by `SolverSettings`: each
+option's promo cost counts at its budget quantile (P90 by default) against the budget and the
+regional caps, its expected units plus a buffer of standard deviations (2 by default) must fit
+its available stock, and the blended margin must reach the minimum with each line's units at
+the margin quantile (P10 by default) on the side that lowers it. Each is a coefficient of an
+existing row, so the model is no larger. When the budget margin alone puts a clearance target
+out of reach, the request is planned at the expected promo cost, and the result says so.
+
 With clearance targets the solve has two phases (ADR 0040). The first finds the plan closest to
 every target, the least stock left short of target weighted by unit cost, under every other
 constraint. Each target is then lowered to what that plan reaches, and the second phase
@@ -89,7 +97,9 @@ from dataclasses import dataclass, field, replace
 from typing import Protocol
 
 import numpy as np
+import pandas as pd
 from ortools.sat.python import cp_model
+from pydantic import ValidationError
 
 from promopilot.domain import (
     BindingConstraint,
@@ -102,11 +112,13 @@ from promopilot.domain import (
     NotSelectedReason,
     PlanLine,
     PlanningRequest,
+    PlanSafetyMargin,
     PolicyFinding,
     PromoPlan,
     Region,
     Relaxation,
     RelaxedConstraint,
+    SafetyMargin,
     SelectionReason,
     SelectionReasonCode,
     SolveStatus,
@@ -118,8 +130,15 @@ from promopilot.guardrails import (
     PlanLimits,
     SkuFacts,
     SubstituteFacts,
+    budget_z,
+    margin_shortfall,
     plan_limits,
+    planned_margin,
+    planned_promo_cost,
+    promo_cost_std,
     run_together,
+    stock_units,
+    units_cv,
 )
 from promopilot.optimizer.options import ClearanceBaseline, PromoOptions
 
@@ -155,7 +174,12 @@ class SolverSettings:
 
     and the worker count (OPTIMIZER_WORKERS). The work budgets decide the result. A wall-clock
     net that runs out first ends the phase too, but then not the same way on every machine. A
-    binding budget or net of 0 turns the binding analysis off."""
+    binding budget or net of 0 turns the binding analysis off.
+
+    The safety margin (ADR 0080): OPTIMIZER_BUDGET_QUANTILE (0.9: promo cost at its P90 against
+    the budget), OPTIMIZER_STOCK_BUFFER_SIGMAS (2: expected units plus 2 std within stock) and
+    OPTIMIZER_MARGIN_QUANTILE (0.1: the minimum margin with units at their P10). 0.5, 1.2816 and
+    0.5 plan on expected values and P90 units, as before ADR 0080."""
 
     time_limit_seconds: float = 60.0
     workers: int = 1
@@ -164,6 +188,9 @@ class SolverSettings:
     deterministic_limit: float = 10.0
     binding_deterministic_limit: float = 6.0
     relaxation_deterministic_limit: float = 10.0
+    budget_quantile: float = 0.9
+    stock_buffer_sigmas: float = 2.0
+    margin_quantile: float = 0.1
 
     def __post_init__(self) -> None:
         if self.time_limit_seconds <= 0:
@@ -180,6 +207,19 @@ class SolverSettings:
             raise ValueError("the binding deterministic limit cannot be negative")
         if self.relaxation_deterministic_limit <= 0:
             raise ValueError("the relaxation deterministic limit must be positive")
+        try:
+            self.safety_margin  # noqa: B018 - validates the three settings together
+        except ValidationError as error:
+            raise ValueError(f"the safety margin is out of range: {error}") from error
+
+    @property
+    def safety_margin(self) -> SafetyMargin:
+        """The margin every plan keeps from its budget, stock and minimum margin (ADR 0080)."""
+        return SafetyMargin(
+            budget_quantile=self.budget_quantile,
+            stock_sigmas=self.stock_buffer_sigmas,
+            margin_quantile=self.margin_quantile,
+        )
 
 
 class OptionFacts(Protocol):
@@ -234,6 +274,10 @@ class OptimisationResult:
     relaxation: Relaxation | None = None
     """When no plan is found that reaches every clearance target, the smallest change to the
     brief's constraints that would make the request feasible (ADR 0044)."""
+    safety_margin: PlanSafetyMargin = field(
+        default_factory=lambda: PlanSafetyMargin(planned_promo_cost=0.0)
+    )
+    """The safety margin the plan was made with, and its promo cost as budgeted (ADR 0080)."""
 
 
 NOT_SELECTED_SHOWN = 5
@@ -253,19 +297,28 @@ def solve(
     constraints, why each line was chosen and the best options left out (ADR 0038)."""
     settings = settings or SolverSettings()
     started = time.monotonic()
-    problem = _Problem.of(request, options, facts, policy)
-    brief = problem  # with the brief's own clearance targets, before any is lowered
+    problem = _Problem.of(request, options, facts, policy, settings.safety_margin)
     findings = problem.rules.findings
     closest: _Closest | None = None
     infeasible = False  # proven that no plan reaches every clearance target
+    waived = False  # planned at the expected promo cost for the clearance targets (ADR 0080)
     time_limit, work = settings.time_limit_seconds, settings.deterministic_limit
     relax_limit = settings.relaxation_time_limit_seconds
     relax_work = settings.relaxation_deterministic_limit
     if problem.targets:
         # The closest plan takes up to half of each; the main solve what it left (ADR 0055).
         closest = problem.closest(settings, seed, time_limit=time_limit / 2, work=work / 2)
+        spent = closest.work
+        if any(closest.shortfall.values()) and budget_z(problem.safety) > 0:
+            # The budget margin may be what puts a target out of reach: without it, every
+            # target reached gives the plan its expected promo cost instead (ADR 0080).
+            plain = problem.at_expected_cost()
+            retry = plain.closest(settings, seed, time_limit=time_limit / 2, work=work / 2)
+            spent += retry.work
+            if not any(retry.shortfall.values()):
+                problem, closest, waived = plain, retry, True
         time_limit = max(time_limit - (time.monotonic() - started), time_limit / 2)
-        work = max(work - closest.work, work / 2)
+        work = max(work - spent, work / 2)
         infeasible = closest.proven
         if any(closest.shortfall.values()) and not closest.proven:
             # The closest search ran out of work short of a target: settle whether any plan
@@ -280,6 +333,8 @@ def solve(
             if check.status in (cp_model.OPTIMAL, cp_model.FEASIBLE):
                 reached = dict.fromkeys(closest.shortfall, 0)
                 closest = _Closest(check.picked, reached, True, closest.work)
+    brief = problem  # with the brief's own clearance targets, before any is lowered
+    if closest is not None:
         problem = problem.lowered(closest.shortfall)
     outcome = problem.solve(
         settings, seed, hint=closest.picked if closest else (), time_limit=time_limit, work=work
@@ -328,6 +383,11 @@ def solve(
         clearance_shortfalls=shortfalls,
         policy_findings=findings,
         relaxation=relaxation,
+        safety_margin=PlanSafetyMargin(
+            **problem.safety.model_dump(),
+            planned_promo_cost=problem.planned_promo_cost(picked),
+            budget_margin_waived=waived,
+        ),
     )
 
 
@@ -461,6 +521,8 @@ class _Problem:
     guard: list[tuple[int, ...]]
     """Groups of eligible options of which at most one may be selected: those covering one
     week and segment in one region with either SKU of a strong pair (ADR 0075)."""
+    safety: SafetyMargin
+    """The margin the budget, stock and minimum margin are kept at (ADR 0080)."""
     _keys: list[list[tuple[str, Region]]] = field(default_factory=list, init=False)
     """The (SKU, region)s each eligible option occupies."""
     _near: list[dict[int, int]] = field(default_factory=list, init=False)
@@ -490,6 +552,7 @@ class _Problem:
         options: PromoOptions,
         facts: OptionFacts,
         policy: CompanyPolicy,
+        safety: SafetyMargin,
     ) -> "_Problem":
         rules = plan_limits(request, policy)
         cleared = frozenset(target.sku_id for target in request.clearance_targets)
@@ -504,7 +567,7 @@ class _Problem:
             if c.sku_id in sell_through and c.region in request.scope.regions
         }
         strong = _strong_pairs(options.lines, facts, policy)
-        eligible = _eligible(request, options, facts, policy, cleared, targets, strong)
+        eligible = _eligible(request, options, facts, policy, cleared, targets, strong, safety)
         lines = [options.lines[n] for n in eligible]
         groups: defaultdict[tuple[str, Region], list[int]] = defaultdict(list)
         for n, line in enumerate(lines):
@@ -554,6 +617,7 @@ class _Problem:
             },
             strong=strong,
             guard=_guard_groups(lines, strong),
+            safety=safety,
         )
         problem.coefficients = problem.row_coefficients(eligible)
         problem.bound = np.array([problem.right_hand_side(limit) for limit in limits], np.int64)
@@ -564,16 +628,44 @@ class _Problem:
         """Eligible options a plan may select with every constraint in place."""
         return int((~self.kvi_breaking).sum())
 
+    def at_expected_cost(self) -> "_Problem":
+        """The same problem with each option's promo cost at its expected value: no budget
+        margin (ADR 0080). The eligible options do not depend on it."""
+        plain = replace(self, safety=self.safety.model_copy(update={"budget_quantile": 0.5}))
+        plain.coefficients = plain.row_coefficients(plain.eligible)
+        return plain
+
+    def _costs(self, table: pd.DataFrame) -> np.ndarray:
+        """Each row's promo cost at the budget quantile, in rupees (ADR 0080)."""
+        return planned_promo_cost(
+            table["promo_cost"].to_numpy(float), _cost_std(table), self.safety
+        )
+
+    def planned_promo_cost(self, picked: Sequence[int]) -> float:
+        """The plan's promo cost at the budget quantile, to the paisa."""
+        if not picked:
+            return 0.0
+        table = self.options.table.iloc[[self.eligible[n] for n in picked]]
+        return round(float(self._costs(table).sum()), 2)
+
+    def _shortfalls(self, table: pd.DataFrame, minimum: float) -> np.ndarray:
+        """Each row's margin shortfall at `minimum` with its units at the margin quantile, in
+        rupees: the plan keeps the minimum when they sum to at most 0 (ADR 0080)."""
+        return margin_shortfall(
+            table["revenue"].to_numpy(float),
+            table["gross_profit"].to_numpy(float),
+            units_cv(table["units"].to_numpy(float), table["units_std"].to_numpy(float)),
+            minimum=minimum,
+            margin=self.safety,
+        )
+
     def row_coefficients(self, rows: Sequence[int]) -> np.ndarray:
         """Each constraint's coefficient for these candidate-table rows (constraints x
         rows), rounded so a plan that keeps them keeps the constraint exactly."""
         table = self.options.table.iloc[list(rows)]
         lines = [self.options.lines[row] for row in rows]
-        cost = _paise_up(table["promo_cost"].to_numpy(float))
-        short = _paise_up(
-            self.rules.min_margin * table["revenue"].to_numpy(float)
-            - table["gross_profit"].to_numpy(float)
-        )
+        cost = _paise_up(self._costs(table))
+        short = _paise_up(self._shortfalls(table, self.rules.min_margin))
         anchor_uplift = table["window_uplift"].to_numpy(float)
         partner_uplift = table["partner_window_uplift"].to_numpy(float)
         tolerance = self.rules.kvi_price_tolerance
@@ -1331,12 +1423,10 @@ class _Problem:
             steps = math.ceil((minimum - floor) / MARGIN_STEP - _ROUNDING)
             levels = [minimum - step * MARGIN_STEP for step in range(steps)] + [floor]
         table = self.options.table.iloc[self.eligible]
-        revenue = table["revenue"].to_numpy(float)
-        gross_profit = table["gross_profit"].to_numpy(float)
         chosen = []
         for n, level in enumerate(levels):
             at = model.new_bool_var(f"margin{n}")
-            short = _paise_up(level * revenue - gross_profit)
+            short = _paise_up(self._shortfalls(table, level))
             model.add(_dot(short, x) <= 0).only_enforce_if(at)
             chosen.append(at)
             weight = math.ceil(BASIS_POINTS * (minimum - level) / minimum - _ROUNDING)
@@ -1418,14 +1508,18 @@ class _Problem:
         """The highest minimum margin, to a basis point and never below the margin floor,
         that the plan keeps with its margin shortfalls rounded as the solver rounds them."""
         table = self.options.table.iloc[[self.eligible[n] for n in plan]]
-        revenue = table["revenue"].to_numpy(float)
-        gross_profit = table["gross_profit"].to_numpy(float)
         floor = self.policy.margin_floor
-        blended = gross_profit.sum() / revenue.sum() if revenue.sum() > 0 else floor
+        blended = planned_margin(
+            table["revenue"].to_numpy(float),
+            table["gross_profit"].to_numpy(float),
+            units_cv(table["units"].to_numpy(float), table["units_std"].to_numpy(float)),
+            self.safety,
+        )
+        blended = floor if blended is None else blended
         level = math.floor(min(blended, self.rules.min_margin) * BASIS_POINTS + _ROUNDING)
         while (
             level / BASIS_POINTS > floor
-            and _paise_up(level / BASIS_POINTS * revenue - gross_profit).sum() > 0
+            and _paise_up(self._shortfalls(table, level / BASIS_POINTS)).sum() > 0
         ):
             level -= 1
         return max(level / BASIS_POINTS, floor)
@@ -1582,9 +1676,8 @@ class _Problem:
         if value < 1:
             reasons.add(NotSelectedReason.LOW_UPLIFT)
         number = {name: float(amount) for name, amount in table.iloc[row].items()}
-        over = number["p90_units"] > number["available_stock"] + _EPSILON
-        partner_over = number["partner_p90_units"] > number["partner_available_stock"] + _EPSILON
-        if over or (line.bundle_partner_sku_id is not None and partner_over):
+        fits, partner_fits = _fits_stock(table.iloc[[row]], self.safety)
+        if not fits[0] or (line.bundle_partner_sku_id is not None and not partner_fits[0]):
             reasons.add(NotSelectedReason.OUT_OF_STOCK)
         if not _in_window(line, self.request) or not _priced_within_policy(
             line, self.facts, self.policy, self.cleared
@@ -1688,10 +1781,12 @@ def _eligible(
     cleared: frozenset[str],
     targets: dict[_Limit, _Target],
     strong: dict[frozenset[str], float],
+    safety: SafetyMargin,
 ) -> list[int]:
     """Options worth at least one paisa alone, or that sell more of a SKU towards a
     clearance target in its region, that keep every per-line rule, in order: a BUNDLE of two
-    strong substitutes promotes them together, so it is not eligible (ADR 0075)."""
+    strong substitutes promotes them together, so it is not eligible (ADR 0075). Stock must
+    hold the stock buffer too (ADR 0080)."""
     table = options.table
     worth = np.rint(table["value"].to_numpy(float) * PAISE) >= 1
     towards = {(limit.sku_id, limit.region) for limit in targets}
@@ -1707,11 +1802,7 @@ def _eligible(
             dtype=bool,
         )
         worth = worth | helps
-    fits = table["p90_units"].to_numpy(float) <= table["available_stock"].to_numpy(float) + _EPSILON
-    partner_fits = (
-        table["partner_p90_units"].to_numpy(float)
-        <= table["partner_available_stock"].to_numpy(float) + _EPSILON
-    )
+    fits, partner_fits = _fits_stock(table, safety)
     kept = []
     for n in np.flatnonzero(worth & fits):
         line = options.lines[n]
@@ -1722,6 +1813,36 @@ def _eligible(
         if _in_window(line, request) and _priced_within_policy(line, facts, policy, cleared):
             kept.append(int(n))
     return kept
+
+
+def _fits_stock(table: pd.DataFrame, safety: SafetyMargin) -> tuple[np.ndarray, np.ndarray]:
+    """Whether each row's anchor, and its BUNDLE partner, fit their available stock: P90 units
+    (ADR 0004) and expected units plus the stock buffer (ADR 0080)."""
+
+    def fit(prefix: str) -> np.ndarray:
+        stock = table[f"{prefix}available_stock"].to_numpy(float) + _EPSILON
+        buffered = stock_units(
+            table[f"{prefix}units"].to_numpy(float),
+            table[f"{prefix}units_std"].to_numpy(float),
+            safety,
+        )
+        return np.asarray(
+            (table[f"{prefix}p90_units"].to_numpy(float) <= stock) & (buffered <= stock)
+        )
+
+    return fit(""), fit("partner_")
+
+
+def _cost_std(table: pd.DataFrame) -> np.ndarray:
+    """Each row's promo-cost std: its discount funding moves with its units (ADR 0080)."""
+    return promo_cost_std(
+        anchor_funding=table["anchor_discount_funding"].to_numpy(float),
+        units=table["units"].to_numpy(float),
+        units_std=table["units_std"].to_numpy(float),
+        partner_funding=table["partner_discount_funding"].to_numpy(float),
+        partner_units=table["partner_units"].to_numpy(float),
+        partner_units_std=table["partner_units_std"].to_numpy(float),
+    )
 
 
 def _in_window(line: PlanLine, request: PlanningRequest) -> bool:

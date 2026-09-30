@@ -40,6 +40,7 @@ from promopilot.datagen import GeneratedDataset
 from promopilot.domain import (
     DecisionMade,
     PlanningRequest,
+    PlanSafetyMargin,
     PromoWindow,
     Region,
     Scope,
@@ -140,6 +141,7 @@ def optimised(candidate_set_id: UUID = SET_ID) -> RunOptimizerOutput:
         objective=6_250.0,
         lines=[],
         total_promo_cost=1_500.0,
+        planned_promo_cost=1_500.0,
         marketing_budget=20_000.0,
         blended_margin=None,
         min_margin=0.15,
@@ -152,6 +154,7 @@ def optimised(candidate_set_id: UUID = SET_ID) -> RunOptimizerOutput:
         clearance_shortfalls=[],
         policy_findings=[],
         relaxation=None,
+        safety_margin=PlanSafetyMargin(planned_promo_cost=1_500.0),
     )
 
 

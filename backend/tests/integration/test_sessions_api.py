@@ -58,6 +58,7 @@ from promopilot.domain import (
     PlanExplanation,
     PlanningRequest,
     PlanRevision,
+    PlanSafetyMargin,
     PromoWindow,
     QuestionReason,
     Region,
@@ -685,6 +686,13 @@ async def test_a_plan_revision_keeps_its_clearance_shortfalls_and_the_briefs_con
         solver_status=SolveStatus.INFEASIBLE,
         clearance_shortfalls=(shortfall,),
         relaxation=relaxation,
+        safety_margin=PlanSafetyMargin(
+            budget_quantile=0.9,
+            stock_sigmas=2.0,
+            margin_quantile=0.1,
+            planned_promo_cost=18_500.0,
+            budget_margin_waived=True,
+        ),
     )
     issue = Violation(
         code=ViolationCode.CLEARANCE_TARGET,

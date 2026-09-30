@@ -91,6 +91,13 @@ class Settings(BaseSettings):
     # plan can reach every clearance target of spends it.
     optimizer_relaxation_deterministic_limit: float = Field(default=10.0, gt=0)
     optimizer_relaxation_time_limit_seconds: float = Field(default=60.0, gt=0)
+    # The safety margin every plan keeps from its limits (ADR 0080): each line's promo cost at
+    # this quantile against the budget (0.5 plans on expected cost), expected units plus this
+    # many std within stock (at least the P90 rule's 1.2816), and the minimum margin with units
+    # at this quantile (0.5 plans on the expected margin).
+    optimizer_budget_quantile: float = Field(default=0.9, ge=0.5, lt=1)
+    optimizer_stock_buffer_sigmas: float = Field(default=2.0, ge=1.2816)
+    optimizer_margin_quantile: float = Field(default=0.1, gt=0, le=0.5)
 
     # The Monte Carlo simulation of every plan revision (ADR 0042): runs per simulation, within
     # the simulator's MIN_RUNS..MAX_RUNS, and the seed that makes it reproducible.

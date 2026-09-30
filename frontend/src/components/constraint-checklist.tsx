@@ -114,7 +114,7 @@ function CheckDetails({
       ) : check.name === "Clearance" && check.result === "fail" ? (
         <Shortfalls revision={revision} />
       ) : (
-        <p>{passText(check, request)}</p>
+        <p>{passText(check, request, revision.safety_margin ?? null)}</p>
       )}
       {check.name === "Policy" &&
         revision.policy_findings.map((finding) => (
@@ -141,16 +141,50 @@ function limit(value: number, format: (n: number) => string, detail: string) {
   );
 }
 
+type SafetyMargin = NonNullable<PlanRevision["safety_margin"]>;
+
+// The percentile a quantile names: 0.9 is P90.
+function percentile(quantile: number): string {
+  return `P${Math.round(quantile * 100)}`;
+}
+
+// The blended margin the check held: expected, or with units at the margin quantile
+// (ADR 0080).
+function marginName(quantile: number): string {
+  return quantile < 0.5
+    ? `Blended margin with units at their ${percentile(quantile)}`
+    : "Blended expected margin";
+}
+
 function passText(
   check: ConstraintCheck,
   request: PlanningRequest | null,
+  margin: SafetyMargin | null,
 ): React.ReactNode {
+  const budgetQuantile = margin?.budget_quantile ?? 0.5;
+  const marginQuantile = margin?.margin_quantile ?? 0.5;
   switch (check.name) {
     case "Budget": {
       const caps = Object.keys(request?.regional_budget_caps ?? {}).length > 0;
+      // The budget counts each line's promo cost at the safety margin's quantile, unless
+      // the clearance targets needed it at the expected cost (ADR 0080).
+      const waived = margin?.budget_margin_waived ?? false;
       return (
         <>
-          Within the marketing budget
+          {margin && !waived && budgetQuantile > 0.5 ? (
+            <>
+              Promo cost at its {percentile(budgetQuantile)},{" "}
+              <SourcedNumber
+                value={margin.planned_promo_cost}
+                format={formatMoney}
+                source={SOURCES.decision}
+                detail="the plan's promo cost as the budget counted it"
+              />
+              , within the marketing budget
+            </>
+          ) : (
+            "Within the marketing budget"
+          )}
           {request && (
             <>
               {" of "}
@@ -162,13 +196,16 @@ function passText(
             </>
           )}
           {caps && " and each regional budget cap"}.
+          {waived &&
+            " Planned at the expected promo cost, without a safety margin: the clearance targets need the whole budget."}
         </>
       );
     }
     case "Minimum margin":
       return request?.min_margin != null ? (
         <>
-          Blended expected margin at or above the brief&apos;s minimum margin of{" "}
+          {marginName(marginQuantile)} at or above the brief&apos;s minimum
+          margin of{" "}
           {limit(
             request.min_margin,
             formatShare,
@@ -177,10 +214,12 @@ function passText(
           .
         </>
       ) : (
-        "Blended expected margin at or above the company-policy margin floor."
+        `${marginName(marginQuantile)} at or above the company-policy margin floor.`
       );
     case "Stock":
-      return "Every line's P90 units fit its available stock.";
+      return margin
+        ? `Every line's expected units plus ${margin.stock_sigmas} standard deviations fit its available stock.`
+        : "Every line's P90 units fit its available stock.";
     case "Clearance": {
       const targets = request?.clearance_targets ?? [];
       if (check.result === "not_set" || targets.length === 0) {

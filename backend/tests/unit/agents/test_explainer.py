@@ -15,6 +15,7 @@ from promopilot.domain import (
     PlanLine,
     PlanRevision,
     PlanRevisionLine,
+    PlanSafetyMargin,
     Region,
     Relaxation,
     RelaxedConstraint,
@@ -203,3 +204,51 @@ def test_the_strong_substitute_rule_is_named_with_its_theta() -> None:
     summary = template_explanations(planned, ()).summary
 
     assert "the rule against promoting strong substitutes together at θ 0.35" in summary
+
+
+def test_the_summary_says_what_the_budget_counted_with_the_safety_margin() -> None:
+    planned = revision(412.4, 18_250.0, 61_874.6, 172_384.2).model_copy(
+        update={
+            "solver_status": SolveStatus.OPTIMAL,
+            "relaxation": None,
+            "binding_constraints": (),
+            "safety_margin": PlanSafetyMargin(
+                budget_quantile=0.9,
+                stock_sigmas=2.0,
+                margin_quantile=0.1,
+                planned_promo_cost=23_456.0,
+            ),
+        }
+    )
+
+    summary = template_explanations(planned).summary
+
+    # ADR 0080: the budget counts each line's promo cost at its P90.
+    assert "promo cost at its P90 is ₹23,456 against the marketing budget" in summary
+    assert "without a safety margin" not in summary
+    assert check_numeric_grounding(summary, [planned]).ungrounded == ()
+
+
+def test_a_waived_budget_margin_is_flagged_in_the_summary() -> None:
+    planned = revision(412.4, 18_250.0, 61_874.6, 172_384.2).model_copy(
+        update={
+            "solver_status": SolveStatus.OPTIMAL,
+            "relaxation": None,
+            "binding_constraints": (),
+            "safety_margin": PlanSafetyMargin(
+                budget_quantile=0.5,
+                stock_sigmas=2.0,
+                margin_quantile=0.1,
+                planned_promo_cost=20_857.0,
+                budget_margin_waived=True,
+            ),
+        }
+    )
+
+    summary = template_explanations(planned).summary
+
+    assert (
+        "The budget is planned at the expected promo cost, without a safety margin: the "
+        "clearance targets need all of it."
+    ) in summary
+    assert check_numeric_grounding(summary, [planned]).ungrounded == ()
