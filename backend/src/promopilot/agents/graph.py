@@ -2,7 +2,8 @@
 (interrupt) → Done, checkpointed so an interrupt survives an API restart. Context goes to the
 Clarify interrupt instead when it has questions, and each answer goes back to Context
 (ADR 0048). An amendment at the Approval interrupt goes back to Context, which reads the brief
-again with every amendment, and the Planner plans a new round (ADR 0052).
+again with every amendment, and the Planner plans a new round (ADR 0052). An accepted
+relaxation goes back the same way, and code applies its values to the reading (ADR 0083).
 
 In this slice the Context node reads the brief with the LLM into a planning request with its
 assumptions, or clarification questions (ADR 0048), and by rules when the LLM is unavailable,
@@ -41,6 +42,7 @@ from langgraph.graph.state import CompiledStateGraph
 from langgraph.types import Command, interrupt
 from pydantic import BaseModel, TypeAdapter
 
+from promopilot.agents.amendments import relaxation_amendment
 from promopilot.agents.critic import (
     best_attempt,
     decide,
@@ -53,6 +55,7 @@ from promopilot.agents.planner import PlannedRevision
 from promopilot.agents.planner_agent import AgentTools, plan_with_tools
 from promopilot.agents.session import BriefData, read_context
 from promopilot.agents.state import (
+    AcceptedRelaxation,
     AmendAnswer,
     ApprovalAnswer,
     ApprovalRequest,
@@ -82,6 +85,7 @@ from promopilot.domain import (
     PlanExplanation,
     PlanningRequest,
     PlanRevision,
+    Relaxation,
 )
 from promopilot.guardrails import RiskThresholds, diff_revisions
 from promopilot.llm import LLMProvider
@@ -193,6 +197,7 @@ def build_graph(
             policy=tools.policy,
             clarifications=state.clarifications,
             amendments=state.amendments,
+            accepted=state.accepted,
             fallback=True,
         )
         if reading.degraded is not None:
@@ -330,9 +335,22 @@ def build_graph(
                 )
             )
             # A new planning round (ADR 0051, ADR 0052): `plan` stays as the revision the next
-            # one is diffed against.
+            # one is diffed against. An accepted relaxation is applied in code, never read by
+            # the LLM (ADR 0083).
+            amended: dict[str, object] = (
+                {"amendments": (*state.amendments, answer.amendment)}
+                if answer.relaxation is None
+                else {
+                    "accepted": (
+                        *state.accepted,
+                        AcceptedRelaxation(
+                            revision_number=plan.number, relaxation=answer.relaxation
+                        ),
+                    )
+                }
+            )
             return {
-                "amendments": (*state.amendments, answer.amendment),
+                **amended,
                 "questions": (),
                 "attempts": (),
                 "critic_findings": (),
@@ -435,6 +453,16 @@ async def resume_with_amendment(graph: PlanningGraph, thread_id: str, text: str)
     """Amend the request of a thread paused at the Approval interrupt: the Context agent reads
     it again and a new round is planned (ADR 0052); returns the nodes it ran, in order."""
     return await _run(graph, thread_id, Command(resume=AmendAnswer(amendment=text)))
+
+
+async def resume_with_acceptance(
+    graph: PlanningGraph, thread_id: str, relaxation: Relaxation
+) -> list[str]:
+    """Accept the relaxation of the revision a thread waits at Approval with: the amendment's
+    text states it (ADR 0052 D7), code applies its values to the Context agent's reading
+    (ADR 0083), and a new round is planned; returns the nodes it ran, in order."""
+    answer = AmendAnswer(amendment=relaxation_amendment(relaxation), relaxation=relaxation)
+    return await _run(graph, thread_id, Command(resume=answer))
 
 
 async def resume_with_answers(

@@ -1,5 +1,5 @@
 {
-  "hash": "f82107df2a56cf342077080ba16bf5370364ef409ec23b562fd73593b665e184",
+  "hash": "3409bf4870abb5e30f3508bf5da96e306d9501ab0ec42d6d74154520779f7a2d",
   "request": {
     "messages": [
       {
@@ -7,7 +7,7 @@
         "role": "system"
       },
       {
-        "content": "Planning request (JSON, read from the brief by the Context agent):\n{\"as_of_week\":104,\"scope\":{\"regions\":[\"North\"],\"categories\":[\"Snacks\",\"Beverages\"],\"sku_ids\":[]},\"promo_window\":{\"start_week\":108,\"end_week\":109},\"marketing_budget\":600000.0,\"min_margin\":0.18,\"clearance_targets\":[{\"sku_id\":\"SKU0002\",\"sell_through\":0.5986},{\"sku_id\":\"SKU0006\",\"sell_through\":0.5986}],\"regional_budget_caps\":{},\"kvi_price_tolerance\":null,\"max_promoted_skus_per_category_per_region\":null}\n\nBrief (a JSON string written by the user):\n\"Plan Diwali promotions for Snacks and Beverages across North and West. Budget ₹8 lakh. Keep margin above 18%. We are overstocked on 400g namkeen packs — clear at least 60% of that stock. Target families.\"",
+        "content": "Planning request (JSON, read from the brief by the Context agent):\n{\"as_of_week\":104,\"scope\":{\"regions\":[\"North\"],\"categories\":[\"Snacks\",\"Beverages\"],\"sku_ids\":[]},\"promo_window\":{\"start_week\":108,\"end_week\":109},\"marketing_budget\":600000.0,\"min_margin\":0.18,\"clearance_targets\":[{\"sku_id\":\"SKU0002\",\"sell_through\":0.6},{\"sku_id\":\"SKU0006\",\"sell_through\":0.5986}],\"regional_budget_caps\":{},\"kvi_price_tolerance\":null,\"max_promoted_skus_per_category_per_region\":null}\n\nBrief (a JSON string written by the user):\n\"Plan Diwali promotions for Snacks and Beverages across North and West. Budget ₹8 lakh. Keep margin above 18%. We are overstocked on 400g namkeen packs — clear at least 60% of that stock. Target families.\"",
         "role": "user"
       },
       {
@@ -25,7 +25,7 @@
                 "West"
               ]
             },
-            "id": "call_11pnRUPNCvms6LeNVBYLtGc6",
+            "id": "call_eL480HAy3naWjBoYRqznnJpm",
             "name": "get_scope_data"
           },
           {
@@ -34,46 +34,40 @@
                 "Snacks",
                 "Beverages"
               ],
+              "overstocked_only": true,
               "regions": [
                 "North",
                 "West"
-              ],
-              "sku_ids": [
-                "SKU0002",
-                "SKU0006"
               ]
             },
-            "id": "call_easJdZeyVLseoVYaACjJwEy2",
+            "id": "call_oDK0rIBxE8bk5UrMqt6olBiF",
             "name": "get_inventory_status"
           },
           {
             "arguments": {
-              "categories": [
-                "Snacks",
-                "Beverages"
-              ],
-              "kvi_only": true,
+              "end_week": 109,
               "regions": [
                 "North",
                 "West"
-              ]
+              ],
+              "start_week": 108
             },
-            "id": "call_yAbtOsXE8XpWuHoHqHXF9qCI",
-            "name": "get_competitor_gaps"
+            "id": "call_CIKwAKkY0vvCQn79ZSfgVgwc",
+            "name": "get_holidays"
           }
         ]
       },
       {
         "role": "tool",
-        "tool_call_id": "call_11pnRUPNCvms6LeNVBYLtGc6"
+        "tool_call_id": "call_eL480HAy3naWjBoYRqznnJpm"
       },
       {
         "role": "tool",
-        "tool_call_id": "call_easJdZeyVLseoVYaACjJwEy2"
+        "tool_call_id": "call_oDK0rIBxE8bk5UrMqt6olBiF"
       },
       {
         "role": "tool",
-        "tool_call_id": "call_yAbtOsXE8XpWuHoHqHXF9qCI"
+        "tool_call_id": "call_CIKwAKkY0vvCQn79ZSfgVgwc"
       },
       {
         "content": "",
@@ -93,7 +87,7 @@
                     "sku_id": "SKU0006"
                   }
                 ],
-                "kvi_price_tolerance": 0.02,
+                "kvi_price_tolerance": null,
                 "marketing_budget": 800000,
                 "max_promoted_skus_per_category_per_region": null,
                 "min_margin": 0.18,
@@ -117,14 +111,14 @@
                 "Families"
               ]
             },
-            "id": "call_o1zQllu9HdlS4JQrbid1R79U",
+            "id": "call_xiusja8aS656mJiGfntyakft",
             "name": "generate_candidates"
           }
         ]
       },
       {
         "role": "tool",
-        "tool_call_id": "call_o1zQllu9HdlS4JQrbid1R79U"
+        "tool_call_id": "call_xiusja8aS656mJiGfntyakft"
       }
     ],
     "temperature": 0.0,
@@ -1277,7 +1271,7 @@
             "as_of_week": 104,
             "clearance_targets": [
               {
-                "sell_through": 0.5986,
+                "sell_through": 0.6,
                 "sku_id": "SKU0002"
               },
               {
@@ -1285,7 +1279,7 @@
                 "sku_id": "SKU0006"
               }
             ],
-            "kvi_price_tolerance": 0.02,
+            "kvi_price_tolerance": null,
             "marketing_budget": 600000,
             "max_promoted_skus_per_category_per_region": null,
             "min_margin": 0.18,
@@ -1293,9 +1287,7 @@
               "end_week": 109,
               "start_week": 108
             },
-            "regional_budget_caps": {
-              "North": 600000
-            },
+            "regional_budget_caps": {},
             "scope": {
               "categories": [
                 "Snacks",
@@ -1303,15 +1295,14 @@
               ],
               "regions": [
                 "North"
-              ],
-              "sku_ids": []
+              ]
             }
           },
           "target_segments": [
             "Families"
           ]
         },
-        "id": "call_pDx5tB3HdFBhDjVCZFNxj9gf",
+        "id": "call_qtkQlmm0EEnY7zRb2mQ3ut9W",
         "name": "generate_candidates"
       }
     ]
@@ -1319,9 +1310,9 @@
   "schema_name": "ToolTurn",
   "usage": [
     {
-      "input_tokens": 10025,
+      "input_tokens": 10508,
       "model": "gpt-4.1-mini",
-      "output_tokens": 141
+      "output_tokens": 130
     }
   ]
 }

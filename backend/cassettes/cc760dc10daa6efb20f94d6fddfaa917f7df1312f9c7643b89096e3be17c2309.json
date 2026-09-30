@@ -1,5 +1,5 @@
 {
-  "hash": "4006f95244eb9878533bc507648449e771aff44dd932f149eb74d2d66883b394",
+  "hash": "cc760dc10daa6efb20f94d6fddfaa917f7df1312f9c7643b89096e3be17c2309",
   "request": {
     "messages": [
       {
@@ -7,7 +7,7 @@
         "role": "system"
       },
       {
-        "content": "Planning request (JSON, read from the brief by the Context agent):\n{\"as_of_week\":104,\"scope\":{\"regions\":[\"North\"],\"categories\":[\"Snacks\",\"Beverages\"],\"sku_ids\":[]},\"promo_window\":{\"start_week\":108,\"end_week\":109},\"marketing_budget\":600000.0,\"min_margin\":0.18,\"clearance_targets\":[{\"sku_id\":\"SKU0002\",\"sell_through\":0.5986},{\"sku_id\":\"SKU0006\",\"sell_through\":0.5986}],\"regional_budget_caps\":{},\"kvi_price_tolerance\":null,\"max_promoted_skus_per_category_per_region\":null}\n\nBrief (a JSON string written by the user):\n\"Plan Diwali promotions for Snacks and Beverages across North and West. Budget ₹8 lakh. Keep margin above 18%. We are overstocked on 400g namkeen packs — clear at least 60% of that stock. Target families.\"",
+        "content": "Planning request (JSON, read from the brief by the Context agent):\n{\"as_of_week\":104,\"scope\":{\"regions\":[\"North\"],\"categories\":[\"Snacks\",\"Beverages\"],\"sku_ids\":[]},\"promo_window\":{\"start_week\":108,\"end_week\":109},\"marketing_budget\":600000.0,\"min_margin\":0.18,\"clearance_targets\":[{\"sku_id\":\"SKU0002\",\"sell_through\":0.6},{\"sku_id\":\"SKU0006\",\"sell_through\":0.5986}],\"regional_budget_caps\":{},\"kvi_price_tolerance\":null,\"max_promoted_skus_per_category_per_region\":null}\n\nBrief (a JSON string written by the user):\n\"Plan Diwali promotions for Snacks and Beverages across North and West. Budget ₹8 lakh. Keep margin above 18%. We are overstocked on 400g namkeen packs — clear at least 60% of that stock. Target families.\"",
         "role": "user"
       }
     ],
@@ -1166,7 +1166,7 @@
             "West"
           ]
         },
-        "id": "call_11pnRUPNCvms6LeNVBYLtGc6",
+        "id": "call_eL480HAy3naWjBoYRqznnJpm",
         "name": "get_scope_data"
       },
       {
@@ -1175,41 +1175,35 @@
             "Snacks",
             "Beverages"
           ],
+          "overstocked_only": true,
           "regions": [
             "North",
             "West"
-          ],
-          "sku_ids": [
-            "SKU0002",
-            "SKU0006"
           ]
         },
-        "id": "call_easJdZeyVLseoVYaACjJwEy2",
+        "id": "call_oDK0rIBxE8bk5UrMqt6olBiF",
         "name": "get_inventory_status"
       },
       {
         "arguments": {
-          "categories": [
-            "Snacks",
-            "Beverages"
-          ],
-          "kvi_only": true,
+          "end_week": 109,
           "regions": [
             "North",
             "West"
-          ]
+          ],
+          "start_week": 108
         },
-        "id": "call_yAbtOsXE8XpWuHoHqHXF9qCI",
-        "name": "get_competitor_gaps"
+        "id": "call_CIKwAKkY0vvCQn79ZSfgVgwc",
+        "name": "get_holidays"
       }
     ]
   },
   "schema_name": "ToolTurn",
   "usage": [
     {
-      "input_tokens": 5147,
+      "input_tokens": 5146,
       "model": "gpt-4.1-mini",
-      "output_tokens": 121
+      "output_tokens": 107
     }
   ]
 }

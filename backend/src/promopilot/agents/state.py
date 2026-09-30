@@ -5,7 +5,8 @@ The state is checkpointed after every step, so it holds only values: the brief, 
 request, the Planner's attempts of the planning round (ADR 0051), the plan revision chosen
 from them with its plan facts, the Planner's notes (ADR 0049), the Critic's findings, the
 explanations and the latest decision, with the Context agent's assumptions, open questions and
-answered clarifications (ADR 0048), and every amendment (ADR 0052). The diff from the
+answered clarifications (ADR 0048), and every amendment (ADR 0052) and accepted relaxation
+(ADR 0083). The diff from the
 previous revision is on the plan revision (`plan.diff`), as is the simulation (ADR 0042). The
 trace is not state: every step is a trace event stored as it happens (ADR 0047).
 """
@@ -25,6 +26,7 @@ from promopilot.domain import (
     PlanExplanation,
     PlanningRequest,
     PlanRevision,
+    Relaxation,
 )
 from promopilot.guardrails import PlanFacts
 
@@ -57,14 +59,27 @@ class PlanAttempt(BaseModel):
     """The Critic's violations and risk findings; empty until it has reviewed the attempt."""
 
 
+class AcceptedRelaxation(BaseModel):
+    """A relaxation the manager accepted (ADR 0052 D7), and the plan revision that offered it.
+    Code applies its values to every later reading of the brief; the LLM never reads it
+    (ADR 0083)."""
+
+    model_config = ConfigDict(frozen=True)
+
+    revision_number: int = Field(ge=1)
+    relaxation: Relaxation
+
+
 class PlanningState(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     session_id: UUID
     brief: str
     amendments: tuple[str, ...] = ()
-    """Every amendment's text, oldest first; the Context agent reads them after the brief
-    (ADR 0052)."""
+    """Every amendment in the manager's words, oldest first; the Context agent reads them after
+    the brief (ADR 0052). An accepted relaxation is in `accepted` instead."""
+    accepted: tuple[AcceptedRelaxation, ...] = ()
+    """Every accepted relaxation, oldest first, applied in code after each reading (ADR 0083)."""
     request: PlanningRequest | None = None
     assumptions: tuple[Assumption, ...] = ()
     """How the Context agent read the brief, from its latest reading (ADR 0048)."""
@@ -132,6 +147,9 @@ class AmendAnswer(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     amendment: str
+    relaxation: Relaxation | None = None
+    """The relaxation this amendment accepts, whose text `amendment` is; code applies it and the
+    Context agent's LLM never reads it (ADR 0083)."""
 
 
 class ClarificationRequest(BaseModel):

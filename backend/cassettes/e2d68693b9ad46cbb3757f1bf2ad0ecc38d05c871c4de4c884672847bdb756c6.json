@@ -1,5 +1,5 @@
 {
-  "hash": "d19df178126eead10efec0c9ade6e0f3301b21de82f89d627201c2c7e7356311",
+  "hash": "e2d68693b9ad46cbb3757f1bf2ad0ecc38d05c871c4de4c884672847bdb756c6",
   "request": {
     "messages": [
       {
@@ -7,7 +7,7 @@
         "role": "system"
       },
       {
-        "content": "Risk findings (JSON from PromoPilot's deterministic review):\n[{\"finding\": 1, \"code\": \"OVER_CONCENTRATION\", \"message\": \"Snacks takes 100% of the plan's promo spend (₹31,387 of ₹31,387), above the 80% limit for one category of several in scope\", \"template_feedback\": \"Balance the plan across categories: set a lower max_promoted_skus_per_category_per_region, or leave some Snacks SKUs out with generate_candidates' exclude_sku_ids, so Snacks takes at most 80% of the spend.\", \"category\": \"Snacks\"}]",
+        "content": "Risk findings (JSON from PromoPilot's deterministic review):\n[{\"finding\": 1, \"code\": \"OVER_CONCENTRATION\", \"message\": \"Snacks takes 91.9% of the plan's promo spend (₹28,090 of ₹30,552), above the 80% limit for one category of several in scope\", \"template_feedback\": \"Balance the plan across categories: set a lower max_promoted_skus_per_category_per_region, or leave some Snacks SKUs out with generate_candidates' exclude_sku_ids, so Snacks takes at most 80% of the spend.\", \"category\": \"Snacks\"}]",
         "role": "user"
       }
     ],
@@ -56,7 +56,7 @@
   "response": {
     "feedback": [
       {
-        "feedback": "Balance the plan across categories by setting a lower max_promoted_skus_per_category_per_region or excluding some Snacks SKUs using generate_candidates' exclude_sku_ids, so that Snacks accounts for at most 80% of the promo spend.",
+        "feedback": "Balance the plan across categories by setting a lower max_promoted_skus_per_category_per_region for Snacks or exclude some Snacks SKUs using generate_candidates' exclude_sku_ids, so that Snacks accounts for at most 80% of the promo spend.",
         "finding": 1
       }
     ]
@@ -64,9 +64,9 @@
   "schema_name": "CriticFeedback",
   "usage": [
     {
-      "input_tokens": 549,
+      "input_tokens": 551,
       "model": "gpt-4.1-mini",
-      "output_tokens": 60
+      "output_tokens": 62
     }
   ]
 }

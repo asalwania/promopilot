@@ -7,6 +7,7 @@ from typing import Protocol
 import pandas as pd
 import structlog
 
+from promopilot.agents.amendments import apply_accepted
 from promopilot.agents.assumptions import (
     ContextReading,
     ContextWorld,
@@ -15,7 +16,7 @@ from promopilot.agents.assumptions import (
 )
 from promopilot.agents.context import BriefError, context_messages, read_brief, week_table
 from promopilot.agents.fallback import read_by_rules
-from promopilot.agents.state import DegradedReason
+from promopilot.agents.state import AcceptedRelaxation, DegradedReason
 from promopilot.agents.tools.inventory_status import pooled_stock
 from promopilot.domain import Clarification, CompanyPolicy, PlanningRequest
 from promopilot.llm import CassetteMissError, LLMError, LLMProvider
@@ -42,10 +43,12 @@ async def read_context(
     policy: CompanyPolicy,
     clarifications: Sequence[Clarification] = (),
     amendments: Sequence[str] = (),
+    accepted: Sequence[AcceptedRelaxation] = (),
     fallback: bool = False,
 ) -> ContextReading:
     """Read the brief, the answers so far and any amendments at the default as-of week: a
-    planning request with its assumptions, or the questions to ask first (ADR 0048).
+    planning request with its assumptions, or the questions to ask first (ADR 0048). Each
+    accepted relaxation is then applied in code; the LLM never reads it (ADR 0083).
 
     Raises `BriefError` when the reading cannot form a planning request and `LLMError` when
     the LLM fails, unless `fallback`: then the brief is read by rules instead, a cassette miss
@@ -94,14 +97,16 @@ async def read_context(
         policy=policy,
     )
     if reading is None:
-        return read_by_rules(
+        read = read_by_rules(
             brief,
             world,
             clarifications=clarifications,
             amendments=amendments,
             degraded=degraded or DegradedReason.LLM_UNAVAILABLE,
         )
-    return interpret(reading, world)
+    else:
+        read = interpret(reading, world)
+    return apply_accepted(read, accepted, policy)
 
 
 async def read_planning_request(

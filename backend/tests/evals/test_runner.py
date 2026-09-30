@@ -2,7 +2,6 @@
 with scripted LLMs, and scores each final plan (E9 seam 1, ADR 0056)."""
 
 import asyncio
-import re
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
@@ -10,7 +9,7 @@ from typing import Any
 import pytest
 from pydantic import BaseModel
 
-from promopilot.agents import BriefReading, ClearanceAsk, LLMPricing, PlanningSettings
+from promopilot.agents import BriefReading, LLMPricing, PlanningSettings
 from promopilot.config import ModelPrice, Settings
 from promopilot.datagen import GeneratedDataset
 from promopilot.domain import (
@@ -459,49 +458,14 @@ OVERREACH = Scenario(
         {"diff_changes": "clearance_targets"},
     ),
 )
-_ACCEPTED = re.compile(r"lower the clearance target for SKU0005 to ([\d.]+)% sell-through")
-
-
-class ReadsTheAccept:
-    """The Context agent's LLM reads only the amendment that accepts a relaxation, as the live
-    model would; every other call fails, so the rules read the brief (they cannot read an
-    accepted relaxation's text) and the planner and Explainer fall back."""
-
-    def __init__(self) -> None:
-        self.accepted: list[float] = []
-
-    async def complete_structured[T: BaseModel](
-        self, schema: type[T], messages: Sequence[Message]
-    ) -> T:
-        said = [found for m in messages for found in _ACCEPTED.findall(m.content)]
-        if schema is not BriefReading or not said:
-            raise LLMError("down but for the accepted relaxation")
-        sell_through = float(said[-1]) / 100
-        self.accepted.append(sell_through)
-        reading = BriefReading(
-            regions=[Region.NORTH],
-            categories=["Snacks"],
-            sku_ids=None,
-            promo_start_week=SMALL_AS_OF + 2,
-            promo_end_week=SMALL_AS_OF + 3,
-            marketing_budget=20_000.0,
-            min_margin=None,
-            clearance=[ClearanceAsk(products=CLEAR, sell_through=sell_through)],
-        )
-        return schema.model_validate(reading.model_dump())
-
-    async def complete_with_tools(
-        self, tools: Sequence[ToolSpec], messages: Sequence[Message]
-    ) -> ToolTurn:
-        raise LLMError("down")
 
 
 async def test_accepting_a_relaxation_re_plans_a_new_revision_with_the_relaxed_request(
     world: EvalWorld,
 ) -> None:
-    reads = ReadsTheAccept()
-
-    report = await evaluate(world, [OVERREACH], reads)
+    # With the LLM down the rules read the brief, and code applies the accepted relaxation: the
+    # LLM never reads its text (ADR 0083), so neither do the rules (lifting ADR 0076 D8's limit).
+    report = await evaluate(world, [OVERREACH])
 
     played = only_run(report, "overreach")
     assert played.outcome is RunOutcome.PLANNED, played.error
@@ -509,18 +473,19 @@ async def test_accepting_a_relaxation_re_plans_a_new_revision_with_the_relaxed_r
     assert played.revision is not None
     assert played.revision.number == 2
     assert played.revision.solver_status is not SolveStatus.INFEASIBLE
-    [relaxed] = reads.accepted
-    assert relaxed < 1.0
     assert [(p.property, p.passed) for p in played.properties] == [
         ("declares_infeasible: false", True),
         ("meets_clearance: SKU0005", True),
         ("diff_changes: clearance_targets", True),
     ]
-    # The label states 95%; the accepted relaxation's value is what the request should hold.
-    assert [(m.field, m.expected, m.matched) for m in played.extraction] == [
-        ("marketing_budget", "20000", True),
-        ("clearance_targets", f"SKU0005 {relaxed}", True),
-    ]
+    # The label states 100%; the accepted relaxation's value is what the request holds.
+    budget, clearance = played.extraction
+    assert (budget.field, budget.expected, budget.matched) == ("marketing_budget", "20000", True)
+    assert clearance.field == "clearance_targets"
+    assert clearance.matched
+    sku_id, relaxed = clearance.expected.split()
+    assert sku_id == "SKU0005"
+    assert 0 < float(relaxed) < 1.0
     assert played.explanations[-1].revision == 2
 
 

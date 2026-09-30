@@ -3,7 +3,6 @@ world's fitted models, against real Postgres and the agent graph's Postgres chec
 seam 1, E6 seam 5, E8 #44, #46)."""
 
 import asyncio
-import json
 from collections.abc import AsyncIterator, Callable, Iterator, Sequence
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from pathlib import Path
@@ -1389,9 +1388,11 @@ async def test_accepting_the_relaxation_amends_the_request_with_its_changes(
     assert amendment["relaxation"] == planned["plan_revision"]["relaxation"]
     assert amendment["text"].startswith("Accept the smallest relaxation: ")
     assert target.sku_id in amendment["text"]
-    # The Context agent reads the accepted relaxation like any other amendment.
-    reread = [call for call in llm.calls if call.schema is BriefReading][-1]
-    assert json.dumps(amendment["text"], ensure_ascii=False) in reread.messages[-1].content
+    # Code applies the accepted relaxation; the Context agent's LLM never reads its text, so
+    # the brief is asked again exactly as it was first (ADR 0083).
+    first, reread = [call for call in llm.calls if call.schema is BriefReading]
+    assert "Accept the smallest relaxation" not in reread.messages[-1].content
+    assert reread.messages == first.messages
     assert done["plan_revision"]["number"] == 2
 
 
