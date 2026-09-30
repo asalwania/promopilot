@@ -64,7 +64,7 @@ The write-off loss a plan avoids by selling overstocked units beyond baseline: t
 The expected units a SKU sells in a region over the promo window, promotions included, divided by its available stock at the as-of week (ADR 0040).
 
 **Clearance target**:
-The minimum sell-through required, in every region of the scope, for an overstocked SKU that the brief names for clearance; SKUs flagged only by days of cover get none (ADR 0014).
+The minimum sell-through required, in every region of the scope, for an overstocked SKU that the brief names for clearance; SKUs flagged only by days of cover get none (ADR 0014). No planner lever may put it out of reach: a clearance SKU cannot be left out (ADR 0059), and narrowing candidates by mechanisms or target segments leaves its options whole (ADR 0086).
 
 **Clearance shortfall**:
 How far a plan falls short of a clearance target that no plan within the other constraints reaches. The optimiser then returns the plan closest to every target and reports each shortfall; it is never a silent miss (ADR 0040). The request is infeasible, and a relaxation says what would fix it (ADR 0044).
@@ -221,7 +221,7 @@ Who a promotion is offered to: either one segment, as a segment-exclusive offer 
 _Avoid_: target audience, targeting
 
 **Promo option**:
-One fully specified possibility (SKU, region, mechanism, depth, duration, start week, target segment) together with its predicted outcomes. A planning request's promo options are enumerated in full and pruned when they are deeper than the maximum discount, below unit cost without overstock, a repeated charm price, or when their P90 units exceed available stock (ADR 0035). The set that survives is a **candidate set**, which the optimiser selects plan lines from. A candidate set narrowed by SKUs, mechanisms or target segments is the matching rows of the same request's unnarrowed set, so a loop-back that narrows it predicts nothing again (ADR 0077).
+One fully specified possibility (SKU, region, mechanism, depth, duration, start week, target segment) together with its predicted outcomes. A planning request's promo options are enumerated in full and pruned when they are deeper than the maximum discount, below unit cost without overstock, a repeated charm price, or when their P90 units exceed available stock (ADR 0035). The set that survives is a **candidate set**, which the optimiser selects plan lines from. A candidate set narrowed by SKUs, mechanisms or target segments is the matching rows of the same request's unnarrowed set, so a loop-back that narrows it predicts nothing again (ADR 0077). Mechanisms and target segments never narrow a SKU the brief names for clearance (ADR 0086).
 _Avoid_: candidate, option (bare)
 
 **P90 units**:
