@@ -3,7 +3,7 @@
 from pathlib import Path
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, SecretStr, model_validator
+from pydantic import BaseModel, ConfigDict, Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -70,6 +70,9 @@ class Settings(BaseSettings):
     # seconds, and whether logs are JSON lines (`json`) or readable text (`console`).
     trace_poll_interval_s: float = Field(default=0.5, gt=0, le=10)
     log_format: Literal["json", "console"] = "json"
+    # Safe logs (ADR 0085): lines below LOG_LEVEL are dropped. A brief, amendment, answer or
+    # rejection reason shows only on debug lines, and API keys never show.
+    log_level: Literal["debug", "info", "warning", "error"] = "info"
 
     # The CP-SAT optimiser (ADR 0036). One worker and a fixed seed give the same plan for the
     # same input; more workers interleave their search deterministically. Each phase stops on
@@ -105,6 +108,16 @@ class Settings(BaseSettings):
     critic_cannibalisation_share: float = Field(default=0.50, gt=0)
     critic_stockout_probability: float = Field(default=0.20, gt=0, le=1)
     critic_objective_tolerance: float = Field(default=0.05, ge=0, le=1)
+
+    def log_secrets(self) -> tuple[str, ...]:
+        """The configured API keys, which logs redact wherever they appear (ADR 0085)."""
+        keys = (self.openai_api_key, self.anthropic_api_key)
+        return tuple(text for key in keys if (text := _secret_text(key)))
+
+    @field_validator("log_level", mode="before")
+    @classmethod
+    def _lower_log_level(cls, value: Any) -> Any:
+        return value.lower() if isinstance(value, str) else value
 
     @model_validator(mode="before")
     @classmethod

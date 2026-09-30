@@ -112,6 +112,29 @@ def test_the_trace_poll_interval_and_log_format_come_from_the_environment(
         Settings()
 
 
+def test_logs_are_info_and_above_unless_the_environment_says(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("LOG_LEVEL", raising=False)
+    assert Settings().log_level == "info"
+
+    monkeypatch.setenv("LOG_LEVEL", "DEBUG")
+    assert Settings().log_level == "debug"
+
+    monkeypatch.setenv("LOG_LEVEL", "trace")
+    with pytest.raises(ValueError, match="log_level"):
+        Settings()
+
+
+def test_the_configured_api_keys_are_the_secrets_logs_redact(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "anthropic-key-123456")
+    monkeypatch.setenv("OPENAI_API_KEY", "")
+
+    assert Settings().log_secrets() == ("anthropic-key-123456",)
+
+
 def test_the_critics_risk_thresholds_come_from_the_environment(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
