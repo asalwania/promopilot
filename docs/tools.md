@@ -152,7 +152,7 @@ List the detected substitutes and complements of each SKU. A substitute is a SKU
 
 ### `generate_candidates`
 
-Generate every promo option for the planning request: each in-scope SKU and region, mechanism, depth, duration, start week inside the promo window, and target segment (one segment or All customers); a BUNDLE pairs a SKU with a detected complement. Options deeper than the company-policy maximum discount, below unit cost (unless overstocked), or whose P90 units exceed available stock are pruned. The rest are predicted, with cannibalisation, halo and clearance value. A KVI the competitor undercuts also gets a price-match option: PCT_OFF at the smallest whole-percent depth that reaches the competitor's price. SKUs the request names for clearance count as overstocked. Returns counts, pruned counts per reason, counts per region and mechanism, the price matches offered, the top options by value, and a candidate_set_id to pass to the optimiser. Narrow by mechanisms, target segments or SKU ids to generate fewer, or leave SKUs out with exclude_sku_ids.
+Generate every promo option for the planning request: each in-scope SKU and region, mechanism, depth, duration, start week inside the promo window, and target segment (one segment or All customers); a BUNDLE pairs a SKU with a detected complement. Options deeper than the company-policy maximum discount, below unit cost (unless overstocked), or whose P90 units exceed available stock are pruned. The rest are predicted, with cannibalisation, halo and clearance value. A KVI the competitor undercuts also gets a price-match option: PCT_OFF at the smallest whole-percent depth that reaches the competitor's price. SKUs the request names for clearance count as overstocked. Returns counts, pruned counts per reason, counts per region and mechanism, the price matches offered, the top options by value, and a candidate_set_id to pass to the optimiser. Narrow by mechanisms, target segments or SKU ids to generate fewer, leave SKUs out with exclude_sku_ids, or cap a SKU's depth or mechanisms with sku_limits.
 
 **Input**
 
@@ -163,6 +163,7 @@ Generate every promo option for the planning request: each in-scope SKU and regi
 | `target_segments` | array of [TargetSegment](#targetsegment) or null | no | default `null` | Omit for every segment and All customers. |
 | `sku_ids` | array of string or null | no | default `null` | Only these SKUs of the request's scope; omit for all. |
 | `exclude_sku_ids` | array of string or null | no | default `null` | SKUs of the request's scope to leave out, in every region: the lever for a SKU the Critic flags. Not a clearance target of the brief; omit to leave none out. |
+| `sku_limits` | array of [SkuLimit](#skulimit) or null | no | default `null` | Caps on how SKUs of the request's scope are promoted, in every region and as a BUNDLE partner: at most max_depth_pct deep, and only by mechanisms. The lever to promote a SKU the Critic flags more gently instead of leaving it out. Each may only tighten: max_depth_pct at most the policy's maximum discount, mechanisms among the call's. Not a clearance target of the brief; omit to cap none. |
 
 **Output**
 
@@ -787,6 +788,19 @@ include a BUNDLE's partner (ADR 0017). Margin is gross profit over revenue in ea
 | `base_price` | number | yes |  |  |
 | `unit_cost` | number | yes |  |  |
 | `is_kvi` | boolean | yes |  |  |
+
+### SkuLimit
+
+The planner's cap on how one SKU of the scope is promoted, in every region, as anchor
+or as a BUNDLE partner: never deeper than `max_depth_pct` (a plan line's nominal
+`depth_pct`) and only by `mechanisms`. It only removes promo options; it is the planner's
+lever for a SKU the Critic flags, not part of the brief (ADR 0084).
+
+| Field | Type | Required | Constraints | Description |
+| --- | --- | --- | --- | --- |
+| `sku_id` | string | yes |  |  |
+| `max_depth_pct` | integer or null | no | minimum 1, maximum 100, default `null` | The deepest depth_pct allowed; omit for any. |
+| `mechanisms` | array of [Mechanism](#mechanism) or null | no | minItems 1, default `null` | The only mechanisms allowed; omit for any. |
 
 ### SkuRelations
 
