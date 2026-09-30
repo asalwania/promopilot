@@ -6,6 +6,8 @@ breaks a constraint, at most 15% since plans keep a safety margin (ADR 0012, ADR
 Expected properties are checked on a session's outcome.
 """
 
+import statistics
+from collections import Counter
 from collections.abc import Sequence
 
 from promopilot.domain import CompanyPolicy, PlanningRequest, PlanRevision, SolveStatus, Violation
@@ -115,6 +117,24 @@ def oracle_breach_rate(runs: Sequence[RunResult]) -> Metric:
         breakdown={
             breach.value: sum(breach in score.breaches for score in scored) for breach in Breach
         },
+    )
+
+
+def open_issues(runs: Sequence[RunResult]) -> Metric:
+    """The median number of open issues on a final plan, over the runs that ended with one,
+    and how many plans have any; reported, aiming at none (ADR 0084). The breakdown counts
+    them in all and by code."""
+    planned = [run for run in runs if run.constraints is not ConstraintCheck.NO_PLAN]
+    codes = Counter(code for run in planned for code in run.open_issues)
+    return Metric(
+        name="open_issues",
+        label="Open issues per plan (median)",
+        value=statistics.median(len(run.open_issues) for run in planned) if planned else None,
+        count=sum(bool(run.open_issues) for run in planned),
+        of=len(planned),
+        direction="at_most",
+        breakdown={"total": sum(codes.values()), **dict(codes)},
+        unit="count",
     )
 
 

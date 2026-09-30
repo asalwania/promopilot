@@ -280,6 +280,9 @@ class RunResult(_Frozen):
     cassette_misses: tuple[str, ...] = ()
     """The hash of every request the replay provider held no cassette for, once each, in the
     order first asked: every round, not only the final one (ADR 0069)."""
+    open_issues: tuple[str, ...] = ()
+    """The code of each open issue the Critic left on the final plan revision, in its order:
+    the violations and risk findings the plan went to approval with (ADR 0084)."""
 
     @computed_field  # type: ignore[prop-decorator]
     @property
@@ -322,8 +325,9 @@ class Metric(_Frozen):
     passed: bool | None = None
     """None for a reported metric, or when nothing was scored."""
     breakdown: dict[str, int] = {}
-    unit: Literal["share", "seconds", "rupees"] = "share"
-    """What `value` and `target` are in: a share from 0 to 1, or a P50 in seconds or rupees."""
+    unit: Literal["share", "seconds", "rupees", "count"] = "share"
+    """What `value` and `target` are in: a share from 0 to 1, a P50 in seconds or rupees, or a
+    median count (ADR 0084)."""
     aim: float | None = None
     """What a reported metric aims for, in `direction` and `unit`, never judged (SPEC §12.2)."""
 
@@ -455,6 +459,8 @@ def format_value(metric: Metric) -> str:
 
 def format_amount(metric: Metric, amount: float, *, share_digits: int = 1) -> str:
     """An amount in the metric's unit, such as its value, target or aim."""
+    if metric.unit == "count":
+        return f"{amount:g}"
     if metric.unit == "seconds":
         return f"{amount:.1f} s"
     if metric.unit == "rupees":

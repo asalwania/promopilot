@@ -902,7 +902,7 @@ One mechanism in a comparison: its best option, or why it has none.
 | `of` | integer | yes |  |  |
 | `passed` | boolean or null | no |  |  |
 | `target` | number or null | no |  |  |
-| `unit` | string | no | one of `share`, `seconds`, `rupees`, default `share` |  |
+| `unit` | string | no | one of `share`, `seconds`, `rupees`, `count`, default `share` |  |
 | `value` | number or null | yes |  |  |
 
 ### ModelEntry
@@ -1401,6 +1401,7 @@ string, one of `planned`, `awaiting_clarification`, `failed`.
 | `flagged` | array of string | no | default `[]` |  |
 | `infeasibility` | [InfeasibilityCheck](#infeasibilitycheck) or null | no |  |  |
 | `llm_s` | number | no | default `0.0` |  |
+| `open_issues` | array of string | no | default `[]` |  |
 | `oracle` | [OracleScore](#oraclescore) or null | no |  |  |
 | `outcome` | [RunOutcome](#runoutcome) | yes |  |  |
 | `passed` | boolean | yes | read-only | It ran, kept its hard constraints and had every expected property. Written into the JSON, so `/evals` shows it as the report says and never re-derives it (ADR 0072). |

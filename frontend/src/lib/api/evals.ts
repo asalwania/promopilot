@@ -18,7 +18,7 @@ const metricSchema = z.object({
   direction: z.enum(["at_least", "at_most"]).nullable().optional(),
   passed: z.boolean().nullable().optional(),
   breakdown: z.record(z.string(), z.number()),
-  unit: z.enum(["share", "seconds", "rupees"]),
+  unit: z.enum(["share", "seconds", "rupees", "count"]),
   aim: z.number().nullable().optional(),
 }) satisfies z.ZodType<Schemas["Metric"]>;
 

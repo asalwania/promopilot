@@ -76,6 +76,7 @@ from promopilot.evals.metrics import (
     check_constraints,
     check_property,
     constraint_satisfaction,
+    open_issues,
     oracle_breach_rate,
     oracle_breaches,
 )
@@ -166,6 +167,7 @@ async def run(
         metrics=(
             constraint_satisfaction(every_run),
             oracle_breach_rate(every_run),
+            open_issues(every_run),
             *behaviour_metrics(every_run),
             *recovery,
             plan_quality(results),
@@ -432,6 +434,11 @@ async def _score(
         constraints=constraints,
         violations=violations,
         oracle=oracle,
+        open_issues=(
+            tuple(issue.code.value for issue in state.critic_findings)
+            if revision is not None and state is not None
+            else ()
+        ),
         properties=tuple(
             check_property(
                 prop,

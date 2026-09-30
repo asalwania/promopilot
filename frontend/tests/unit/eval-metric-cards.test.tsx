@@ -70,6 +70,29 @@ describe("EvalMetricCards", () => {
     expect(within(card("P50 session cost")).getByText("₹3.04")).toBeVisible();
   });
 
+  it("shows a count as a plain number, with open issues under Plan quality", () => {
+    const issues = {
+      ...metric("grounding"),
+      name: "open_issues",
+      label: "Open issues per plan (median)",
+      value: 1.5,
+      count: 2,
+      of: 3,
+      target: null,
+      direction: "at_most" as const,
+      passed: null,
+      unit: "count" as const,
+      breakdown: { total: 3 },
+    };
+    render(<EvalMetricCards metrics={[...recordedReport.metrics, issues]} />);
+
+    const quality = screen.getByRole("region", { name: "Plan quality" });
+    const found = within(quality).getByRole("article", {
+      name: "Open issues per plan (median)",
+    });
+    expect(within(found).getByText("1.5")).toBeVisible();
+  });
+
   it("names the eval metric each value comes from", () => {
     render(<EvalMetricCards metrics={recordedReport.metrics} />);
 

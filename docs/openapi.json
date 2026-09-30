@@ -1583,7 +1583,8 @@
             "enum": [
               "share",
               "seconds",
-              "rupees"
+              "rupees",
+              "count"
             ],
             "title": "Unit",
             "type": "string"
@@ -3391,6 +3392,14 @@
             "default": 0.0,
             "title": "Llm S",
             "type": "number"
+          },
+          "open_issues": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Open Issues",
+            "type": "array"
           },
           "oracle": {
             "anyOf": [
