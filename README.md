@@ -573,6 +573,7 @@ docs/agents/ Agent workflow config (issue tracker, triage labels, domain docs)
 - [ADR 0084: SKU limits let the Critic loop promote a flagged SKU more gently: `generate_candidates`' `sku_limits` caps one SKU's depth or mechanisms, only ever tightening, and the Critic's feedback leads with it](docs/adr/0084-sku-limits-let-the-critic-loop-promote-a-flagged-sku-more-gently.md)
 - [ADR 0085: Every log line names its request and session; the API logs one `http.request` line per request, redacts secrets at every level, and shows a manager's text only at debug (`LOG_LEVEL`)](docs/adr/0085-structured-safe-logging.md)
 - [ADR 0086: Narrowing candidates never limits a clearance target; the demo brief plans feasibly, and accepting a relaxation moves to an infeasible session](docs/adr/0086-narrowing-never-limits-a-clearance-target.md)
+- [ADR 0089: The nine-blocker claim is kept at D2 only by a stated rule, on numbers from one clean live recording; the evidence matrix cites code, pytest ids, demo moments and metrics](docs/adr/0089-nine-blocker-claim-and-evidence-rules.md)
 - [ADR 0090: The Explainer is shown the totals and the budget left it would otherwise work out itself, so it never cites a figure no tool output shows; a refused recording dumps the Explainer's requests and answers](docs/adr/0090-the-explainer-is-shown-the-totals-it-would-derive.md)
 
 The domain glossary is [CONTEXT.md](CONTEXT.md).
