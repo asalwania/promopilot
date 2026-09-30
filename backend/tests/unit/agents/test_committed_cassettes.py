@@ -31,7 +31,7 @@ SCRIPTS = load_scripts(CASSETTE_DIR / "sessions.json")
 # margin (ADR 0080) these rounds get heavy-cannibalisation findings on lines already at the
 # shallowest depth; each attempt answers one SKU and the next is flagged on another, so the
 # findings never repeat and the round hands on its best plan with open issues at the cap (#181).
-ROUNDS_AT_CAP = {("e2e", 0), ("demo", 3), ("clarify", 0)}
+ROUNDS_AT_CAP = {("e2e", 0), ("clarify", 0), ("infeasible", 1)}
 
 
 def test_the_manifest_lists_every_session_as_scripted_and_every_cassette_it_called() -> None:
@@ -53,16 +53,23 @@ def test_every_recorded_planning_round_converges_or_stops_early() -> None:
                 assert count < MAX_ATTEMPTS, f"{name}: {attempts} planner attempts per round"
 
 
+def steps_of(name: str) -> list[str]:
+    [script] = [script for script in SCRIPTS if script.name == name]
+    return [
+        "accept" if step.accept_relaxation else "approve" if step.approve else "amend"
+        for step in script.steps
+    ]
+
+
 def test_the_demo_the_e2e_journey_and_a_clarification_are_scripted() -> None:
-    assert {"demo", "e2e", "clarify"} <= {script.name for script in SCRIPTS}
+    assert {"demo", "e2e", "clarify", "infeasible"} <= {script.name for script in SCRIPTS}
     assert any(step.answers for script in SCRIPTS for step in script.steps)
     assert any(step.amend for script in SCRIPTS for step in script.steps)
-    # The demo accepts its relaxation and then approves, as the UI can (ADR 0070).
-    [demo] = [script for script in SCRIPTS if script.name == "demo"]
-    assert [
-        "accept" if step.accept_relaxation else "approve" if step.approve else "amend"
-        for step in demo.steps
-    ] == ["amend", "amend", "accept", "approve"]
+    # The demo brief plans feasibly, so it is amended twice and approved (ADR 0086).
+    assert steps_of("demo") == ["amend", "amend", "approve"]
+    # An infeasible brief accepts its relaxation and then approves, as the UI can (ADR 0070,
+    # ADR 0086).
+    assert steps_of("infeasible") == ["accept", "approve"]
 
 
 @pytest.mark.parametrize("script", SCRIPTS, ids=[script.name for script in SCRIPTS])
