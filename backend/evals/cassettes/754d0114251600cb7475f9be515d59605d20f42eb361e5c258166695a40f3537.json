@@ -1,0 +1,80 @@
+{
+  "hash": "754d0114251600cb7475f9be515d59605d20f42eb361e5c258166695a40f3537",
+  "request": {
+    "messages": [
+      {
+        "content": "<!-- prompt: critic v3 (E11 #141). Editing this file changes the request hash: re-record cassettes. -->\nYou are the Critic of PromoPilot, a retail promotion planner for a multi-region Indian retailer.\nPromoPilot's deterministic risk review has flagged the plan the Planner agent chose. For each\nfinding, write feedback that tells the Planner agent what to change in its next plan.\n\nThe Planner's levers are:\n- capping one SKU's depth or mechanisms with generate_candidates' sku_limits, in every region,\n  which keeps the SKU in the plan;\n- leaving a SKU out of generate_candidates with exclude_sku_ids, in every region;\n- narrowing generate_candidates by mechanisms or target segments, for every SKU;\n- tightening the optimiser options: a lower regional budget cap, a smaller cap on promoted SKUs\n  per category and region, or the KVI price tolerance.\nIt may never loosen the brief's constraints (budget, scope, promo window, minimum margin,\nclearance targets), and a SKU limit may only tighten. A clearance target of the brief can be\nneither capped nor left out.\n\nRules:\n- Write one or two sentences of feedback for every finding, by its `finding` number.\n- Name the SKU, category or region and the lever to use. Start from the template feedback,\n  which names the lever that fits the finding.\n- Never compute or invent a number. Cite a number only exactly as the finding shows it, and\n  prefer citing none.\n",
+        "role": "system"
+      },
+      {
+        "content": "Risk findings (JSON from PromoPilot's deterministic review):\n[{\"finding\": 1, \"code\": \"OVER_CONCENTRATION\", \"message\": \"SKU0002 in East (FIXED_PRICE at 20%): its promo cost ₹42,218 is 38.4% of the plan's promo spend ₹1.1 lakh, above the 25% limit for one plan line\", \"template_feedback\": \"Spread the promo spend: cap SKU0002's depth below 20% with generate_candidates' sku_limits, or else leave SKU0002 out with generate_candidates' exclude_sku_ids, so no plan line takes over 25% of it.\", \"sku_id\": \"SKU0002\", \"region\": \"East\"}, {\"finding\": 2, \"code\": \"HEAVY_CANNIBALISATION\", \"message\": \"SKU0017 in East (FIXED_PRICE at 5%): the cannibalisation of its substitutes ₹132 is 232.1% of its incremental profit ₹57, at or above the 50% limit\", \"template_feedback\": \"SKU0017 in East mostly takes sales from its own substitutes: cap SKU0017's depth below 5% or limit its mechanisms with generate_candidates' sku_limits, or else leave SKU0017 out with generate_candidates' exclude_sku_ids.\", \"sku_id\": \"SKU0017\", \"region\": \"East\"}, {\"finding\": 3, \"code\": \"HEAVY_CANNIBALISATION\", \"message\": \"SKU0019 in East (FIXED_PRICE at 5%): the cannibalisation of its substitutes ₹27 is 62.7% of its incremental profit ₹43, at or above the 50% limit\", \"template_feedback\": \"SKU0019 in East mostly takes sales from its own substitutes: cap SKU0019's depth below 5% or limit its mechanisms with generate_candidates' sku_limits, or else leave SKU0019 out with generate_candidates' exclude_sku_ids.\", \"sku_id\": \"SKU0019\", \"region\": \"East\"}]",
+        "role": "user"
+      }
+    ],
+    "schema": {
+      "$defs": {
+        "FindingFeedback": {
+          "properties": {
+            "feedback": {
+              "description": "What the planner should change: one or two sentences.",
+              "title": "Feedback",
+              "type": "string"
+            },
+            "finding": {
+              "description": "The finding's `finding` number in the findings data.",
+              "title": "Finding",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "finding",
+            "feedback"
+          ],
+          "title": "FindingFeedback",
+          "type": "object"
+        }
+      },
+      "description": "What the Critic's LLM writes: actionable feedback for each risk finding.",
+      "properties": {
+        "feedback": {
+          "description": "One feedback for every finding.",
+          "items": {
+            "$ref": "#/$defs/FindingFeedback"
+          },
+          "title": "Feedback",
+          "type": "array"
+        }
+      },
+      "required": [
+        "feedback"
+      ],
+      "title": "CriticFeedback",
+      "type": "object"
+    },
+    "temperature": 0.0
+  },
+  "response": {
+    "feedback": [
+      {
+        "feedback": "Spread the promo spend in East by capping SKU0002's depth below 20% using generate_candidates' sku_limits, or exclude SKU0002 entirely with generate_candidates' exclude_sku_ids to ensure no single plan line exceeds 25% of the promo spend.",
+        "finding": 1
+      },
+      {
+        "feedback": "Reduce heavy cannibalisation in East by capping SKU0017's depth below 5% or limiting its promotional mechanisms with generate_candidates' sku_limits, or exclude SKU0017 with generate_candidates' exclude_sku_ids to prevent excessive sales cannibalisation.",
+        "finding": 2
+      },
+      {
+        "feedback": "Address the cannibalisation issue for SKU0019 in East by capping its depth below 5% or restricting its mechanisms with generate_candidates' sku_limits, or exclude SKU0019 using generate_candidates' exclude_sku_ids to reduce cannibalisation of its substitutes.",
+        "finding": 3
+      }
+    ]
+  },
+  "schema_name": "CriticFeedback",
+  "usage": [
+    {
+      "input_tokens": 892,
+      "model": "gpt-4.1-mini",
+      "output_tokens": 186
+    }
+  ]
+}

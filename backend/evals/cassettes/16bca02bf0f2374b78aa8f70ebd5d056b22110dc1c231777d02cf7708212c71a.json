@@ -73,16 +73,16 @@
     "temperature": 0.0
   },
   "response": {
-    "changes": null,
+    "changes": "No plan lines were created because the plan is infeasible. The binding constraints are the minimum margin of 35% and the clearance targets of 90% for SKU0057, SKU0059, and SKU0061 in South. The relaxation suggests lowering the margin to 15.1% and clearance targets substantially to enable a feasible plan, but company policy currently binds these constraints.",
     "rationales": [],
-    "summary": "This plan aims to promote Dairy SKUs in the South region during weeks W54 to W55 with a marketing budget of ₹2 lakh and strict clearance targets of 90% for SKUs SKU0057, SKU0059, and SKU0061. However, the plan is infeasible because it cannot meet the minimum margin requirement of 35% alongside these high clearance targets. The binding constraints are the minimum margin and the clearance targets for these three SKUs, which result in significant shortfalls in expected sell-through. The main risk is that no promotional strategy can satisfy both the margin and clearance goals simultaneously under current company policies."
+    "summary": "This plan aims to promote Dairy SKUs in the South region during weeks W54 to W55 with a marketing budget of ₹2 lakh and strict clearance targets of 90% for SKUs SKU0057, SKU0059, and SKU0061. However, the plan is infeasible because it cannot meet the minimum margin requirement of 35% alongside these high clearance targets. The binding constraints are the minimum margin and the clearance targets for these three SKUs, which result in significant shortfalls in expected sell-through. The main risk is that no promotional strategy can clear enough stock without violating margin policies, leading to zero planned promo cost and no expected profit."
   },
   "schema_name": "ExplainerAnswer",
   "usage": [
     {
       "input_tokens": 1965,
       "model": "gpt-4.1-mini",
-      "output_tokens": 138
+      "output_tokens": 220
     }
   ]
 }

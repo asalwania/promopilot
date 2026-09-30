@@ -40,7 +40,7 @@ OPENAI_API_KEY=sk-...      # OPENAI_MODEL defaults to gpt-4.1-mini
 
 The badge then reads **Live LLM** with the provider and model. The stack's `LLM_PROVIDER` is `auto` in demo mode: OpenAI if its key is set, else Anthropic, else replay. `make up` always replays, whatever `.env` holds.
 
-The `/evals` page shows the recorded full eval run baked into the api image (32 scenarios, `backend/evals/published/`).
+The `/evals` page shows the recorded full eval run baked into the api image (33 scenarios, `backend/evals/published/`).
 
 | Command | What it does |
 |---|---|
