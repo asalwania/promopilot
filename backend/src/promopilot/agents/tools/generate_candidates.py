@@ -59,7 +59,10 @@ DESCRIPTION = (
     "overstocked. Returns counts, pruned counts per reason, counts per region and mechanism, "
     "the price matches offered, the top options by value, and a candidate_set_id to pass to "
     "the optimiser. Narrow by mechanisms, target segments or SKU ids to generate fewer, "
-    "leave SKUs out with exclude_sku_ids, or cap a SKU's depth or mechanisms with sku_limits."
+    "leave SKUs out with exclude_sku_ids, or cap a SKU's depth or mechanisms with sku_limits. "
+    "Mechanisms and target segments never narrow a SKU the request names for clearance: it "
+    "keeps every mechanism and segment, so the narrowing cannot put its clearance target out "
+    "of reach."
 )
 
 
@@ -67,9 +70,15 @@ class GenerateCandidatesInput(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     request: PlanningRequest
-    mechanisms: list[Mechanism] | None = Field(default=None, description="Omit for all four.")
+    mechanisms: list[Mechanism] | None = Field(
+        default=None,
+        description="Omit for all four. A SKU named for clearance keeps all four.",
+    )
     target_segments: list[TargetSegment] | None = Field(
-        default=None, description="Omit for every segment and All customers."
+        default=None,
+        description=(
+            "Omit for every segment and All customers. A SKU named for clearance keeps them all."
+        ),
     )
     sku_ids: list[str] | None = Field(
         default=None, description="Only these SKUs of the request's scope; omit for all."
@@ -153,6 +162,13 @@ class GenerateCandidatesOutput(BaseModel):
         description="Undercut KVIs in scope and the depth that matches the competitor's price."
     )
     top: list[CandidateOption] = Field(description=f"Up to {MAX_TOP} options, best value first.")
+    not_narrowed: list[str] = Field(
+        default_factory=list,
+        description=(
+            "SKUs named for clearance that kept every mechanism and segment although the call "
+            "narrowed mechanisms or target segments (ADR 0086)."
+        ),
+    )
 
 
 def generate_candidates_tool(
@@ -192,7 +208,7 @@ def generate_candidates_tool(
             FittedOptionFacts(context) if whole is None else whole[1],
             candidate_set_id=candidate_set_id(arguments, loaded),
         )
-        return _summary(stored.candidate_set_id, options, loaded)
+        return _summary(stored.candidate_set_id, options, loaded, _not_narrowed(arguments))
 
     return Tool(
         name="generate_candidates",
@@ -242,8 +258,23 @@ def _unnarrowed(
     return stored.options, stored.facts
 
 
+def _not_narrowed(arguments: GenerateCandidatesInput) -> list[str]:
+    """The clearance targets a narrowing by mechanisms or target segments left whole, among
+    the SKUs the call keeps (ADR 0086)."""
+    if arguments.mechanisms is None and arguments.target_segments is None:
+        return []
+    return [
+        target.sku_id
+        for target in arguments.request.clearance_targets
+        if arguments.sku_ids is None or target.sku_id in arguments.sku_ids
+    ]
+
+
 def _summary(
-    candidate_set_id: UUID, options: PromoOptions, loaded: LoadedOptionContext
+    candidate_set_id: UUID,
+    options: PromoOptions,
+    loaded: LoadedOptionContext,
+    not_narrowed: list[str],
 ) -> GenerateCandidatesOutput:
     table = options.table
     counts = pd.Series(
@@ -284,6 +315,7 @@ def _summary(
             )
             for n in best
         ],
+        not_narrowed=not_narrowed,
     )
 
 

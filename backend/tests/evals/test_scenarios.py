@@ -143,16 +143,29 @@ def test_an_amendment_accepts_a_relaxation_only_as_accept_relaxation_true(
         load_scenario(write(tmp_path, "amend-drop-west", text))
 
 
-def test_the_demo_scenario_accepts_its_relaxation_and_expects_a_feasible_revision() -> None:
+def test_the_demo_scenario_amends_twice_and_meets_both_clearance_targets() -> None:
+    # The demo brief plans feasibly (ADR 0086): no relaxation is accepted.
     demo = load_scenario(SCENARIO_DIR / "demo-budget-cut-drop-west.yaml")
 
-    assert demo.amendments == (
-        "Budget cut to ₹6 lakh",
-        "Drop West",
-        AcceptRelaxation(accept_relaxation=True),
-    )
+    assert demo.amendments == ("Budget cut to ₹6 lakh", "Drop West")
     assert DeclaresInfeasible(declares_infeasible=False) in demo.expect
-    assert DiffChanges(diff_changes="clearance_targets") in demo.expect
+    assert DiffChanges(diff_changes="scope.regions") in demo.expect
+    assert {
+        MeetsClearance(meets_clearance="SKU0002"),
+        MeetsClearance(meets_clearance="SKU0006"),
+    } <= set(demo.expect)
+
+
+def test_an_infeasible_brief_accepts_its_relaxation_and_expects_a_feasible_revision() -> None:
+    # The accept-relaxation step moved from the demo to the infeasible session (ADR 0086).
+    accepted = load_scenario(SCENARIO_DIR / "infeasible-tiny-budget-accept.yaml")
+    tiny = load_scenario(SCENARIO_DIR / "infeasible-clearance-tiny-budget.yaml")
+
+    assert accepted.group is ScenarioGroup.MID_PLAN_AMENDMENTS
+    assert accepted.brief == tiny.brief  # it replays the app's `infeasible` session
+    assert accepted.amendments == (AcceptRelaxation(accept_relaxation=True),)
+    assert DeclaresInfeasible(declares_infeasible=False) in accepted.expect
+    assert DiffChanges(diff_changes="clearance_targets") in accepted.expect
 
 
 def test_the_strong_substitutes_property_loads(tmp_path: Path) -> None:

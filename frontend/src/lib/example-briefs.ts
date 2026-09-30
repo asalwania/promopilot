@@ -21,7 +21,7 @@ export const EXAMPLE_BRIEFS: readonly ExampleBrief[] = [
     brief:
       "Plan Diwali promotions for Snacks and Beverages across North and West. Budget ₹8 lakh. Keep margin above 18%. We are overstocked on 400g namkeen packs — clear at least 60% of that stock. Target families.",
     tryNext:
-      "Then amend with “Budget cut to ₹6 lakh” and “Drop West”, accept the relaxation, and approve.",
+      "Then amend with “Budget cut to ₹6 lakh” and “Drop West”, and approve.",
   },
   {
     session: "e2e",

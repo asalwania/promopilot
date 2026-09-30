@@ -8,8 +8,9 @@ import {
 } from "./session-scripts";
 
 // The recorded `demo` session (ADR 0054): the SPEC §3.2 brief, amended with a budget cut
-// and then with "Drop West", its relaxation accepted and the feasible revision approved
-// (ADR 0070). Each amendment re-plans from replayed cassettes.
+// and then with "Drop West", and the last revision approved. Its clearance targets are
+// within reach, so every revision is feasible (ADR 0086). Each amendment re-plans from
+// replayed cassettes. Accepting a relaxation is the `infeasible` journey's.
 const demo = sessionScript("demo");
 const [budgetCut, dropWest] = (demo.steps ?? []).flatMap((step) =>
   step.amend ? [step.amend] : [],
@@ -17,13 +18,8 @@ const [budgetCut, dropWest] = (demo.steps ?? []).flatMap((step) =>
 if (!budgetCut || !dropWest) {
   throw new Error("the demo session no longer has its two amendments");
 }
-if (
-  !(demo.steps ?? []).some((step) => step.accept_relaxation) ||
-  !demo.steps?.at(-1)?.approve
-) {
-  throw new Error(
-    "the demo session no longer accepts its relaxation and then approves",
-  );
+if (!demo.steps?.at(-1)?.approve) {
+  throw new Error("the demo session no longer approves its last revision");
 }
 
 type Session = {
@@ -38,49 +34,20 @@ type Session = {
   } | null;
 };
 
-test("amending a plan re-plans it, accepting its relaxation makes it approvable, and approving makes it final", async ({
+test("amending a plan re-plans it with a diff, and approving makes it final", async ({
   page,
 }) => {
-  test.setTimeout(4 * PLANNING_MS + 60_000);
+  test.setTimeout(3 * PLANNING_MS + 60_000);
   await planBrief(page, demo.brief);
 
-  // The demo's clearance target is out of reach, so its revisions are infeasible: the
-  // manager can amend or reject them, but not approve them (ADR 0046 D10).
-  const first = page.getByRole("region", { name: "Review plan revision 1" });
-  await expect(
-    first.getByRole("button", { name: "Approve plan revision 1" }),
-  ).toBeDisabled();
-  await expect(
-    first.getByText(
-      "An infeasible plan can't be approved: amend the brief first.",
-    ),
-  ).toBeVisible();
-
-  // Why it is infeasible, and the smallest relaxation, one click from an amendment
-  // (ADR 0044, ADR 0067).
-  const infeasible = page.getByRole("region", { name: /^Infeasible/ });
-  await expect(
-    infeasible.getByRole("list", { name: "Binding constraints" }),
-  ).toContainText("Clearance target for SKU0006");
-  const relaxation = infeasible.getByRole("table", {
-    name: "Proposed relaxation",
-  });
-  await expect(
-    relaxation.getByRole("rowheader", { name: "Clearance target for SKU0006" }),
-  ).toBeVisible();
-  await expect(
-    relaxation.locator("[title^='Source: relax_constraints']").first(),
-  ).toBeVisible();
-  await expect(
-    infeasible.getByRole("button", {
-      name: "Accept the relaxation and re-plan",
-    }),
-  ).toBeEnabled();
+  // The demo reaches its 60% namkeen clearance target, so revision 1 can be approved and
+  // its clearance check passes (ADR 0086).
+  await expectFeasible(page, 1);
   const clearance = page
     .getByRole("table", { name: "Constraint checklist" })
     .getByRole("row")
     .filter({ has: page.getByRole("rowheader", { name: "Clearance" }) });
-  await expect(clearance.getByRole("cell").first()).toHaveText("Fail");
+  await expect(clearance.getByRole("cell").first()).toHaveText("Pass");
 
   await amend(page, budgetCut);
   await expect(
@@ -94,11 +61,11 @@ test("amending a plan re-plans it, accepting its relaxation makes it approvable,
     cut.getByRole("list", { name: "Request changes" }),
   ).toContainText(/Marketing budget: .+ → .+/);
   await expect(cut.getByRole("table", { name: "Plan totals" })).toBeVisible();
+  await expectFeasible(page, 2);
 
   await amend(page, dropWest);
-  await expect(
-    page.getByRole("region", { name: "Review plan revision 3" }),
-  ).toBeVisible({ timeout: PLANNING_MS });
+  const review = page.getByRole("region", { name: "Review plan revision 3" });
+  await expect(review).toBeVisible({ timeout: PLANNING_MS });
   const dropped = page.getByRole("region", {
     name: "What changed from plan revision 2",
   });
@@ -112,49 +79,24 @@ test("amending a plan re-plans it, accepting its relaxation makes it approvable,
   await expect(
     page.getByRole("tablist", { name: "Plan regions" }).getByRole("tab"),
   ).toHaveText([/^North/, "Compare regions"]);
+  await expectFeasible(page, 3);
 
-  // Revision 3 is still infeasible: accepting its relaxation re-plans, one click
-  // (ADR 0052 D7, ADR 0067, ADR 0070).
-  await expect(
-    page
-      .getByRole("region", { name: "Review plan revision 3" })
-      .getByRole("button", { name: "Approve plan revision 3" }),
-  ).toBeDisabled();
-  await page
-    .getByRole("region", { name: /^Infeasible/ })
-    .getByRole("button", { name: "Accept the relaxation and re-plan" })
-    .click();
-  await expect(page.getByRole("status")).toHaveText("Planning…");
-  const review = page.getByRole("region", { name: "Review plan revision 4" });
-  await expect(review).toBeVisible({ timeout: PLANNING_MS });
-  const relaxed = page.getByRole("region", {
-    name: "What changed from plan revision 3",
-  });
-  await expect(relaxed).toContainText(
-    "After your amendment “Accept the smallest relaxation:",
-  );
-  await expect(
-    relaxed.getByRole("list", { name: "Request changes" }),
-  ).toContainText(/Clearance targets: .+ → .+/);
-
-  // The relaxed revision is feasible, so it can be approved, and the session is final.
-  await review.getByRole("button", { name: "Approve plan revision 4" }).click();
-  await expect(review).toContainText(/Approving makes plan revision 4 final/);
+  // Revision 3 is feasible, so it is approved, and the session is final.
+  await review.getByRole("button", { name: "Approve plan revision 3" }).click();
+  await expect(review).toContainText(/Approving makes plan revision 3 final/);
   await review.getByRole("button", { name: "Confirm approval" }).click();
   const status = page.getByRole("status");
   await expect(status).toContainText("Approved");
   await expect(status).toContainText("Final");
 
-  // Every amendment, the accepted relaxation among them, and the approval are on the
-  // audit trail, oldest first.
+  // Both amendments and the approval are on the audit trail, oldest first.
   const trail = page
     .getByRole("list", { name: "Audit trail" })
     .getByRole("listitem");
   await expect(trail).toHaveText([
     new RegExp(`Amended plan revision 1: “${budgetCut}”`),
     new RegExp(`Amended plan revision 2: “${dropWest}”`),
-    /Amended plan revision 3: “Accept the smallest relaxation: .+”\s*Relaxation accepted/,
-    /Approved plan revision 4$/,
+    /Approved plan revision 3$/,
   ]);
 
   // Every round replayed: the Explainer's recorded answer explains the last revision.
@@ -163,17 +105,30 @@ test("amending a plan re-plans it, accepting its relaxation makes it approvable,
   expect(session.amendments.map((amendment) => amendment.text)).toEqual([
     budgetCut,
     dropWest,
-    expect.stringMatching(/^Accept the smallest relaxation: /),
   ]);
-  expect(session.amendments[2]?.relaxation).toBeTruthy();
   expect(session.decisions).toMatchObject([
-    { decision: "approved", revision_number: 4 },
+    { decision: "approved", revision_number: 3 },
   ]);
-  expect(session.plan_revision?.number).toBe(4);
+  expect(session.plan_revision?.number).toBe(3);
   expect(session.plan_revision?.solver_status).not.toBe("INFEASIBLE");
-  expect(session.plan_revision?.diff?.from_revision).toBe(3);
+  expect(session.plan_revision?.diff?.from_revision).toBe(2);
   expect(session.plan_revision?.explanation?.source).toBe("llm");
 });
+
+// A feasible revision can be approved and shows no infeasibility panel (ADR 0067).
+async function expectFeasible(page: Page, revision: number) {
+  await expect(
+    page
+      .getByRole("region", { name: `Review plan revision ${revision}` })
+      .getByRole("button", { name: `Approve plan revision ${revision}` }),
+  ).toBeEnabled();
+  await expect(page.getByRole("region", { name: /^Infeasible/ })).toHaveCount(
+    0,
+  );
+  const session = await readSession<Session>(page);
+  expect(session.plan_revision?.number).toBe(revision);
+  expect(session.plan_revision?.solver_status).not.toBe("INFEASIBLE");
+}
 
 async function amend(page: Page, text: string) {
   await page.getByRole("textbox", { name: "Amend the brief" }).fill(text);
