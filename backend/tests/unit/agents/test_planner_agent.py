@@ -621,6 +621,7 @@ async def test_a_request_that_loosens_the_brief_is_refused_as_a_structured_error
     assert error["ok"] is False
     assert error["code"] == "invalid_input"
     assert "marketing_budget" in error["message"]
+    assert "sku_limits" in error["message"]  # the lever to promote a SKU more gently
     assert tools.called()[:1] == ["generate_candidates"]
     assert len([name for name in tools.called() if name == "generate_candidates"]) == 1
     assert state.plan == planned().revision
@@ -840,4 +841,7 @@ def test_the_planner_prompt_is_versioned() -> None:
 
     prompt = (files("promopilot.agents") / "prompts" / "planner.md").read_text("utf-8")
 
-    assert prompt.startswith("<!-- prompt: planner v3")
+    assert prompt.startswith("<!-- prompt: planner v4")
+    # The planner caps a flagged SKU before it leaves it out (ADR 0084).
+    assert "sku_limits" in prompt
+    assert "cannot choose a mechanism or depth" not in prompt
