@@ -2,7 +2,7 @@
 Project: PromoPilot — agentic retail promotion planner (see SPEC.md).
 
 ## Commands
-- make setup | make data | make train | make dev | make test | make eval | make demo | make screenshots | make lint | make typecheck | make api-types
+- make setup | make data | make train | make dev | make test | make eval | make demo | make screenshots | make lint | make typecheck | make api-types | make tool-docs
 
 ## Rules
 - SPEC.md is the source of truth. If something is ambiguous, ask; record decisions in docs/adr/.

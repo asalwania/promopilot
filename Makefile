@@ -104,14 +104,18 @@ test-e2e: ## Playwright against a running stack (make dev or make up)
 screenshots: ## Capture the deck screenshots (1920x1080) into frontend/screenshots/ against a running make demo (no key)
 	$(FRONTEND) E2E_BASE_URL=$${E2E_BASE_URL:-http://localhost:$(WEB_PORT)} pnpm screenshots
 
-.PHONY: api-types api-docs
-api-types: ## Export OpenAPI, regenerate frontend API types and the API docs (docs/api.md)
+.PHONY: api-types api-docs tool-docs
+api-types: ## Export OpenAPI, regenerate frontend API types, the API docs (docs/api.md) and the tool docs (docs/tools.md)
 	$(BACKEND) uv run python -m promopilot.api.openapi > ../docs/openapi.json
 	$(FRONTEND) pnpm exec openapi-typescript ../docs/openapi.json -o src/lib/api/schema.d.ts
 	$(MAKE) api-docs
+	$(MAKE) tool-docs
 
 api-docs: ## Regenerate the API docs (docs/api.md) from the committed docs/openapi.json
 	$(BACKEND) uv run python -m tools.api_docs ../docs/openapi.json ../docs/api.md
+
+tool-docs: ## Regenerate the tool contracts (docs/tools.md) from the tool registry
+	$(BACKEND) uv run python -m tools.tool_docs ../docs/tools.md
 
 # ---------------------------------------------------------------- data + later epics
 
