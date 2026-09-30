@@ -172,8 +172,12 @@ A plan-level constraint (marketing budget, regional budget cap, minimum margin o
 _Avoid_: active constraint, bottleneck
 
 **Company policy**:
-Standing rules set by the parent company, outside any brief (e.g. margin floor, maximum discount, undercut threshold, KVI price tolerance, overstock threshold, write-off rate, fixed marketing costs). A brief may tighten company policy but never loosen it.
+Standing rules set by the parent company, outside any brief (e.g. margin floor, maximum discount, undercut threshold, KVI price tolerance, overstock threshold, write-off rate, fixed marketing costs). A brief may tighten company policy but never loosen it, and no text in a brief, amendment or answer can: the tools apply it whatever the LLM asks (ADR 0079).
 _Avoid_: global constraints, defaults
+
+**Rate limit**:
+How many requests a minute one client may make to the endpoints that start or advance planning: creating, amending and clarifying a session share the planning limit, and re-simulating a plan has its own. A request over it is refused with 429 and when to retry (ADR 0079).
+_Avoid_: throttle, quota
 
 **Policy finding**:
 A brief value that would loosen company policy (a minimum margin below the margin floor, a looser promoted-SKU cap or KVI price tolerance). Planning keeps the policy value and reports the finding (ADR 0007, ADR 0040).

@@ -14,7 +14,7 @@ from promopilot.domain import Violation, ViolationCode
 from promopilot.guardrails.diff import diff_revisions, request_changes
 from promopilot.guardrails.formatting import format_percent, format_rupees, format_units
 from promopilot.guardrails.grounding import GroundingReport, check_numeric_grounding
-from promopilot.guardrails.limits import PlanLimits, plan_limits
+from promopilot.guardrails.limits import PlanLimits, deeper_than_policy, plan_limits
 from promopilot.guardrails.risks import RiskThresholds, review_risks
 from promopilot.guardrails.stated import StatedKind, StatedNumber, read_stated_numbers
 from promopilot.guardrails.validation import (
@@ -41,6 +41,7 @@ __all__ = [
     "Violation",
     "ViolationCode",
     "check_numeric_grounding",
+    "deeper_than_policy",
     "diff_revisions",
     "format_percent",
     "format_rupees",

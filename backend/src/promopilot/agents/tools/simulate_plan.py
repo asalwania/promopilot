@@ -24,6 +24,7 @@ from promopilot.domain import (
     PlanSimulation,
     PromoPlan,
 )
+from promopilot.guardrails import deeper_than_policy
 from promopilot.simulator import (
     MAX_RUNS,
     MIN_RUNS,
@@ -98,6 +99,9 @@ def simulate_plan_tool(
             plan = PromoPlan(lines=tuple(arguments.lines))
         except ValidationError as error:
             raise ToolCallError("invalid_input", _message(error)) from error
+        too_deep = deeper_than_policy(plan.lines, policy)
+        if too_deep is not None:
+            raise ToolCallError("invalid_input", too_deep)
         week = await current_as_of_week(as_of_week)
         for planned in plan.lines:
             if planned.start_week < week:

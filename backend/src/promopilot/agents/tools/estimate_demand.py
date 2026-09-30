@@ -13,6 +13,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from promopilot.agents.tools.registry import Tool, ToolCallError
 from promopilot.domain import CompanyPolicy, PlanLine, Region, Segment
+from promopilot.guardrails import deeper_than_policy
 from promopilot.models.demand import DemandModel, PredictionContext
 from promopilot.models.registry import RegisteredModel
 
@@ -109,6 +110,9 @@ def estimate_demand_tool(
     models: DemandModelSource, *, policy: CompanyPolicy
 ) -> Tool[EstimateDemandInput, EstimateDemandOutput]:
     async def estimate_demand(arguments: EstimateDemandInput) -> EstimateDemandOutput:
+        too_deep = deeper_than_policy(arguments.options, policy)
+        if too_deep is not None:
+            raise ToolCallError("invalid_input", too_deep)
         loaded = await models.get()
         if loaded is None:
             raise ToolCallError("model_unavailable", "no demand model is registered yet")

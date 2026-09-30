@@ -2498,6 +2498,17 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
+            /** @description Too many requests from this client (RATE_LIMIT_*_PER_MINUTE) */
+            429: {
+                headers: {
+                    /** @description Whole seconds until the client may send this request again. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
             /** @description No trained demand model, or no inventory snapshot for the planning request's as-of week */
             503: {
                 headers: {
@@ -2601,6 +2612,17 @@ export interface operations {
             /** @description Validation Error */
             422: {
                 headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Too many requests from this client (RATE_LIMIT_*_PER_MINUTE) */
+            429: {
+                headers: {
+                    /** @description Whole seconds until the client may send this request again. */
+                    "Retry-After"?: number;
                     [name: string]: unknown;
                 };
                 content: {
@@ -2712,6 +2734,17 @@ export interface operations {
             /** @description Validation Error */
             422: {
                 headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Too many requests from this client (RATE_LIMIT_*_PER_MINUTE) */
+            429: {
+                headers: {
+                    /** @description Whole seconds until the client may send this request again. */
+                    "Retry-After"?: number;
                     [name: string]: unknown;
                 };
                 content: {
@@ -2854,6 +2887,17 @@ export interface operations {
             /** @description Validation Error */
             422: {
                 headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Too many requests from this client (RATE_LIMIT_*_PER_MINUTE) */
+            429: {
+                headers: {
+                    /** @description Whole seconds until the client may send this request again. */
+                    "Retry-After"?: number;
                     [name: string]: unknown;
                 };
                 content: {

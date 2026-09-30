@@ -18,6 +18,12 @@ from fastapi import APIRouter, HTTPException, status
 from promopilot.agents.tools import ToolCallError
 from promopilot.agents.tools.estimate_demand import DemandModelSource
 from promopilot.agents.tools.simulate_plan import SimulationData, simulate_on_latest_model
+from promopilot.api.rate_limit import (
+    TOO_MANY_REQUESTS,
+    RateLimiter,
+    RateLimitGroup,
+    rate_limited,
+)
 from promopilot.api.schemas import PlanSimulationResponse, SimulatePlanRequest
 from promopilot.domain import (
     CompanyPolicy,
@@ -115,7 +121,9 @@ class PlanService:
         )
 
 
-def plans_router(plans: PlanService) -> APIRouter:
+def plans_router(plans: PlanService, limiter: RateLimiter | None = None) -> APIRouter:
+    """The plan routes; re-simulating a plan takes from the client's simulation budget when
+    `limiter` is set (ADR 0079)."""
     router = APIRouter(prefix="/api/plans", tags=["plans"])
 
     @router.post(
@@ -135,7 +143,9 @@ def plans_router(plans: PlanService) -> APIRouter:
             status.HTTP_504_GATEWAY_TIMEOUT: {
                 "description": "The simulation took longer than TOOL_TIMEOUT_SECONDS"
             },
+            **TOO_MANY_REQUESTS,
         },
+        dependencies=rate_limited(limiter, RateLimitGroup.SIMULATIONS),
     )
     async def simulate_plan(session_id: UUID, body: SimulatePlanRequest) -> PlanSimulationResponse:
         """Re-simulate the session's latest plan revision and store the result against it."""
