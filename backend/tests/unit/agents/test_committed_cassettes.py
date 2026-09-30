@@ -27,10 +27,11 @@ from tests.unit.agents.fakes import InMemoryRetailData
 CASSETTE_DIR = Path(__file__).parents[3] / "cassettes"
 SCRIPTS = load_scripts(CASSETTE_DIR / "sessions.json")
 
-# Recorded rounds known to reach the Critic's cap, by session and round index. The demo's
-# accept-relaxation round (ADR 0070) gets new risk findings on every attempt and the Critic has
-# no per-SKU lever to answer them, so it hands on its best plan with open issues (#141).
-ROUNDS_AT_CAP = {("demo", 3)}
+# Recorded rounds known to reach the Critic's cap, by session and round index. Under the safety
+# margin (ADR 0080) these rounds get heavy-cannibalisation findings on lines already at the
+# shallowest depth; each attempt answers one SKU and the next is flagged on another, so the
+# findings never repeat and the round hands on its best plan with open issues at the cap (#181).
+ROUNDS_AT_CAP = {("e2e", 0), ("demo", 3), ("clarify", 0)}
 
 
 def test_the_manifest_lists_every_session_as_scripted_and_every_cassette_it_called() -> None:
