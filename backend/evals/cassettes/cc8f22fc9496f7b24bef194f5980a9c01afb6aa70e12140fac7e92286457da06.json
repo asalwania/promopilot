@@ -77,65 +77,65 @@
     "rationales": [
       {
         "line": 1,
-        "rationale": "SKU0028 in North is promoted with a 10% PCT_OFF for 2 weeks as it offers the best value of ₹869 with a strong halo effect of ₹1,308, despite a slight negative incremental profit; stockout risk is low at 1%."
+        "rationale": "SKU0028 in North is promoted with a 10% percentage-off discount over 2 weeks as it offers the best value for this SKU and region, driven by a strong halo effect of ₹1,308 despite a slight expected incremental loss; stockout risk is low at 1%."
       },
       {
         "line": 2,
-        "rationale": "SKU0029 uses a 30% PCT_OFF for 2 weeks to maximize clearance value of ₹7,229 and halo of ₹597, chosen over other mechanisms despite a negative incremental profit, with zero stockout risk."
+        "rationale": "SKU0029 is promoted with a 30% percentage-off discount for 2 weeks to maximize clearance value of ₹7,229 and a moderate halo effect, chosen despite a negative incremental profit due to zero stockout risk and high expected revenue."
       },
       {
         "line": 3,
-        "rationale": "SKU0030 is promoted at a 5% FIXED_PRICE for 1 week due to its positive incremental profit of ₹826 and best value among options, with no stockout risk."
+        "rationale": "SKU0030 uses a 5% fixed price discount for 1 week, selected for its positive incremental profit of ₹826 and zero stockout risk, outperforming percentage-off options in margin and profit."
       },
       {
         "line": 4,
-        "rationale": "SKU0031 is promoted with a 5% PCT_OFF for 2 weeks, delivering a strong incremental profit of ₹4,742 and halo of ₹131, making it the best option with low stockout risk of 1.6%."
+        "rationale": "SKU0031 is promoted with a 5% percentage-off discount over 2 weeks, chosen for its strong incremental profit of ₹4,742 and additional halo effect, with a low stockout probability of 1.6%."
       },
       {
         "line": 5,
-        "rationale": "SKU0034 is chosen for a 5% FIXED_PRICE for 1 week due to its positive incremental profit of ₹1,010 and slight halo, outperforming other mechanisms with zero stockout risk."
+        "rationale": "SKU0034 receives a 5% fixed price discount for 1 week due to its positive incremental profit of ₹1,010 and zero stockout risk, outperforming other mechanisms in value and margin."
       },
       {
         "line": 6,
-        "rationale": "SKU0035 is promoted at 5% FIXED_PRICE for 2 weeks, offering a positive incremental profit of ₹1,862 and clearance value of ₹8,347, but with a high cannibalisation risk nearly equal to its profit, though stockout risk is zero."
+        "rationale": "SKU0035 is promoted with a 5% fixed price discount over 2 weeks, selected for its high clearance value and halo effect, but it carries a significant risk as its cannibalisation nearly equals its incremental profit, flagged as an open issue."
       },
       {
         "line": 7,
-        "rationale": "SKU0040 uses a 20% PCT_OFF for 2 weeks to achieve clearance value of ₹8,189 and halo of ₹1,374, despite a negative incremental profit, with no stockout risk."
+        "rationale": "SKU0040 is promoted with a 20% percentage-off discount for 2 weeks to maximize clearance value and halo, despite a negative incremental profit; zero stockout risk supports this choice."
       },
       {
         "line": 8,
-        "rationale": "SKU0047 is promoted with a 5% FIXED_PRICE for 1 week, chosen for its positive incremental profit of ₹1,073 and minimal halo, with zero stockout risk."
+        "rationale": "SKU0047 uses a 5% fixed price discount for 1 week, chosen for its positive incremental profit and halo effect, with zero stockout risk and better value than percentage-off or bundle options."
       },
       {
         "line": 9,
-        "rationale": "SKU0049 is promoted at 5% FIXED_PRICE for 1 week due to its high incremental profit of ₹8,377, the best among options, with no stockout risk."
+        "rationale": "SKU0049 is promoted with a 5% fixed price discount for 1 week, selected for its strong incremental profit of ₹8,377 and zero stockout risk, outperforming percentage-off alternatives."
       },
       {
         "line": 10,
-        "rationale": "SKU0050 is promoted with a 5% FIXED_PRICE for 1 week, delivering a positive incremental profit of ₹1,526 and best value, with very low stockout risk of 0.5%."
+        "rationale": "SKU0050 receives a 5% fixed price discount for 1 week due to its positive incremental profit and low stockout risk, chosen over percentage-off which showed negative profit."
       },
       {
         "line": 11,
-        "rationale": "SKU0192 is promoted at 8% PCT_OFF for 2 weeks, chosen for its positive incremental profit of ₹3,825 and slight halo, with zero stockout risk."
+        "rationale": "SKU0192 is promoted with an 8% percentage-off discount over 2 weeks, selected for its solid incremental profit and halo effect, with zero stockout risk and good margin."
       },
       {
         "line": 12,
-        "rationale": "SKU0194 uses a 5% FIXED_PRICE for 2 weeks, despite a slight negative incremental profit, chosen for clearance value and halo benefits, with no stockout risk."
+        "rationale": "SKU0194 uses a 5% fixed price discount for 2 weeks, chosen for its clearance value and halo despite a slight negative incremental profit, supported by zero stockout risk."
       },
       {
         "line": 13,
-        "rationale": "SKU0198 is promoted with a 5% FIXED_PRICE for 1 week due to its positive incremental profit of ₹1,104 and best value, with minimal stockout risk of 0.1%."
+        "rationale": "SKU0198 is promoted with a 5% fixed price discount for 1 week, selected for its positive incremental profit and low stockout risk, outperforming percentage-off options."
       }
     ],
-    "summary": "This plan promotes 13 SKUs in the North region across Beverages and Bakery categories during weeks W84 and W85, aiming for an expected incremental profit of ₹43,128. The plan respects company policies limiting promoted SKUs to 10 per category in the region, KVI price tolerance of 1%, and restrictions on promoting strong substitutes together. The expected gross profit ranges from ₹1.35 lakh at P10 to ₹1.5 lakh at P90, with a stockout probability of 3.2% in North. The main risks include SKU0035's high cannibalisation of substitutes nearly matching its incremental profit and some SKUs showing negative incremental profit despite being chosen for clearance or halo effects."
+    "summary": "This plan promotes 13 SKUs in the North region across Beverages and Bakery categories during weeks W84 and W85. It aims to generate an expected incremental profit of ₹43,128 with a planned promo cost of ₹88,799, balancing margin and stock availability. The main binding constraints are company policy limits on promoting no more than 10 Beverages SKUs in North, a strict KVI price tolerance of 1%, and rules preventing promotion of strong substitutes together. Key risks include a 3.2% stockout probability in North and a high cannibalisation risk for SKU0035, which nearly offsets its incremental profit."
   },
   "schema_name": "ExplainerAnswer",
   "usage": [
     {
       "input_tokens": 7398,
       "model": "gpt-4.1-mini",
-      "output_tokens": 838
+      "output_tokens": 800
     }
   ]
 }

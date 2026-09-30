@@ -56,7 +56,7 @@
   "response": {
     "feedback": [
       {
-        "feedback": "Spread the promo spend in the North region by capping SKU0040's depth below 25% using generate_candidates' sku_limits, or exclude SKU0040 entirely with generate_candidates' exclude_sku_ids to ensure no single plan line exceeds 25% of the promo spend.",
+        "feedback": "Spread the promo spend in the North region by capping SKU0040's depth below 25% using generate_candidates' sku_limits, or exclude SKU0040 entirely with generate_candidates' exclude_sku_ids to ensure no single plan line exceeds the 25% promo spend limit.",
         "finding": 1
       }
     ]

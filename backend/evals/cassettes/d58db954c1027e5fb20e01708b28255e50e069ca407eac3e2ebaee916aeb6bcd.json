@@ -73,121 +73,121 @@
     "temperature": 0.0
   },
   "response": {
-    "changes": "The main change from the previous revision is the reduction of the marketing budget from ₹3 lakh to ₹1.5 lakh, which led to removal of one line (SKU0179 in North) and adjustments in discount mechanisms and depths for SKU0029 and SKU0040 in both regions to lower promo costs and incremental losses. This budget cut decreased the objective incremental profit slightly from ₹1.13 lakh to ₹1.11 lakh and reduced promo cost from ₹1.76 lakh to ₹1.33 lakh, reflecting a tighter but still optimal plan within the new budget constraints.",
+    "changes": "The main change from the previous revision is the reduction of the marketing budget from ₹3 lakh to ₹1.5 lakh, which led to removal of one line (SKU0179 in North) and adjustments in discount mechanisms and depths for SKU0029 and SKU0040 in both regions to lower promo costs and incremental losses. This budget tightening decreased the objective incremental profit slightly from ₹1.13 lakh to ₹1.11 lakh and reduced promo cost from ₹1.76 lakh to ₹1.33 lakh, reflecting a more constrained but still optimal plan.",
     "rationales": [
       {
         "line": 1,
-        "rationale": "Line 1 uses a 5% FIXED_PRICE discount on SKU0029 in North for 2 weeks, chosen for its better margin (18.7%) and lower incremental loss (-₹479) compared to deeper discounts, with zero stockout risk."
+        "rationale": "Line 1 uses a 5% fixed price discount on SKU0029 in North to balance clearance value and halo effects, chosen over deeper percentage discounts due to better margin despite a small expected incremental loss; stockout risk is zero."
       },
       {
         "line": 2,
-        "rationale": "Line 2 applies a 5% FIXED_PRICE discount on SKU0029 in South for 2 weeks, balancing a moderate promo cost and incremental loss (-₹508) while avoiding stockouts and strong substitute conflicts."
+        "rationale": "Line 2 applies a 5% fixed price discount on SKU0029 in South, selected for its relatively better margin and lower incremental loss compared to higher depth discounts, with no stockout risk."
       },
       {
         "line": 3,
-        "rationale": "Line 3 promotes SKU0030 in North with a 5% FIXED_PRICE discount for 1 week, selected for its positive incremental profit (₹833) and highest margin (34%) among options, with no stockout risk."
+        "rationale": "Line 3 promotes SKU0030 in North with a 5% fixed price discount, the best option for incremental profit and margin, with zero stockout risk."
       },
       {
         "line": 4,
-        "rationale": "Line 4 offers a 5% FIXED_PRICE discount on SKU0030 in South for 1 week, chosen for its strong incremental profit (₹726) and margin (34%), ensuring no stockout risk."
+        "rationale": "Line 4 offers a 5% fixed price discount on SKU0030 in South, chosen for highest incremental profit and margin among options, with no stockout risk."
       },
       {
         "line": 5,
-        "rationale": "Line 5 uses a 5% PCT_OFF discount on SKU0031 in North for 2 weeks, selected for its high incremental profit (₹3,956) and good margin (28.2%), despite a small stockout probability (0.6%)."
+        "rationale": "Line 5 uses a 5% percentage off on SKU0031 in North, selected for strong incremental profit and margin, despite a slight stockout probability of 0.6%."
       },
       {
         "line": 6,
-        "rationale": "Line 6 applies a 5% PCT_OFF discount on SKU0031 in South for 1 week, chosen for its solid incremental profit (₹2,077) and zero stockout risk, maximizing value within budget."
+        "rationale": "Line 6 applies a 5% percentage off on SKU0031 in South, chosen for its high incremental profit and margin with zero stockout risk."
       },
       {
         "line": 7,
-        "rationale": "Line 7 promotes SKU0034 in North with a 5% PCT_OFF discount for 2 weeks, selected for positive incremental profit (₹816) and margin (25.7%), with no stockout risk."
+        "rationale": "Line 7 promotes SKU0034 in North with a 5% percentage off, selected for positive incremental profit and margin, and zero stockout risk."
       },
       {
         "line": 8,
-        "rationale": "Line 8 uses a 5% FIXED_PRICE discount on SKU0035 in North for 2 weeks, chosen for its strong incremental profit (₹4,390) and clearance value, with zero stockout risk."
+        "rationale": "Line 8 uses a 5% fixed price discount on SKU0035 in North, the best option for incremental profit and clearance value, with zero stockout risk."
       },
       {
         "line": 9,
-        "rationale": "Line 9 applies a 5% FIXED_PRICE discount on SKU0035 in South for 2 weeks, selected for highest incremental profit (₹4,535) and margin (18.9%), with no stockout risk."
+        "rationale": "Line 9 applies a 5% fixed price discount on SKU0035 in South, chosen for highest incremental profit and clearance value, with zero stockout risk."
       },
       {
         "line": 10,
-        "rationale": "Line 10 promotes SKU0038 in North with a 5% PCT_OFF discount for 2 weeks, chosen for positive incremental profit (₹231) and halo effect, despite a small stockout probability (0.4%)."
+        "rationale": "Line 10 promotes SKU0038 in North with a 5% percentage off, selected for positive incremental profit and halo effect, with a low stockout probability of 0.4%."
       },
       {
         "line": 11,
-        "rationale": "Line 11 uses a 15% FIXED_PRICE discount on SKU0040 in North for 2 weeks, selected despite negative incremental profit (-₹2,732) due to clearance value and halo effects, with no stockout risk."
+        "rationale": "Line 11 offers a 15% fixed price discount on SKU0040 in North, chosen despite negative incremental profit due to clearance and halo benefits, with zero stockout risk."
       },
       {
         "line": 12,
-        "rationale": "Line 12 applies a 15% FIXED_PRICE discount on SKU0040 in South for 2 weeks, chosen for similar reasons as line 11, balancing clearance and halo benefits with negative incremental profit (-₹2,516)."
+        "rationale": "Line 12 applies a 15% fixed price discount on SKU0040 in South, selected despite negative incremental profit for clearance and halo reasons, with zero stockout risk."
       },
       {
         "line": 13,
-        "rationale": "Line 13 promotes SKU0041 in South with a 5% PCT_OFF discount for 1 week, selected for positive incremental profit (₹572) and margin (35.1%), though with a moderate stockout probability (2.8%)."
+        "rationale": "Line 13 uses a 5% percentage off on SKU0041 in South targeting Value Seekers, chosen for positive incremental profit and halo, though with a 2.8% stockout risk."
       },
       {
         "line": 14,
-        "rationale": "Line 14 uses a 5% PCT_OFF discount on SKU0042 in North for 1 week, chosen for strong incremental profit (₹1,423) and margin (26.4%), with a low stockout probability (1.6%)."
+        "rationale": "Line 14 promotes SKU0042 in North with a 5% percentage off, selected for strong incremental profit and halo, with a low stockout probability of 1.6%."
       },
       {
         "line": 15,
-        "rationale": "Line 15 applies a 5% PCT_OFF discount on SKU0042 in South for 1 week, selected for positive incremental profit (₹1,332) and zero stockout risk, maximizing margin."
+        "rationale": "Line 15 applies a 5% percentage off on SKU0042 in South, chosen for positive incremental profit and halo, with zero stockout risk."
       },
       {
         "line": 16,
-        "rationale": "Line 16 bundles SKU0047 with SKU0184 in South at 10% discount for 1 week, chosen for highest incremental profit (₹4,083) and margin (29.6%), with no stockout risk."
+        "rationale": "Line 16 bundles SKU0047 with SKU0184 in South at 10% depth, selected for highest incremental profit and margin, with zero stockout risk."
       },
       {
         "line": 17,
-        "rationale": "Line 17 offers a 5% FIXED_PRICE discount on SKU0049 in North for 1 week, selected for very high incremental profit (₹12,308) and margin (36.2%), with zero stockout risk."
+        "rationale": "Line 17 uses a 5% fixed price discount on SKU0049 in North, chosen for strong incremental profit and margin, with zero stockout risk."
       },
       {
         "line": 18,
-        "rationale": "Line 18 applies a 5% FIXED_PRICE discount on SKU0049 in South for 1 week, chosen for strong incremental profit (₹11,172) and margin (36.2%), with no stockout risk."
+        "rationale": "Line 18 applies a 5% fixed price discount on SKU0049 in South, selected for high incremental profit and margin, with zero stockout risk."
       },
       {
         "line": 19,
-        "rationale": "Line 19 promotes SKU0050 in North with a 5% FIXED_PRICE discount for 1 week, selected for positive incremental profit (₹2,895) and margin (25.5%), with minimal stockout risk (0.2%)."
+        "rationale": "Line 19 promotes SKU0050 in North with a 5% fixed price discount, chosen for positive incremental profit and margin, with a low stockout probability of 0.2%."
       },
       {
         "line": 20,
-        "rationale": "Line 20 uses a 5% FIXED_PRICE discount on SKU0050 in South for 1 week, chosen for solid incremental profit (₹2,356) and zero stockout risk."
+        "rationale": "Line 20 uses a 5% fixed price discount on SKU0050 in South, selected for positive incremental profit and margin, with zero stockout risk."
       },
       {
         "line": 21,
-        "rationale": "Line 21 applies a 5% PCT_OFF discount on SKU0192 in North for 2 weeks, selected for high incremental profit (₹4,703) and margin (18.6%), with low stockout risk (0%)."
+        "rationale": "Line 21 applies a 5% percentage off on SKU0192 in North, chosen for strong incremental profit and margin, with a low stockout probability of 0%."
       },
       {
         "line": 22,
-        "rationale": "Line 22 promotes SKU0192 in South with a 5% PCT_OFF discount for 2 weeks, chosen for highest incremental profit (₹6,092) and margin (18.6%), with no stockout risk."
+        "rationale": "Line 22 promotes SKU0192 in South with a 5% percentage off, selected for highest incremental profit and margin, with zero stockout risk."
       },
       {
         "line": 23,
-        "rationale": "Line 23 uses a 5% FIXED_PRICE discount on SKU0194 in North for 1 week, chosen despite negative incremental profit (-₹301) due to clearance and halo effects, with no stockout risk."
+        "rationale": "Line 23 uses a 5% fixed price discount on SKU0194 in North, chosen despite a small expected incremental loss due to clearance and halo benefits, with zero stockout risk."
       },
       {
         "line": 24,
-        "rationale": "Line 24 applies a 5% FIXED_PRICE discount on SKU0194 in South for 1 week, selected for similar reasons as line 23, balancing clearance and halo with negative incremental profit (-₹326)."
+        "rationale": "Line 24 applies a 5% fixed price discount on SKU0194 in South, selected despite negative incremental profit for clearance and halo reasons, with zero stockout risk."
       },
       {
         "line": 25,
-        "rationale": "Line 25 promotes SKU0195 in North with a 5% PCT_OFF discount for 1 week, chosen for positive incremental profit (₹1,610) and margin (24.3%), with no stockout risk."
+        "rationale": "Line 25 promotes SKU0195 in North with a 5% percentage off, chosen for positive incremental profit and halo, with zero stockout risk."
       },
       {
         "line": 26,
-        "rationale": "Line 26 uses a 5% PCT_OFF discount on SKU0195 in South for 1 week, selected for positive incremental profit (₹1,588) and margin (24.3%), with zero stockout risk."
+        "rationale": "Line 26 uses a 5% percentage off on SKU0195 in South, selected for positive incremental profit and halo, with zero stockout risk."
       }
     ],
-    "summary": "This promotion plan targets Beverages and Bakery categories across North and South regions during weeks W63 and W64, aiming for an expected incremental profit of ₹1.11 lakh with a promo cost at its P90 of ₹1.5 lakh. The plan is constrained primarily by the marketing budget of ₹1.5 lakh, the company policy limiting promoted Beverages SKUs in South to 10, and the rule against promoting strong substitutes together. The plan achieves a balanced margin around 24% and maintains low stockout probabilities, but the main risk lies in the high promo spend concentration on Beverages (80.6%), which exceeds the 80% limit, and competitor price undercuts on several SKUs. Overall, the plan protects margin by not matching competitor prices on undercut SKUs and carefully selects promotion mechanisms to optimize incremental profit within constraints."
+    "summary": "This promotion plan targets Beverages and Bakery categories across North and South regions during weeks W63 and W64, aiming for an expected incremental profit of ₹1.11 lakh with a promo cost capped at ₹1.5 lakh due to the marketing budget constraint. The plan is limited by the marketing budget, a company policy cap on promoted Beverages SKUs in South, and a rule against promoting strong substitutes together. The main risk is the high promo spend concentration in Beverages (80.6%), exceeding the 80% limit, and some SKUs showing negative incremental profit, indicating potential margin pressure. Stockout probabilities remain low, ensuring availability, but competitor price undercuts in key SKUs pose competitive risks."
   },
   "schema_name": "ExplainerAnswer",
   "usage": [
     {
       "input_tokens": 13876,
       "model": "gpt-4.1-mini",
-      "output_tokens": 1732
+      "output_tokens": 1386
     }
   ]
 }

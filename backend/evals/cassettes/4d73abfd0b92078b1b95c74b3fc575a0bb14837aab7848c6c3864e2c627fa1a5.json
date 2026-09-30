@@ -1,0 +1,84 @@
+{
+  "hash": "4d73abfd0b92078b1b95c74b3fc575a0bb14837aab7848c6c3864e2c627fa1a5",
+  "request": {
+    "messages": [
+      {
+        "content": "<!-- prompt: critic v3 (E11 #141). Editing this file changes the request hash: re-record cassettes. -->\nYou are the Critic of PromoPilot, a retail promotion planner for a multi-region Indian retailer.\nPromoPilot's deterministic risk review has flagged the plan the Planner agent chose. For each\nfinding, write feedback that tells the Planner agent what to change in its next plan.\n\nThe Planner's levers are:\n- capping one SKU's depth or mechanisms with generate_candidates' sku_limits, in every region,\n  which keeps the SKU in the plan;\n- leaving a SKU out of generate_candidates with exclude_sku_ids, in every region;\n- narrowing generate_candidates by mechanisms or target segments, for every SKU;\n- tightening the optimiser options: a lower regional budget cap, a smaller cap on promoted SKUs\n  per category and region, or the KVI price tolerance.\nIt may never loosen the brief's constraints (budget, scope, promo window, minimum margin,\nclearance targets), and a SKU limit may only tighten. A clearance target of the brief can be\nneither capped nor left out.\n\nRules:\n- Write one or two sentences of feedback for every finding, by its `finding` number.\n- Name the SKU, category or region and the lever to use. Start from the template feedback,\n  which names the lever that fits the finding.\n- Never compute or invent a number. Cite a number only exactly as the finding shows it, and\n  prefer citing none.\n",
+        "role": "system"
+      },
+      {
+        "content": "Risk findings (JSON from PromoPilot's deterministic review):\n[{\"finding\": 1, \"code\": \"OVER_CONCENTRATION\", \"message\": \"SKU0158 in East (FIXED_PRICE at 10%): its promo cost ₹33,731 is 25.2% of the plan's promo spend ₹1.34 lakh, above the 25% limit for one plan line\", \"template_feedback\": \"Spread the promo spend: cap SKU0158's depth below 10% with generate_candidates' sku_limits, or else leave SKU0158 out with generate_candidates' exclude_sku_ids, so no plan line takes over 25% of it.\", \"sku_id\": \"SKU0158\", \"region\": \"East\"}, {\"finding\": 2, \"code\": \"HEAVY_CANNIBALISATION\", \"message\": \"SKU0158 in East (FIXED_PRICE at 10%): the cannibalisation of its substitutes ₹1,076 is 949.6% of its incremental profit ₹113, at or above the 50% limit\", \"template_feedback\": \"SKU0158 in East mostly takes sales from its own substitutes: cap SKU0158's depth below 10% or limit its mechanisms with generate_candidates' sku_limits, or else leave SKU0158 out with generate_candidates' exclude_sku_ids.\", \"sku_id\": \"SKU0158\", \"region\": \"East\"}, {\"finding\": 3, \"code\": \"HEAVY_CANNIBALISATION\", \"message\": \"SKU0167 in East (PCT_OFF at 5%): the cannibalisation of its substitutes ₹477 is 77.5% of its incremental profit ₹616, at or above the 50% limit\", \"template_feedback\": \"SKU0167 in East mostly takes sales from its own substitutes: cap SKU0167's depth below 5% or limit its mechanisms with generate_candidates' sku_limits, or else leave SKU0167 out with generate_candidates' exclude_sku_ids.\", \"sku_id\": \"SKU0167\", \"region\": \"East\"}, {\"finding\": 4, \"code\": \"HEAVY_CANNIBALISATION\", \"message\": \"SKU0167 in West (PCT_OFF at 5%): the cannibalisation of its substitutes ₹485 is 84.6% of its incremental profit ₹573, at or above the 50% limit\", \"template_feedback\": \"SKU0167 in West mostly takes sales from its own substitutes: cap SKU0167's depth below 5% or limit its mechanisms with generate_candidates' sku_limits, or else leave SKU0167 out with generate_candidates' exclude_sku_ids.\", \"sku_id\": \"SKU0167\", \"region\": \"West\"}]",
+        "role": "user"
+      }
+    ],
+    "schema": {
+      "$defs": {
+        "FindingFeedback": {
+          "properties": {
+            "feedback": {
+              "description": "What the planner should change: one or two sentences.",
+              "title": "Feedback",
+              "type": "string"
+            },
+            "finding": {
+              "description": "The finding's `finding` number in the findings data.",
+              "title": "Finding",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "finding",
+            "feedback"
+          ],
+          "title": "FindingFeedback",
+          "type": "object"
+        }
+      },
+      "description": "What the Critic's LLM writes: actionable feedback for each risk finding.",
+      "properties": {
+        "feedback": {
+          "description": "One feedback for every finding.",
+          "items": {
+            "$ref": "#/$defs/FindingFeedback"
+          },
+          "title": "Feedback",
+          "type": "array"
+        }
+      },
+      "required": [
+        "feedback"
+      ],
+      "title": "CriticFeedback",
+      "type": "object"
+    },
+    "temperature": 0.0
+  },
+  "response": {
+    "feedback": [
+      {
+        "feedback": "Spread the promo spend in East by capping SKU0158's depth below 10% using generate_candidates' sku_limits, or exclude SKU0158 entirely with generate_candidates' exclude_sku_ids to ensure no single plan line exceeds 25% of the promo spend.",
+        "finding": 1
+      },
+      {
+        "feedback": "To reduce heavy cannibalisation in East, cap SKU0158's depth below 10% or limit its mechanisms with generate_candidates' sku_limits, or exclude SKU0158 with generate_candidates' exclude_sku_ids to prevent excessive sales cannibalisation from its substitutes.",
+        "finding": 2
+      },
+      {
+        "feedback": "In East, cap SKU0167's depth below 5% or limit its mechanisms with generate_candidates' sku_limits, or exclude SKU0167 using generate_candidates' exclude_sku_ids to mitigate heavy cannibalisation of its substitutes.",
+        "finding": 3
+      },
+      {
+        "feedback": "For West, reduce SKU0167's depth below 5% or limit its mechanisms with generate_candidates' sku_limits, or exclude SKU0167 with generate_candidates' exclude_sku_ids to address the high cannibalisation of its substitutes.",
+        "finding": 4
+      }
+    ]
+  },
+  "schema_name": "CriticFeedback",
+  "usage": [
+    {
+      "input_tokens": 1033,
+      "model": "gpt-4.1-mini",
+      "output_tokens": 236
+    }
+  ]
+}

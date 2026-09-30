@@ -1224,34 +1224,17 @@
     "tool_calls": [
       {
         "arguments": {
-          "max_promoted_skus_per_category_per_region": 2,
-          "request": {
-            "as_of_week": 62,
-            "clearance_targets": [],
-            "kvi_price_tolerance": null,
-            "marketing_budget": 300000,
-            "max_promoted_skus_per_category_per_region": 2,
-            "min_margin": null,
-            "promo_window": {
-              "end_week": 64,
-              "start_week": 63
-            },
-            "regional_budget_caps": {},
-            "scope": {
-              "categories": [
-                "Beverages",
-                "Bakery"
-              ],
-              "regions": [
-                "North",
-                "South"
-              ],
-              "sku_ids": []
-            }
-          }
+          "categories": [
+            "Beverages",
+            "Bakery"
+          ],
+          "regions": [
+            "North",
+            "South"
+          ]
         },
-        "id": "call_5buXxyD6DnCVDFHQmTMKh9xB",
-        "name": "generate_candidates"
+        "id": "call_xeiLut9Am5adZ7M2Obg2xsD0",
+        "name": "get_scope_data"
       }
     ]
   },
@@ -1260,7 +1243,7 @@
     {
       "input_tokens": 5696,
       "model": "gpt-4.1-mini",
-      "output_tokens": 109
+      "output_tokens": 28
     }
   ]
 }

@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-09-29T07:21:10.959318Z",
+  "generated_at": "2026-09-30T14:54:13.205438Z",
   "provider": "openai (recording)",
   "world_seed": 42,
   "runs_per_scenario": 1,
@@ -12,25 +12,29 @@
     "optimizer_binding_time_limit_seconds": 30.0,
     "optimizer_relaxation_deterministic_limit": 10.0,
     "optimizer_relaxation_time_limit_seconds": 60.0,
+    "optimizer_budget_quantile": 0.9,
+    "optimizer_stock_buffer_sigmas": 2.0,
+    "optimizer_margin_quantile": 0.1,
     "simulation_runs": 1000,
     "simulation_seed": 0,
     "critic_line_spend_share": 0.25,
     "critic_group_spend_share": 0.8,
     "critic_cannibalisation_share": 0.5,
-    "critic_stockout_probability": 0.2
+    "critic_stockout_probability": 0.2,
+    "critic_objective_tolerance": 0.05
   },
   "metrics": [
     {
       "name": "constraint_satisfaction",
       "label": "Constraint satisfaction",
-      "value": 0.9655172413793104,
-      "count": 28,
-      "of": 29,
+      "value": 1.0,
+      "count": 30,
+      "of": 30,
       "target": 1.0,
       "direction": "at_least",
-      "passed": false,
+      "passed": true,
       "breakdown": {
-        "failed": 1,
+        "failed": 0,
         "infeasible": 3,
         "no_plan": 0
       },
@@ -40,26 +44,44 @@
     {
       "name": "oracle_breach_rate",
       "label": "Oracle breach rate",
-      "value": 0.41379310344827586,
-      "count": 12,
-      "of": 29,
-      "target": null,
-      "direction": null,
-      "passed": null,
+      "value": 0.13333333333333333,
+      "count": 4,
+      "of": 30,
+      "target": 0.15,
+      "direction": "at_most",
+      "passed": true,
       "breakdown": {
-        "promo_cost_over_budget": 7,
-        "margin_below_minimum": 2,
-        "demand_over_stock": 7
+        "promo_cost_over_budget": 2,
+        "margin_below_minimum": 0,
+        "demand_over_stock": 3
       },
       "unit": "share",
+      "aim": null
+    },
+    {
+      "name": "open_issues",
+      "label": "Open issues per plan (median)",
+      "value": 1.0,
+      "count": 21,
+      "of": 33,
+      "target": null,
+      "direction": "at_most",
+      "passed": null,
+      "breakdown": {
+        "total": 41,
+        "HEAVY_CANNIBALISATION": 18,
+        "OVER_CONCENTRATION": 14,
+        "CLEARANCE_TARGET": 9
+      },
+      "unit": "count",
       "aim": null
     },
     {
       "name": "extraction_accuracy",
       "label": "Extraction accuracy",
       "value": 1.0,
-      "count": 147,
-      "of": 147,
+      "count": 152,
+      "of": 152,
       "target": 0.95,
       "direction": "at_least",
       "passed": true,
@@ -106,15 +128,15 @@
     {
       "name": "grounding",
       "label": "Grounding",
-      "value": 1.0,
-      "count": 37,
-      "of": 37,
+      "value": 0.9743589743589743,
+      "count": 38,
+      "of": 39,
       "target": 0.98,
       "direction": "at_least",
-      "passed": true,
+      "passed": false,
       "breakdown": {
-        "llm": 37,
-        "ungrounded": 0,
+        "llm": 38,
+        "ungrounded": 1,
         "invalid_answer": 0,
         "llm_unavailable": 0
       },
@@ -124,14 +146,15 @@
     {
       "name": "session_latency_p50",
       "label": "P50 session time",
-      "value": 148.81715569997323,
-      "count": 32,
-      "of": 32,
+      "value": 68.31848819999868,
+      "count": 33,
+      "of": 33,
       "target": null,
       "direction": null,
       "passed": null,
       "breakdown": {
-        "max_s": 868
+        "max_s": 297,
+        "llm_p50_s": 36
       },
       "unit": "seconds",
       "aim": null
@@ -139,16 +162,16 @@
     {
       "name": "session_cost_p50",
       "label": "P50 session cost",
-      "value": 3.0370944,
-      "count": 32,
-      "of": 32,
+      "value": 3.5433216,
+      "count": 33,
+      "of": 33,
       "target": null,
       "direction": null,
       "passed": null,
       "breakdown": {
-        "calls": 363,
-        "input_tokens": 2735938,
-        "output_tokens": 64236,
+        "calls": 448,
+        "input_tokens": 3447129,
+        "output_tokens": 78762,
         "unpriced_runs": 0
       },
       "unit": "rupees",
@@ -261,15 +284,15 @@
     {
       "name": "plan_quality",
       "label": "Plan quality (beats the rule-based baseline)",
-      "value": 0.9310344827586207,
-      "count": 27,
-      "of": 29,
+      "value": 1.0,
+      "count": 30,
+      "of": 30,
       "target": 0.9,
       "direction": "at_least",
       "passed": true,
       "breakdown": {
-        "beats": 27,
-        "ties": 2,
+        "beats": 30,
+        "ties": 0,
         "loses": 0
       },
       "unit": "share",
@@ -278,14 +301,18 @@
     {
       "name": "regret",
       "label": "Regret (median, against the best plan)",
-      "value": 0.23538226775938856,
+      "value": 0.12256549673098585,
       "count": 12,
       "of": 29,
       "target": 0.1,
       "direction": "at_most",
       "passed": false,
       "breakdown": {
-        "best_infeasible": 0
+        "best_infeasible": 1,
+        "best_timed_out": 0,
+        "largest_model_error": 16,
+        "largest_planner": 1,
+        "largest_timeouts": 0
       },
       "unit": "share",
       "aim": null
@@ -351,8 +378,8 @@
               "East"
             ],
             "solver_status": "OPTIMAL",
-            "objective": 124979.82,
-            "promo_cost": 149994.7525652788,
+            "objective": 118483.07,
+            "promo_cost": 133666.4908543221,
             "marketing_budget": 150000.0,
             "sku_ids": [
               "SKU0102",
@@ -363,7 +390,7 @@
               "SKU0115",
               "SKU0116",
               "SKU0119",
-              "SKU0122",
+              "SKU0120",
               "SKU0124",
               "SKU0125"
             ]
@@ -371,13 +398,12 @@
           "constraints": "passed",
           "violations": [],
           "oracle": {
-            "incremental_profit": 100050.4248636508,
-            "clearance_value": 31943.282647177573,
-            "promo_cost": 161514.88217607525,
-            "blended_margin": 0.31958116883873133,
-            "stock_capped_lines": 2,
+            "incremental_profit": 90361.44429114717,
+            "clearance_value": 36011.379589393255,
+            "promo_cost": 140862.08223204332,
+            "blended_margin": 0.32833240561919064,
+            "stock_capped_lines": 1,
             "breaches": [
-              "promo_cost_over_budget",
               "demand_over_stock"
             ]
           },
@@ -394,7 +420,7 @@
             }
           ],
           "quality": {
-            "objective": 131993.70751082836,
+            "objective": 126372.82388054043,
             "rule_based": {
               "sku_ids": [
                 "SKU0114"
@@ -429,13 +455,37 @@
                 "SKU0124",
                 "SKU0125"
               ],
-              "objective": 142193.0357896218
+              "objective": 128601.4536493305
             },
             "versus_rule_based": "beats",
-            "regret": 0.07172874692599991,
-            "regret_rupees": 10199.32827879343
+            "regret": 0.017329740104393313,
+            "regret_rupees": 2228.6297687900806,
+            "default": {
+              "solver_status": "OPTIMAL",
+              "lines": 20,
+              "sku_ids": [
+                "SKU0102",
+                "SKU0103",
+                "SKU0105",
+                "SKU0108",
+                "SKU0114",
+                "SKU0115",
+                "SKU0116",
+                "SKU0119",
+                "SKU0120",
+                "SKU0124",
+                "SKU0125"
+              ],
+              "objective": 126372.82388054043
+            },
+            "breakdown": {
+              "model_error": 0.017329740104393313,
+              "planner": 0.0,
+              "timeouts": 0.0
+            },
+            "timed_out": []
           },
-          "duration_s": 485.58529669995187,
+          "duration_s": 428.9424394000016,
           "extraction": [
             {
               "field": "regions",
@@ -483,15 +533,21 @@
               "fallback_reason": null
             }
           ],
-          "session_s": 363.3505790999625,
+          "session_s": 266.085665300001,
+          "llm_s": 101.87013520001346,
           "usage": {
-            "calls": 27,
-            "input_tokens": 195100,
-            "output_tokens": 5136,
-            "cost_usd": 0.0862576,
-            "cost_inr": 8.2807296,
+            "calls": 29,
+            "input_tokens": 217868,
+            "output_tokens": 5410,
+            "cost_usd": 0.0958032,
+            "cost_inr": 9.1971072,
             "unpriced_models": []
-          }
+          },
+          "cassette_misses": [],
+          "open_issues": [
+            "HEAVY_CANNIBALISATION"
+          ],
+          "passed": true
         }
       ],
       "passed": true,
@@ -513,10 +569,18 @@
             "critic",
             "planner",
             "critic",
+            "planner",
+            "critic",
             "explainer",
             "approval",
             "approval",
             "context",
+            "planner",
+            "critic",
+            "planner",
+            "critic",
+            "planner",
+            "critic",
             "planner",
             "critic",
             "explainer",
@@ -527,28 +591,28 @@
           "fallbacks": [],
           "revision": {
             "number": 2,
-            "lines": 27,
+            "lines": 26,
             "regions": [
               "North",
               "South"
             ],
             "solver_status": "OPTIMAL",
-            "objective": 116407.52,
-            "promo_cost": 149157.18319955567,
+            "objective": 110554.96,
+            "promo_cost": 132784.6733890184,
             "marketing_budget": 150000.0,
             "sku_ids": [
               "SKU0029",
               "SKU0030",
               "SKU0031",
-              "SKU0032",
               "SKU0034",
               "SKU0035",
+              "SKU0038",
               "SKU0040",
+              "SKU0041",
               "SKU0042",
               "SKU0047",
               "SKU0049",
               "SKU0050",
-              "SKU0179",
               "SKU0184",
               "SKU0192",
               "SKU0194",
@@ -558,10 +622,10 @@
           "constraints": "passed",
           "violations": [],
           "oracle": {
-            "incremental_profit": 28594.366903451733,
-            "clearance_value": 43413.858489159546,
-            "promo_cost": 132850.38135388447,
-            "blended_margin": 0.23432883559484025,
+            "incremental_profit": 28635.004270277364,
+            "clearance_value": 37831.29799233797,
+            "promo_cost": 118262.31981562098,
+            "blended_margin": 0.23629760213509945,
             "stock_capped_lines": 0,
             "breaches": []
           },
@@ -578,7 +642,7 @@
             }
           ],
           "quality": {
-            "objective": 72008.22539261128,
+            "objective": 66466.30226261533,
             "rule_based": {
               "sku_ids": [
                 "SKU0192"
@@ -600,31 +664,60 @@
             },
             "best": {
               "solver_status": "OPTIMAL",
-              "lines": 29,
+              "lines": 27,
               "sku_ids": [
                 "SKU0028",
                 "SKU0029",
                 "SKU0030",
                 "SKU0031",
-                "SKU0032",
+                "SKU0034",
                 "SKU0035",
                 "SKU0040",
                 "SKU0041",
                 "SKU0047",
                 "SKU0049",
+                "SKU0064",
                 "SKU0179",
+                "SKU0184",
+                "SKU0192",
+                "SKU0194"
+              ],
+              "objective": 81021.19319172384
+            },
+            "versus_rule_based": "beats",
+            "regret": 0.17964300889357018,
+            "regret_rupees": 14554.890929108515,
+            "default": {
+              "solver_status": "OPTIMAL",
+              "lines": 26,
+              "sku_ids": [
+                "SKU0029",
+                "SKU0030",
+                "SKU0031",
+                "SKU0034",
+                "SKU0035",
+                "SKU0038",
+                "SKU0040",
+                "SKU0041",
+                "SKU0042",
+                "SKU0047",
+                "SKU0049",
+                "SKU0050",
                 "SKU0184",
                 "SKU0192",
                 "SKU0194",
                 "SKU0195"
               ],
-              "objective": 94383.01689843487
+              "objective": 66466.30226261533
             },
-            "versus_rule_based": "beats",
-            "regret": 0.2370637455878424,
-            "regret_rupees": 22374.791505823596
+            "breakdown": {
+              "model_error": 0.17964300889357018,
+              "planner": 0.0,
+              "timeouts": 0.0
+            },
+            "timed_out": []
           },
-          "duration_s": 395.494816099992,
+          "duration_s": 417.66549769999983,
           "extraction": [
             {
               "field": "regions",
@@ -667,15 +760,21 @@
               "fallback_reason": null
             }
           ],
-          "session_s": 250.17326300003333,
+          "session_s": 296.57632329999615,
+          "llm_s": 118.64312130003964,
           "usage": {
-            "calls": 15,
-            "input_tokens": 120200,
-            "output_tokens": 3163,
-            "cost_usd": 0.0531408,
-            "cost_inr": 5.1015168,
+            "calls": 40,
+            "input_tokens": 330283,
+            "output_tokens": 5241,
+            "cost_usd": 0.1404988,
+            "cost_inr": 13.487884800000002,
             "unpriced_models": []
-          }
+          },
+          "cassette_misses": [],
+          "open_issues": [
+            "OVER_CONCENTRATION"
+          ],
+          "passed": true
         }
       ],
       "passed": true,
@@ -697,6 +796,10 @@
             "critic",
             "planner",
             "critic",
+            "planner",
+            "critic",
+            "planner",
+            "critic",
             "explainer",
             "approval"
           ],
@@ -711,22 +814,22 @@
               "West"
             ],
             "solver_status": "OPTIMAL",
-            "objective": 8439.91,
-            "promo_cost": 15204.096142112818,
+            "objective": 19340.12,
+            "promo_cost": 26290.460207805965,
             "marketing_budget": 150000.0,
             "sku_ids": [
+              "SKU0192",
               "SKU0194",
-              "SKU0195",
-              "SKU0198"
+              "SKU0195"
             ]
           },
           "constraints": "passed",
           "violations": [],
           "oracle": {
-            "incremental_profit": 392.6521510299008,
-            "clearance_value": 5631.949178398219,
-            "promo_cost": 13100.480096672976,
-            "blended_margin": 0.2345772544850152,
+            "incremental_profit": 12384.591053692851,
+            "clearance_value": 3294.011648327929,
+            "promo_cost": 24170.889512874874,
+            "blended_margin": 0.19735119679027827,
             "stock_capped_lines": 0,
             "breaches": []
           },
@@ -738,12 +841,12 @@
             },
             {
               "property": "no_strong_substitutes_together: true",
-              "passed": false,
-              "detail": "revision 1 promotes SKU0194 and SKU0195 (θ 0.64) together in North, West"
+              "passed": true,
+              "detail": "revision 1 promotes none of the 11 strong substitute pairs in scope together"
             }
           ],
           "quality": {
-            "objective": 6024.60132942812,
+            "objective": 15678.60270202078,
             "rule_based": {
               "sku_ids": [
                 "SKU0181",
@@ -765,7 +868,7 @@
             },
             "best": {
               "solver_status": "OPTIMAL",
-              "lines": 10,
+              "lines": 9,
               "sku_ids": [
                 "SKU0038",
                 "SKU0064",
@@ -775,13 +878,29 @@
                 "SKU0195",
                 "SKU0198"
               ],
-              "objective": 20581.596216139445
+              "objective": 19332.603711444943
             },
             "versus_rule_based": "beats",
-            "regret": 0.7072821142655682,
-            "regret_rupees": 14556.994886711325
+            "regret": 0.18900718516569945,
+            "regret_rupees": 3654.0010094241625,
+            "default": {
+              "solver_status": "OPTIMAL",
+              "lines": 6,
+              "sku_ids": [
+                "SKU0192",
+                "SKU0194",
+                "SKU0195"
+              ],
+              "objective": 15678.60270202078
+            },
+            "breakdown": {
+              "model_error": 0.18900718516569945,
+              "planner": 0.0,
+              "timeouts": 0.0
+            },
+            "timed_out": []
           },
-          "duration_s": 243.73449310002616,
+          "duration_s": 218.07354930000292,
           "extraction": [
             {
               "field": "regions",
@@ -819,18 +938,24 @@
               "fallback_reason": null
             }
           ],
-          "session_s": 66.64298830000916,
+          "session_s": 72.69433199999912,
+          "llm_s": 49.26291319998563,
           "usage": {
-            "calls": 9,
-            "input_tokens": 55465,
-            "output_tokens": 988,
-            "cost_usd": 0.0237668,
-            "cost_inr": 2.2816128,
+            "calls": 21,
+            "input_tokens": 130875,
+            "output_tokens": 2308,
+            "cost_usd": 0.0560428,
+            "cost_inr": 5.3801088,
             "unpriced_models": []
-          }
+          },
+          "cassette_misses": [],
+          "open_issues": [
+            "OVER_CONCENTRATION"
+          ],
+          "passed": true
         }
       ],
-      "passed": false,
+      "passed": true,
       "consistency": null
     },
     {
@@ -867,8 +992,8 @@
               "West"
             ],
             "solver_status": "OPTIMAL",
-            "objective": 99155.02,
-            "promo_cost": 149931.13993874996,
+            "objective": 97291.74,
+            "promo_cost": 133665.00152959512,
             "marketing_budget": 150000.0,
             "sku_ids": [
               "SKU0028",
@@ -879,21 +1004,18 @@
               "SKU0165",
               "SKU0166",
               "SKU0167",
-              "SKU0168",
               "SKU0172"
             ]
           },
           "constraints": "passed",
           "violations": [],
           "oracle": {
-            "incremental_profit": 39308.84694276439,
-            "clearance_value": 56487.00619056027,
-            "promo_cost": 154981.76157213486,
-            "blended_margin": 0.26266191413738554,
+            "incremental_profit": 34651.08531341029,
+            "clearance_value": 53773.63333696802,
+            "promo_cost": 140734.54236606456,
+            "blended_margin": 0.26393290124081753,
             "stock_capped_lines": 0,
-            "breaches": [
-              "promo_cost_over_budget"
-            ]
+            "breaches": []
           },
           "properties": [
             {
@@ -908,7 +1030,7 @@
             }
           ],
           "quality": {
-            "objective": 95795.85313332465,
+            "objective": 88424.71865037832,
             "rule_based": {
               "sku_ids": [
                 "SKU0165",
@@ -945,13 +1067,35 @@
                 "SKU0171",
                 "SKU0172"
               ],
-              "objective": 103287.10281971662
+              "objective": 100776.43211081708
             },
             "versus_rule_based": "beats",
-            "regret": 0.07252841334379989,
-            "regret_rupees": 7491.249686391966
+            "regret": 0.12256549673098585,
+            "regret_rupees": 12351.713460438768,
+            "default": {
+              "solver_status": "OPTIMAL",
+              "lines": 15,
+              "sku_ids": [
+                "SKU0028",
+                "SKU0152",
+                "SKU0155",
+                "SKU0158",
+                "SKU0161",
+                "SKU0165",
+                "SKU0166",
+                "SKU0167",
+                "SKU0172"
+              ],
+              "objective": 88424.71865037832
+            },
+            "breakdown": {
+              "model_error": 0.12256549673098585,
+              "planner": 0.0,
+              "timeouts": 0.0
+            },
+            "timed_out": []
           },
-          "duration_s": 124.76929199998267,
+          "duration_s": 89.11689189999743,
           "extraction": [
             {
               "field": "regions",
@@ -989,15 +1133,24 @@
               "fallback_reason": null
             }
           ],
-          "session_s": 124.74542160000419,
+          "session_s": 69.73863400000118,
+          "llm_s": 42.49119349998364,
           "usage": {
-            "calls": 18,
-            "input_tokens": 119164,
-            "output_tokens": 2254,
-            "cost_usd": 0.051272000000000005,
-            "cost_inr": 4.922112,
+            "calls": 21,
+            "input_tokens": 146100,
+            "output_tokens": 2825,
+            "cost_usd": 0.06296,
+            "cost_inr": 6.044160000000001,
             "unpriced_models": []
-          }
+          },
+          "cassette_misses": [],
+          "open_issues": [
+            "OVER_CONCENTRATION",
+            "HEAVY_CANNIBALISATION",
+            "HEAVY_CANNIBALISATION",
+            "HEAVY_CANNIBALISATION"
+          ],
+          "passed": true
         }
       ],
       "passed": true,
@@ -1019,8 +1172,6 @@
             "critic",
             "planner",
             "critic",
-            "planner",
-            "critic",
             "explainer",
             "approval"
           ],
@@ -1034,13 +1185,12 @@
               "North",
               "South"
             ],
-            "solver_status": "FEASIBLE",
-            "objective": 104097.99,
-            "promo_cost": 188085.54938455857,
+            "solver_status": "OPTIMAL",
+            "objective": 98031.85,
+            "promo_cost": 124730.07605581346,
             "marketing_budget": 200000.0,
             "sku_ids": [
               "SKU0077",
-              "SKU0078",
               "SKU0081",
               "SKU0083",
               "SKU0085",
@@ -1051,18 +1201,16 @@
               "SKU0093",
               "SKU0095",
               "SKU0100",
-              "SKU0102",
-              "SKU0105",
-              "SKU0119"
+              "SKU0102"
             ]
           },
           "constraints": "passed",
           "violations": [],
           "oracle": {
-            "incremental_profit": 91326.96943951573,
-            "clearance_value": 6014.505207740254,
-            "promo_cost": 189063.74839635633,
-            "blended_margin": 0.36586909927574834,
+            "incremental_profit": 98979.33535531654,
+            "clearance_value": 6105.704809105359,
+            "promo_cost": 125104.09486419705,
+            "blended_margin": 0.3868713936202839,
             "stock_capped_lines": 0,
             "breaches": []
           },
@@ -1070,16 +1218,16 @@
             {
               "property": "declares_infeasible: false",
               "passed": true,
-              "detail": "revision 1 is FEASIBLE"
+              "detail": "revision 1 is OPTIMAL"
             },
             {
               "property": "no_strong_substitutes_together: true",
-              "passed": false,
-              "detail": "revision 1 promotes SKU0085 and SKU0087 (θ 0.73) together in North; SKU0077 and SKU0078 (θ 0.69) together in North"
+              "passed": true,
+              "detail": "revision 1 promotes none of the 14 strong substitute pairs in scope together"
             }
           ],
           "quality": {
-            "objective": 97341.47464725598,
+            "objective": 105085.0401644219,
             "rule_based": {
               "sku_ids": [
                 "SKU0079",
@@ -1100,25 +1248,54 @@
               "objective": -37830.892537748005
             },
             "best": {
-              "solver_status": "FEASIBLE",
-              "lines": 13,
+              "solver_status": "OPTIMAL",
+              "lines": 20,
               "sku_ids": [
                 "SKU0077",
+                "SKU0081",
+                "SKU0083",
+                "SKU0086",
                 "SKU0087",
+                "SKU0089",
                 "SKU0090",
                 "SKU0091",
                 "SKU0093",
                 "SKU0095",
-                "SKU0099",
-                "SKU0100"
+                "SKU0100",
+                "SKU0102"
               ],
-              "objective": 8280.471339052197
+              "objective": 101197.88970993659
             },
             "versus_rule_based": "beats",
-            "regret": -10.755547560218707,
-            "regret_rupees": -89061.00330820378
+            "regret": -0.038411378593239884,
+            "regret_rupees": -3887.1504544853087,
+            "default": {
+              "solver_status": "OPTIMAL",
+              "lines": 20,
+              "sku_ids": [
+                "SKU0077",
+                "SKU0083",
+                "SKU0085",
+                "SKU0086",
+                "SKU0087",
+                "SKU0089",
+                "SKU0090",
+                "SKU0091",
+                "SKU0093",
+                "SKU0095",
+                "SKU0100",
+                "SKU0102"
+              ],
+              "objective": 105255.79480377166
+            },
+            "breakdown": {
+              "model_error": -0.040098712586460444,
+              "planner": 0.001687333993220563,
+              "timeouts": 0.0
+            },
+            "timed_out": []
           },
-          "duration_s": 408.49490399996284,
+          "duration_s": 193.59256939999614,
           "extraction": [
             {
               "field": "regions",
@@ -1156,18 +1333,22 @@
               "fallback_reason": null
             }
           ],
-          "session_s": 408.4735071999603,
+          "session_s": 133.80525569999736,
+          "llm_s": 31.617576899996493,
           "usage": {
-            "calls": 13,
-            "input_tokens": 95301,
-            "output_tokens": 2162,
-            "cost_usd": 0.0415796,
-            "cost_inr": 3.9916416000000003,
+            "calls": 10,
+            "input_tokens": 75918,
+            "output_tokens": 1782,
+            "cost_usd": 0.0332184,
+            "cost_inr": 3.1889664000000004,
             "unpriced_models": []
-          }
+          },
+          "cassette_misses": [],
+          "open_issues": [],
+          "passed": true
         }
       ],
-      "passed": false,
+      "passed": true,
       "consistency": null
     },
     {
@@ -1186,6 +1367,10 @@
             "critic",
             "planner",
             "critic",
+            "planner",
+            "critic",
+            "planner",
+            "critic",
             "explainer",
             "approval"
           ],
@@ -1194,19 +1379,29 @@
           "fallbacks": [],
           "revision": {
             "number": 1,
-            "lines": 12,
+            "lines": 26,
             "regions": [
               "South",
               "West"
             ],
             "solver_status": "OPTIMAL",
-            "objective": 85895.01,
-            "promo_cost": 119257.48795869332,
+            "objective": 107152.04,
+            "promo_cost": 167825.9648774574,
             "marketing_budget": 250000.0,
             "sku_ids": [
+              "SKU0029",
+              "SKU0030",
+              "SKU0031",
+              "SKU0034",
               "SKU0035",
+              "SKU0038",
               "SKU0040",
+              "SKU0041",
+              "SKU0042",
+              "SKU0047",
               "SKU0049",
+              "SKU0050",
+              "SKU0184",
               "SKU0192",
               "SKU0194",
               "SKU0195"
@@ -1215,10 +1410,10 @@
           "constraints": "passed",
           "violations": [],
           "oracle": {
-            "incremental_profit": 11720.24626911956,
-            "clearance_value": 42545.2966155146,
-            "promo_cost": 102422.47124394796,
-            "blended_margin": 0.2012424123026498,
+            "incremental_profit": 16023.162673048208,
+            "clearance_value": 50589.45674642915,
+            "promo_cost": 146328.68529563502,
+            "blended_margin": 0.2153680305548117,
             "stock_capped_lines": 0,
             "breaches": []
           },
@@ -1235,7 +1430,7 @@
             }
           ],
           "quality": {
-            "objective": 54265.54288463416,
+            "objective": 66612.61941947736,
             "rule_based": {
               "sku_ids": [
                 "SKU0192",
@@ -1261,9 +1456,9 @@
               "sku_ids": [
                 "SKU0028",
                 "SKU0029",
+                "SKU0030",
                 "SKU0031",
-                "SKU0032",
-                "SKU0033",
+                "SKU0034",
                 "SKU0035",
                 "SKU0038",
                 "SKU0040",
@@ -1278,13 +1473,42 @@
                 "SKU0194",
                 "SKU0195"
               ],
-              "objective": 92604.25764831754
+              "objective": 84127.04115177752
             },
             "versus_rule_based": "beats",
-            "regret": 0.4140059618995275,
-            "regret_rupees": 38338.714763683376
+            "regret": 0.20819015494318382,
+            "regret_rupees": 17514.421732300165,
+            "default": {
+              "solver_status": "OPTIMAL",
+              "lines": 26,
+              "sku_ids": [
+                "SKU0029",
+                "SKU0030",
+                "SKU0031",
+                "SKU0034",
+                "SKU0035",
+                "SKU0038",
+                "SKU0040",
+                "SKU0041",
+                "SKU0042",
+                "SKU0047",
+                "SKU0049",
+                "SKU0050",
+                "SKU0184",
+                "SKU0192",
+                "SKU0194",
+                "SKU0195"
+              ],
+              "objective": 66612.61941947736
+            },
+            "breakdown": {
+              "model_error": 0.20819015494318382,
+              "planner": 0.0,
+              "timeouts": 0.0
+            },
+            "timed_out": []
           },
-          "duration_s": 266.9968166000326,
+          "duration_s": 180.32855389999895,
           "extraction": [
             {
               "field": "regions",
@@ -1322,15 +1546,21 @@
               "fallback_reason": null
             }
           ],
-          "session_s": 266.6313173000235,
+          "session_s": 143.10749140000553,
+          "llm_s": 58.97815900002024,
           "usage": {
-            "calls": 10,
-            "input_tokens": 77091,
-            "output_tokens": 1380,
-            "cost_usd": 0.0330444,
-            "cost_inr": 3.1722624,
+            "calls": 21,
+            "input_tokens": 163336,
+            "output_tokens": 2532,
+            "cost_usd": 0.0693856,
+            "cost_inr": 6.6610176,
             "unpriced_models": []
-          }
+          },
+          "cassette_misses": [],
+          "open_issues": [
+            "OVER_CONCENTRATION"
+          ],
+          "passed": true
         }
       ],
       "passed": true,
@@ -1352,10 +1582,6 @@
             "critic",
             "planner",
             "critic",
-            "planner",
-            "critic",
-            "planner",
-            "critic",
             "explainer",
             "approval"
           ],
@@ -1364,23 +1590,20 @@
           "fallbacks": [],
           "revision": {
             "number": 1,
-            "lines": 30,
+            "lines": 25,
             "regions": [
               "North",
               "South"
             ],
             "solver_status": "OPTIMAL",
-            "objective": 138653.96,
-            "promo_cost": 199950.7762058838,
+            "objective": 131470.46,
+            "promo_cost": 180292.3528107634,
             "marketing_budget": 200000.0,
             "sku_ids": [
               "SKU0002",
-              "SKU0006",
               "SKU0007",
               "SKU0010",
-              "SKU0013",
               "SKU0017",
-              "SKU0019",
               "SKU0025",
               "SKU0028",
               "SKU0039",
@@ -1398,14 +1621,12 @@
           "constraints": "passed",
           "violations": [],
           "oracle": {
-            "incremental_profit": 76655.43403319083,
-            "clearance_value": 67036.17038732281,
-            "promo_cost": 207305.78881108644,
-            "blended_margin": 0.2608095723116912,
+            "incremental_profit": 75046.22865898901,
+            "clearance_value": 62083.22150572474,
+            "promo_cost": 186639.62867386302,
+            "blended_margin": 0.2618671794636061,
             "stock_capped_lines": 0,
-            "breaches": [
-              "promo_cost_over_budget"
-            ]
+            "breaches": []
           },
           "properties": [
             {
@@ -1420,7 +1641,7 @@
             }
           ],
           "quality": {
-            "objective": 143691.60442051364,
+            "objective": 137129.45016471375,
             "rule_based": {
               "sku_ids": [
                 "SKU0020",
@@ -1442,11 +1663,10 @@
             },
             "best": {
               "solver_status": "OPTIMAL",
-              "lines": 28,
+              "lines": 27,
               "sku_ids": [
                 "SKU0002",
                 "SKU0006",
-                "SKU0007",
                 "SKU0010",
                 "SKU0017",
                 "SKU0025",
@@ -1462,13 +1682,41 @@
                 "SKU0168",
                 "SKU0172"
               ],
-              "objective": 143821.27729909078
+              "objective": 138911.2777680038
             },
             "versus_rule_based": "beats",
-            "regret": 0.0009016251351145584,
-            "regret_rupees": 129.6728785771411
+            "regret": 0.012827091017519093,
+            "regret_rupees": 1781.8276032900612,
+            "default": {
+              "solver_status": "OPTIMAL",
+              "lines": 25,
+              "sku_ids": [
+                "SKU0002",
+                "SKU0006",
+                "SKU0017",
+                "SKU0025",
+                "SKU0028",
+                "SKU0039",
+                "SKU0151",
+                "SKU0152",
+                "SKU0155",
+                "SKU0158",
+                "SKU0161",
+                "SKU0165",
+                "SKU0166",
+                "SKU0168",
+                "SKU0172"
+              ],
+              "objective": 135406.6658281042
+            },
+            "breakdown": {
+              "model_error": 0.025229139031840795,
+              "planner": -0.012402048014321702,
+              "timeouts": 0.0
+            },
+            "timed_out": []
           },
-          "duration_s": 317.49921179999365,
+          "duration_s": 119.3390939000019,
           "extraction": [
             {
               "field": "regions",
@@ -1506,15 +1754,19 @@
               "fallback_reason": null
             }
           ],
-          "session_s": 317.4627284000162,
+          "session_s": 82.2110360000006,
+          "llm_s": 43.748709500003315,
           "usage": {
-            "calls": 18,
-            "input_tokens": 132366,
-            "output_tokens": 2630,
-            "cost_usd": 0.0571544,
-            "cost_inr": 5.4868224,
+            "calls": 14,
+            "input_tokens": 125142,
+            "output_tokens": 2323,
+            "cost_usd": 0.053773600000000005,
+            "cost_inr": 5.1622656000000005,
             "unpriced_models": []
-          }
+          },
+          "cassette_misses": [],
+          "open_issues": [],
+          "passed": true
         }
       ],
       "passed": true,
@@ -1542,14 +1794,14 @@
           "fallbacks": [],
           "revision": {
             "number": 1,
-            "lines": 19,
+            "lines": 17,
             "regions": [
               "North",
               "South"
             ],
-            "solver_status": "FEASIBLE",
-            "objective": 3404.27,
-            "promo_cost": 70058.66763759601,
+            "solver_status": "INFEASIBLE",
+            "objective": 2447.73,
+            "promo_cost": 55888.72827237627,
             "marketing_budget": 200000.0,
             "sku_ids": [
               "SKU0052",
@@ -1557,95 +1809,24 @@
               "SKU0057",
               "SKU0059",
               "SKU0061",
-              "SKU0062",
               "SKU0064",
               "SKU0070",
               "SKU0073",
               "SKU0075"
             ]
           },
-          "constraints": "failed",
-          "violations": [
-            {
-              "kind": "violation",
-              "code": "CLEARANCE_TARGET",
-              "message": "SKU0057 in North is expected to sell through 28.3% of its stock, below the clearance target 50.0%: short by 867 units",
-              "sku_id": "SKU0057",
-              "region": "North",
-              "actual": 0.28264441478959784,
-              "limit": 0.5
-            }
-          ],
-          "oracle": {
-            "incremental_profit": -27360.512169219233,
-            "clearance_value": 24544.867763004884,
-            "promo_cost": 63537.80215602729,
-            "blended_margin": 0.15272780451879162,
-            "stock_capped_lines": 0,
-            "breaches": []
-          },
+          "constraints": "infeasible",
+          "violations": [],
+          "oracle": null,
           "properties": [
             {
-              "property": "declares_infeasible: false",
+              "property": "declares_infeasible: true",
               "passed": true,
-              "detail": "revision 1 is FEASIBLE"
-            },
-            {
-              "property": "meets_clearance: SKU0057",
-              "passed": false,
-              "detail": "North reaches 28.26% of a 50% target, 867 units short"
-            },
-            {
-              "property": "meets_clearance: SKU0059",
-              "passed": true,
-              "detail": "no clearance shortfall in revision 1"
-            },
-            {
-              "property": "meets_clearance: SKU0061",
-              "passed": true,
-              "detail": "no clearance shortfall in revision 1"
+              "detail": "revision 1 is INFEASIBLE"
             }
           ],
-          "quality": {
-            "objective": -2815.644406214349,
-            "rule_based": {
-              "sku_ids": [
-                "SKU0073"
-              ],
-              "dropped_sku_ids": [
-                "SKU0068",
-                "SKU0063",
-                "SKU0056",
-                "SKU0069",
-                "SKU0062",
-                "SKU0060",
-                "SKU0061",
-                "SKU0070",
-                "SKU0064"
-              ],
-              "lines": 2,
-              "expected_promo_cost": 141940.63384698943,
-              "objective": -54843.63184047275
-            },
-            "best": {
-              "solver_status": "FEASIBLE",
-              "lines": 14,
-              "sku_ids": [
-                "SKU0052",
-                "SKU0057",
-                "SKU0059",
-                "SKU0061",
-                "SKU0064",
-                "SKU0070",
-                "SKU0073"
-              ],
-              "objective": -1078.7264737942642
-            },
-            "versus_rule_based": "beats",
-            "regret": 1.0,
-            "regret_rupees": 1736.917932420085
-          },
-          "duration_s": 314.61221800005296,
+          "quality": null,
+          "duration_s": 240.62378609999723,
           "extraction": [
             {
               "field": "regions",
@@ -1689,18 +1870,27 @@
               "fallback_reason": null
             }
           ],
-          "session_s": 173.43383330001961,
+          "session_s": 168.76646469999832,
+          "llm_s": 44.359265099978074,
           "usage": {
-            "calls": 8,
-            "input_tokens": 64031,
-            "output_tokens": 2885,
-            "cost_usd": 0.0302284,
-            "cost_inr": 2.9019264000000002,
+            "calls": 11,
+            "input_tokens": 118357,
+            "output_tokens": 3135,
+            "cost_usd": 0.052358800000000004,
+            "cost_inr": 5.0264448,
             "unpriced_models": []
-          }
+          },
+          "cassette_misses": [],
+          "open_issues": [
+            "CLEARANCE_TARGET",
+            "CLEARANCE_TARGET",
+            "CLEARANCE_TARGET",
+            "CLEARANCE_TARGET"
+          ],
+          "passed": true
         }
       ],
-      "passed": false,
+      "passed": true,
       "consistency": null
     },
     {
@@ -1733,8 +1923,8 @@
               "East"
             ],
             "solver_status": "OPTIMAL",
-            "objective": 25769.46,
-            "promo_cost": 149994.54867588182,
+            "objective": 24066.89,
+            "promo_cost": 149951.9125200182,
             "marketing_budget": 150000.0,
             "sku_ids": [
               "SKU0114",
@@ -1746,10 +1936,10 @@
           "constraints": "passed",
           "violations": [],
           "oracle": {
-            "incremental_profit": -16878.28994652305,
-            "clearance_value": 48982.27840673986,
-            "promo_cost": 142708.69109375367,
-            "blended_margin": 0.1782036457870789,
+            "incremental_profit": -18631.957048251854,
+            "clearance_value": 49702.7239896058,
+            "promo_cost": 143028.84611198824,
+            "blended_margin": 0.20682215271051999,
             "stock_capped_lines": 0,
             "breaches": []
           },
@@ -1771,7 +1961,7 @@
             }
           ],
           "quality": {
-            "objective": 32103.98846021681,
+            "objective": 31070.766941353948,
             "rule_based": {
               "sku_ids": [
                 "SKU0114"
@@ -1800,13 +1990,30 @@
                 "SKU0119",
                 "SKU0124"
               ],
-              "objective": 51998.19681010057
+              "objective": 36615.94418553531
             },
             "versus_rule_based": "beats",
-            "regret": 0.3825941969206775,
-            "regret_rupees": 19894.20834988376
+            "regret": 0.15144160194486847,
+            "regret_rupees": 5545.177244181359,
+            "default": {
+              "solver_status": "OPTIMAL",
+              "lines": 6,
+              "sku_ids": [
+                "SKU0114",
+                "SKU0115",
+                "SKU0119",
+                "SKU0124"
+              ],
+              "objective": 31070.766941353948
+            },
+            "breakdown": {
+              "model_error": 0.15144160194486847,
+              "planner": 0.0,
+              "timeouts": 0.0
+            },
+            "timed_out": []
           },
-          "duration_s": 337.7113934000372,
+          "duration_s": 183.55266109999502,
           "extraction": [
             {
               "field": "regions",
@@ -1850,15 +2057,23 @@
               "fallback_reason": null
             }
           ],
-          "session_s": 337.60940230003325,
+          "session_s": 123.15117029999965,
+          "llm_s": 35.16074630001822,
           "usage": {
-            "calls": 15,
-            "input_tokens": 123689,
-            "output_tokens": 1920,
-            "cost_usd": 0.0525476,
-            "cost_inr": 5.0445696,
+            "calls": 12,
+            "input_tokens": 76659,
+            "output_tokens": 1600,
+            "cost_usd": 0.0332236,
+            "cost_inr": 3.1894656,
             "unpriced_models": []
-          }
+          },
+          "cassette_misses": [],
+          "open_issues": [
+            "OVER_CONCENTRATION",
+            "OVER_CONCENTRATION",
+            "HEAVY_CANNIBALISATION"
+          ],
+          "passed": true
         }
       ],
       "passed": true,
@@ -1892,14 +2107,14 @@
               "West"
             ],
             "solver_status": "OPTIMAL",
-            "objective": 90375.76,
-            "promo_cost": 147128.10930179336,
+            "objective": 87547.92,
+            "promo_cost": 131480.90729278055,
             "marketing_budget": 150000.0,
             "sku_ids": [
               "SKU0029",
               "SKU0030",
               "SKU0031",
-              "SKU0032",
+              "SKU0034",
               "SKU0035",
               "SKU0036",
               "SKU0040",
@@ -1913,10 +2128,10 @@
           "constraints": "passed",
           "violations": [],
           "oracle": {
-            "incremental_profit": 2416.3537299200234,
-            "clearance_value": 48739.09127271264,
-            "promo_cost": 125840.74011433574,
-            "blended_margin": 0.22757173697594854,
+            "incremental_profit": 4497.598353712234,
+            "clearance_value": 45614.4830500938,
+            "promo_cost": 112774.69804002803,
+            "blended_margin": 0.22805119488568804,
             "stock_capped_lines": 0,
             "breaches": []
           },
@@ -1933,7 +2148,7 @@
             }
           ],
           "quality": {
-            "objective": 51155.44500263267,
+            "objective": 50112.081403806034,
             "rule_based": {
               "sku_ids": [
                 "SKU0037",
@@ -1959,24 +2174,48 @@
               "sku_ids": [
                 "SKU0028",
                 "SKU0029",
+                "SKU0030",
                 "SKU0031",
-                "SKU0032",
-                "SKU0033",
+                "SKU0034",
                 "SKU0035",
                 "SKU0036",
                 "SKU0040",
-                "SKU0041",
                 "SKU0047",
                 "SKU0049",
                 "SKU0050"
               ],
-              "objective": 70087.72583801413
+              "objective": 63592.535378490036
             },
             "versus_rule_based": "beats",
-            "regret": 0.27012263001852155,
-            "regret_rupees": 18932.28083538146
+            "regret": 0.2119817034255835,
+            "regret_rupees": 13480.453974684002,
+            "default": {
+              "solver_status": "OPTIMAL",
+              "lines": 20,
+              "sku_ids": [
+                "SKU0029",
+                "SKU0030",
+                "SKU0031",
+                "SKU0034",
+                "SKU0035",
+                "SKU0036",
+                "SKU0040",
+                "SKU0042",
+                "SKU0047",
+                "SKU0049",
+                "SKU0050",
+                "SKU0184"
+              ],
+              "objective": 50112.081403806034
+            },
+            "breakdown": {
+              "model_error": 0.2119817034255835,
+              "planner": 0.0,
+              "timeouts": 0.0
+            },
+            "timed_out": []
           },
-          "duration_s": 146.463759700011,
+          "duration_s": 112.4986726000061,
           "extraction": [
             {
               "field": "regions",
@@ -2020,15 +2259,19 @@
               "fallback_reason": null
             }
           ],
-          "session_s": 146.40361089998623,
+          "session_s": 73.55725800000073,
+          "llm_s": 17.03348620000179,
           "usage": {
             "calls": 5,
-            "input_tokens": 39308,
-            "output_tokens": 1421,
-            "cost_usd": 0.0179968,
-            "cost_inr": 1.7276928000000003,
+            "input_tokens": 40908,
+            "output_tokens": 1357,
+            "cost_usd": 0.0185344,
+            "cost_inr": 1.7793024,
             "unpriced_models": []
-          }
+          },
+          "cassette_misses": [],
+          "open_issues": [],
+          "passed": true
         }
       ],
       "passed": true,
@@ -2068,13 +2311,14 @@
               "West"
             ],
             "solver_status": "OPTIMAL",
-            "objective": 92006.11,
-            "promo_cost": 149327.2728355633,
+            "objective": 71363.07,
+            "promo_cost": 128169.0595643036,
             "marketing_budget": 150000.0,
             "sku_ids": [
               "SKU0077",
               "SKU0078",
               "SKU0081",
+              "SKU0083",
               "SKU0085",
               "SKU0086",
               "SKU0087",
@@ -2089,10 +2333,10 @@
           "constraints": "passed",
           "violations": [],
           "oracle": {
-            "incremental_profit": 87554.17206079654,
-            "clearance_value": 25023.96227726074,
-            "promo_cost": 145675.5907412963,
-            "blended_margin": 0.3795148360863663,
+            "incremental_profit": 68420.83801293319,
+            "clearance_value": 24601.74455534249,
+            "promo_cost": 127761.70264178532,
+            "blended_margin": 0.36341731104731184,
             "stock_capped_lines": 0,
             "breaches": []
           },
@@ -2109,7 +2353,7 @@
             }
           ],
           "quality": {
-            "objective": 112578.13433805728,
+            "objective": 93022.58256827568,
             "rule_based": {
               "sku_ids": [
                 "SKU0077",
@@ -2130,28 +2374,54 @@
               "objective": -30597.10480217595
             },
             "best": {
-              "solver_status": "FEASIBLE",
+              "solver_status": "OPTIMAL",
+              "lines": 20,
+              "sku_ids": [
+                "SKU0077",
+                "SKU0081",
+                "SKU0083",
+                "SKU0085",
+                "SKU0086",
+                "SKU0087",
+                "SKU0089",
+                "SKU0090",
+                "SKU0091",
+                "SKU0093",
+                "SKU0095"
+              ],
+              "objective": 81042.84208443381
+            },
+            "versus_rule_based": "beats",
+            "regret": -0.14781984658633862,
+            "regret_rupees": -11979.740483841873,
+            "default": {
+              "solver_status": "OPTIMAL",
               "lines": 20,
               "sku_ids": [
                 "SKU0077",
                 "SKU0078",
                 "SKU0081",
                 "SKU0083",
+                "SKU0085",
                 "SKU0086",
                 "SKU0087",
+                "SKU0089",
                 "SKU0090",
                 "SKU0091",
                 "SKU0093",
                 "SKU0095",
-                "SKU0105"
+                "SKU0102"
               ],
-              "objective": 92556.37558372846
+              "objective": 93022.58256827568
             },
-            "versus_rule_based": "beats",
-            "regret": -0.21631960659713514,
-            "regret_rupees": -20021.758754328825
+            "breakdown": {
+              "model_error": -0.14781984658633862,
+              "planner": 0.0,
+              "timeouts": 0.0
+            },
+            "timed_out": []
           },
-          "duration_s": 675.5664663999924,
+          "duration_s": 338.6759927000021,
           "extraction": [
             {
               "field": "regions",
@@ -2201,15 +2471,21 @@
               "fallback_reason": null
             }
           ],
-          "session_s": 675.5106581999571,
+          "session_s": 290.96658939999907,
+          "llm_s": 54.09823109998251,
           "usage": {
-            "calls": 19,
-            "input_tokens": 127180,
-            "output_tokens": 3232,
-            "cost_usd": 0.0560432,
-            "cost_inr": 5.380147200000001,
+            "calls": 25,
+            "input_tokens": 170934,
+            "output_tokens": 3198,
+            "cost_usd": 0.07349040000000001,
+            "cost_inr": 7.0550784,
             "unpriced_models": []
-          }
+          },
+          "cassette_misses": [],
+          "open_issues": [
+            "OVER_CONCENTRATION"
+          ],
+          "passed": true
         }
       ],
       "passed": true,
@@ -2248,8 +2524,8 @@
               "North"
             ],
             "solver_status": "OPTIMAL",
-            "objective": 23072.65,
-            "promo_cost": 49745.77495600045,
+            "objective": 23002.48,
+            "promo_cost": 49534.510769465116,
             "marketing_budget": 100000.0,
             "sku_ids": [
               "SKU0002",
@@ -2266,10 +2542,10 @@
           "constraints": "passed",
           "violations": [],
           "oracle": {
-            "incremental_profit": -2030.7924662917612,
+            "incremental_profit": -2160.3893950770234,
             "clearance_value": 16714.1193303034,
-            "promo_cost": 44664.8882398764,
-            "blended_margin": 0.199189462733996,
+            "promo_cost": 44421.36314645493,
+            "blended_margin": 0.19990415973049616,
             "stock_capped_lines": 0,
             "breaches": []
           },
@@ -2286,7 +2562,7 @@
             }
           ],
           "quality": {
-            "objective": 14683.32686401164,
+            "objective": 14553.729935226378,
             "rule_based": {
               "sku_ids": [
                 "SKU0025",
@@ -2318,13 +2594,35 @@
                 "SKU0019",
                 "SKU0025"
               ],
-              "objective": 22301.57141467126
+              "objective": 22155.17188813186
             },
             "versus_rule_based": "beats",
-            "regret": 0.34160124454942664,
-            "regret_rupees": 7618.24455065962
+            "regret": 0.3431001118514202,
+            "regret_rupees": 7601.441952905481,
+            "default": {
+              "solver_status": "OPTIMAL",
+              "lines": 9,
+              "sku_ids": [
+                "SKU0002",
+                "SKU0003",
+                "SKU0005",
+                "SKU0006",
+                "SKU0007",
+                "SKU0013",
+                "SKU0017",
+                "SKU0019",
+                "SKU0025"
+              ],
+              "objective": 14553.729935226378
+            },
+            "breakdown": {
+              "model_error": 0.3431001118514202,
+              "planner": 0.0,
+              "timeouts": 0.0
+            },
+            "timed_out": []
           },
-          "duration_s": 157.438059899956,
+          "duration_s": 76.84380059999967,
           "extraction": [
             {
               "field": "regions",
@@ -2379,15 +2677,21 @@
               "fallback_reason": null
             }
           ],
-          "session_s": 157.37468239996815,
+          "session_s": 64.92101589999947,
+          "llm_s": 46.174058499978855,
           "usage": {
-            "calls": 18,
-            "input_tokens": 108573,
-            "output_tokens": 1852,
-            "cost_usd": 0.0463924,
-            "cost_inr": 4.4536704,
+            "calls": 19,
+            "input_tokens": 121923,
+            "output_tokens": 2185,
+            "cost_usd": 0.0522652,
+            "cost_inr": 5.0174592,
             "unpriced_models": []
-          }
+          },
+          "cassette_misses": [],
+          "open_issues": [
+            "OVER_CONCENTRATION"
+          ],
+          "passed": true
         }
       ],
       "passed": true,
@@ -2419,6 +2723,8 @@
             "context",
             "planner",
             "critic",
+            "planner",
+            "critic",
             "explainer",
             "approval"
           ],
@@ -2427,13 +2733,13 @@
           "fallbacks": [],
           "revision": {
             "number": 3,
-            "lines": 13,
+            "lines": 11,
             "regions": [
               "North"
             ],
-            "solver_status": "INFEASIBLE",
-            "objective": 16877.89,
-            "promo_cost": 101054.26939028769,
+            "solver_status": "OPTIMAL",
+            "objective": 30091.8,
+            "promo_cost": 87800.64746889229,
             "marketing_budget": 600000.0,
             "sku_ids": [
               "SKU0002",
@@ -2443,18 +2749,28 @@
               "SKU0029",
               "SKU0030",
               "SKU0031",
-              "SKU0032",
-              "SKU0033",
               "SKU0035",
               "SKU0040",
               "SKU0049",
               "SKU0050"
             ]
           },
-          "constraints": "infeasible",
+          "constraints": "passed",
           "violations": [],
-          "oracle": null,
+          "oracle": {
+            "incremental_profit": -10191.586185897995,
+            "clearance_value": 32979.954052207664,
+            "promo_cost": 82259.92231560938,
+            "blended_margin": 0.2545239153663283,
+            "stock_capped_lines": 0,
+            "breaches": []
+          },
           "properties": [
+            {
+              "property": "declares_infeasible: false",
+              "passed": true,
+              "detail": "revision 3 is OPTIMAL"
+            },
             {
               "property": "excludes_region: West",
               "passed": true,
@@ -2467,12 +2783,99 @@
             },
             {
               "property": "meets_clearance: SKU0006",
-              "passed": false,
-              "detail": "North reaches 59.87% of a 60% target, 1 units short"
+              "passed": true,
+              "detail": "no clearance shortfall in revision 3"
+            },
+            {
+              "property": "diff_changes: scope.regions",
+              "passed": true,
+              "detail": "revision 3's diff changes scope.regions"
             }
           ],
-          "quality": null,
-          "duration_s": 183.10132700001122,
+          "quality": {
+            "objective": 22788.36786630967,
+            "rule_based": {
+              "sku_ids": [
+                "SKU0043",
+                "SKU0023",
+                "SKU0029",
+                "SKU0037",
+                "SKU0031",
+                "SKU0020",
+                "SKU0009",
+                "SKU0033",
+                "SKU0040",
+                "SKU0018"
+              ],
+              "dropped_sku_ids": [],
+              "lines": 10,
+              "expected_promo_cost": 186919.78717007057,
+              "objective": -41795.345167308275
+            },
+            "best": {
+              "solver_status": "OPTIMAL",
+              "lines": 19,
+              "sku_ids": [
+                "SKU0002",
+                "SKU0006",
+                "SKU0007",
+                "SKU0009",
+                "SKU0010",
+                "SKU0017",
+                "SKU0019",
+                "SKU0023",
+                "SKU0025",
+                "SKU0028",
+                "SKU0029",
+                "SKU0030",
+                "SKU0031",
+                "SKU0035",
+                "SKU0040",
+                "SKU0042",
+                "SKU0048",
+                "SKU0049",
+                "SKU0050"
+              ],
+              "objective": 74803.35606683225
+            },
+            "versus_rule_based": "beats",
+            "regret": 0.6953563440930425,
+            "regret_rupees": 52014.98820052258,
+            "default": {
+              "solver_status": "OPTIMAL",
+              "lines": 20,
+              "sku_ids": [
+                "SKU0002",
+                "SKU0005",
+                "SKU0006",
+                "SKU0007",
+                "SKU0010",
+                "SKU0013",
+                "SKU0017",
+                "SKU0019",
+                "SKU0023",
+                "SKU0025",
+                "SKU0028",
+                "SKU0029",
+                "SKU0030",
+                "SKU0031",
+                "SKU0035",
+                "SKU0040",
+                "SKU0042",
+                "SKU0048",
+                "SKU0049",
+                "SKU0050"
+              ],
+              "objective": 68017.73869511404
+            },
+            "breakdown": {
+              "model_error": 0.09071273975536169,
+              "planner": 0.6046436043376808,
+              "timeouts": 0.0
+            },
+            "timed_out": []
+          },
+          "duration_s": 92.03592030000436,
           "extraction": [
             {
               "field": "regions",
@@ -2528,18 +2931,24 @@
               "fallback_reason": null
             }
           ],
-          "session_s": 183.03031140001258,
+          "session_s": 60.81499210000038,
+          "llm_s": 0.974790899999789,
           "usage": {
-            "calls": 25,
-            "input_tokens": 256650,
-            "output_tokens": 5706,
-            "cost_usd": 0.11178960000000002,
-            "cost_inr": 10.7318016,
+            "calls": 29,
+            "input_tokens": 258031,
+            "output_tokens": 5732,
+            "cost_usd": 0.1123836,
+            "cost_inr": 10.788825600000001,
             "unpriced_models": []
-          }
+          },
+          "cassette_misses": [],
+          "open_issues": [
+            "OVER_CONCENTRATION"
+          ],
+          "passed": true
         }
       ],
-      "passed": false,
+      "passed": true,
       "consistency": null
     },
     {
@@ -2556,6 +2965,8 @@
             "context",
             "planner",
             "critic",
+            "planner",
+            "critic",
             "explainer",
             "approval"
           ],
@@ -2564,33 +2975,64 @@
           "fallbacks": [],
           "revision": {
             "number": 1,
-            "lines": 0,
-            "regions": [],
-            "solver_status": "FEASIBLE",
-            "objective": 0.0,
-            "promo_cost": 0.0,
+            "lines": 75,
+            "regions": [
+              "North",
+              "South",
+              "East",
+              "West"
+            ],
+            "solver_status": "OPTIMAL",
+            "objective": 414701.82,
+            "promo_cost": 357192.72927174356,
             "marketing_budget": 400000.0,
-            "sku_ids": []
+            "sku_ids": [
+              "SKU0077",
+              "SKU0083",
+              "SKU0085",
+              "SKU0086",
+              "SKU0087",
+              "SKU0089",
+              "SKU0091",
+              "SKU0093",
+              "SKU0095",
+              "SKU0099",
+              "SKU0100",
+              "SKU0102",
+              "SKU0103",
+              "SKU0105",
+              "SKU0106",
+              "SKU0108",
+              "SKU0113",
+              "SKU0114",
+              "SKU0116",
+              "SKU0118",
+              "SKU0119",
+              "SKU0120",
+              "SKU0124"
+            ]
           },
           "constraints": "passed",
           "violations": [],
           "oracle": {
-            "incremental_profit": 0.0,
-            "clearance_value": 0.0,
-            "promo_cost": 0.0,
-            "blended_margin": null,
-            "stock_capped_lines": 0,
-            "breaches": []
+            "incremental_profit": 444516.5012085575,
+            "clearance_value": 24548.374214552656,
+            "promo_cost": 385550.023348159,
+            "blended_margin": 0.35865001097524146,
+            "stock_capped_lines": 3,
+            "breaches": [
+              "demand_over_stock"
+            ]
           },
           "properties": [
             {
               "property": "declares_infeasible: false",
               "passed": true,
-              "detail": "revision 1 is FEASIBLE"
+              "detail": "revision 1 is OPTIMAL"
             }
           ],
           "quality": {
-            "objective": 0.0,
+            "objective": 469064.87542311015,
             "rule_based": {
               "sku_ids": [],
               "dropped_sku_ids": [
@@ -2610,16 +3052,76 @@
               "objective": 0.0
             },
             "best": {
-              "solver_status": "FEASIBLE",
-              "lines": 0,
-              "sku_ids": [],
-              "objective": 0.0
+              "solver_status": "OPTIMAL",
+              "lines": 72,
+              "sku_ids": [
+                "SKU0077",
+                "SKU0081",
+                "SKU0083",
+                "SKU0086",
+                "SKU0087",
+                "SKU0090",
+                "SKU0091",
+                "SKU0093",
+                "SKU0095",
+                "SKU0100",
+                "SKU0102",
+                "SKU0103",
+                "SKU0105",
+                "SKU0108",
+                "SKU0112",
+                "SKU0114",
+                "SKU0115",
+                "SKU0116",
+                "SKU0119",
+                "SKU0120",
+                "SKU0124",
+                "SKU0125"
+              ],
+              "objective": 521562.12246810785
             },
-            "versus_rule_based": "ties",
-            "regret": 0.0,
-            "regret_rupees": 0.0
+            "versus_rule_based": "beats",
+            "regret": 0.10065387186587302,
+            "regret_rupees": 52497.2470449977,
+            "default": {
+              "solver_status": "OPTIMAL",
+              "lines": 80,
+              "sku_ids": [
+                "SKU0077",
+                "SKU0083",
+                "SKU0085",
+                "SKU0086",
+                "SKU0087",
+                "SKU0089",
+                "SKU0090",
+                "SKU0091",
+                "SKU0093",
+                "SKU0095",
+                "SKU0100",
+                "SKU0102",
+                "SKU0103",
+                "SKU0105",
+                "SKU0106",
+                "SKU0108",
+                "SKU0113",
+                "SKU0114",
+                "SKU0115",
+                "SKU0116",
+                "SKU0118",
+                "SKU0119",
+                "SKU0120",
+                "SKU0124"
+              ],
+              "objective": 476570.68006390054
+            },
+            "breakdown": {
+              "model_error": 0.0862628639351747,
+              "planner": 0.014391007930698321,
+              "timeouts": 0.0
+            },
+            "timed_out": []
           },
-          "duration_s": 307.380442499998,
+          "duration_s": 307.7537450000018,
           "extraction": [
             {
               "field": "regions",
@@ -2657,15 +3159,19 @@
               "fallback_reason": null
             }
           ],
-          "session_s": 307.33648150000954,
+          "session_s": 193.39194660000067,
+          "llm_s": 55.58773199997813,
           "usage": {
-            "calls": 5,
-            "input_tokens": 27049,
-            "output_tokens": 445,
-            "cost_usd": 0.0115316,
-            "cost_inr": 1.1070336,
+            "calls": 10,
+            "input_tokens": 128761,
+            "output_tokens": 5147,
+            "cost_usd": 0.059739600000000004,
+            "cost_inr": 5.7350016,
             "unpriced_models": []
-          }
+          },
+          "cassette_misses": [],
+          "open_issues": [],
+          "passed": true
         }
       ],
       "passed": true,
@@ -2687,10 +3193,6 @@
             "critic",
             "planner",
             "critic",
-            "planner",
-            "critic",
-            "planner",
-            "critic",
             "explainer",
             "approval"
           ],
@@ -2699,18 +3201,19 @@
           "fallbacks": [],
           "revision": {
             "number": 1,
-            "lines": 71,
+            "lines": 66,
             "regions": [
+              "North",
               "South",
               "East",
-              "West",
-              "North"
+              "West"
             ],
             "solver_status": "OPTIMAL",
-            "objective": 351644.8,
-            "promo_cost": 470374.2937070421,
+            "objective": 380674.4,
+            "promo_cost": 443314.9665214073,
             "marketing_budget": 500000.0,
             "sku_ids": [
+              "SKU0002",
               "SKU0003",
               "SKU0005",
               "SKU0006",
@@ -2718,14 +3221,11 @@
               "SKU0009",
               "SKU0013",
               "SKU0017",
-              "SKU0018",
-              "SKU0019",
               "SKU0025",
+              "SKU0028",
               "SKU0029",
               "SKU0030",
               "SKU0031",
-              "SKU0032",
-              "SKU0033",
               "SKU0034",
               "SKU0035",
               "SKU0038",
@@ -2741,14 +3241,12 @@
           "constraints": "passed",
           "violations": [],
           "oracle": {
-            "incremental_profit": 69844.697002764,
-            "clearance_value": 174869.03832399414,
-            "promo_cost": 466010.8837406422,
-            "blended_margin": 0.23669425499110266,
-            "stock_capped_lines": 1,
-            "breaches": [
-              "demand_over_stock"
-            ]
+            "incremental_profit": 99827.6569816921,
+            "clearance_value": 178935.52323924078,
+            "promo_cost": 442059.9713828948,
+            "blended_margin": 0.24833958269858283,
+            "stock_capped_lines": 0,
+            "breaches": []
           },
           "properties": [
             {
@@ -2758,7 +3256,7 @@
             }
           ],
           "quality": {
-            "objective": 244713.73532675815,
+            "objective": 278763.1802209329,
             "rule_based": {
               "sku_ids": [
                 "SKU0031",
@@ -2786,10 +3284,8 @@
                 "SKU0006",
                 "SKU0007",
                 "SKU0010",
-                "SKU0013",
                 "SKU0017",
                 "SKU0019",
-                "SKU0023",
                 "SKU0025",
                 "SKU0028",
                 "SKU0029",
@@ -2806,13 +3302,50 @@
                 "SKU0049",
                 "SKU0050"
               ],
-              "objective": 331598.60204670153
+              "objective": 321272.239270861
             },
             "versus_rule_based": "beats",
-            "regret": 0.26201819363432277,
-            "regret_rupees": 86884.86671994338
+            "regret": 0.13231475942771775,
+            "regret_rupees": 42509.05904992815,
+            "default": {
+              "solver_status": "OPTIMAL",
+              "lines": 71,
+              "sku_ids": [
+                "SKU0002",
+                "SKU0003",
+                "SKU0005",
+                "SKU0006",
+                "SKU0007",
+                "SKU0009",
+                "SKU0013",
+                "SKU0017",
+                "SKU0019",
+                "SKU0025",
+                "SKU0028",
+                "SKU0029",
+                "SKU0030",
+                "SKU0031",
+                "SKU0034",
+                "SKU0035",
+                "SKU0038",
+                "SKU0040",
+                "SKU0041",
+                "SKU0042",
+                "SKU0047",
+                "SKU0048",
+                "SKU0049",
+                "SKU0050"
+              ],
+              "objective": 295493.43879860634
+            },
+            "breakdown": {
+              "model_error": 0.08023973851821312,
+              "planner": 0.05207502090950463,
+              "timeouts": 0.0
+            },
+            "timed_out": []
           },
-          "duration_s": 867.6616964000277,
+          "duration_s": 247.90149050000036,
           "extraction": [
             {
               "field": "regions",
@@ -2856,15 +3389,19 @@
               "fallback_reason": null
             }
           ],
-          "session_s": 867.619457599998,
+          "session_s": 161.49853849999636,
+          "llm_s": 46.78191220000008,
           "usage": {
-            "calls": 19,
-            "input_tokens": 196559,
-            "output_tokens": 4813,
-            "cost_usd": 0.08632440000000001,
-            "cost_inr": 8.2871424,
+            "calls": 10,
+            "input_tokens": 120769,
+            "output_tokens": 3861,
+            "cost_usd": 0.054485200000000004,
+            "cost_inr": 5.2305792,
             "unpriced_models": []
-          }
+          },
+          "cassette_misses": [],
+          "open_issues": [],
+          "passed": true
         }
       ],
       "passed": true,
@@ -2892,35 +3429,38 @@
           "fallbacks": [],
           "revision": {
             "number": 1,
-            "lines": 10,
+            "lines": 19,
             "regions": [
               "North",
               "East"
             ],
             "solver_status": "OPTIMAL",
-            "objective": 34160.06,
-            "promo_cost": 90980.50454234007,
+            "objective": 118967.37,
+            "promo_cost": 118397.24389971203,
             "marketing_budget": 300000.0,
             "sku_ids": [
+              "SKU0052",
+              "SKU0053",
+              "SKU0057",
+              "SKU0061",
               "SKU0064",
               "SKU0070",
+              "SKU0073",
+              "SKU0075",
               "SKU0135",
               "SKU0138",
-              "SKU0149",
               "SKU0179"
             ]
           },
           "constraints": "passed",
           "violations": [],
           "oracle": {
-            "incremental_profit": 4454.695276201688,
-            "clearance_value": 25113.458188289726,
-            "promo_cost": 92314.87202495548,
-            "blended_margin": 0.15970879895529813,
+            "incremental_profit": 13569.544389803114,
+            "clearance_value": 94671.12876549258,
+            "promo_cost": 115084.10072160629,
+            "blended_margin": 0.16200171212016953,
             "stock_capped_lines": 0,
-            "breaches": [
-              "margin_below_minimum"
-            ]
+            "breaches": []
           },
           "properties": [
             {
@@ -2935,7 +3475,7 @@
             }
           ],
           "quality": {
-            "objective": 29568.153464491414,
+            "objective": 108240.67315529569,
             "rule_based": {
               "sku_ids": [
                 "SKU0140"
@@ -2957,7 +3497,7 @@
             },
             "best": {
               "solver_status": "OPTIMAL",
-              "lines": 14,
+              "lines": 13,
               "sku_ids": [
                 "SKU0052",
                 "SKU0053",
@@ -2967,13 +3507,37 @@
                 "SKU0073",
                 "SKU0138"
               ],
-              "objective": 103720.9668975232
+              "objective": 102023.63163579814
             },
             "versus_rule_based": "beats",
-            "regret": 0.7149259754423144,
-            "regret_rupees": 74152.81343303178
+            "regret": -0.06093726933472646,
+            "regret_rupees": -6217.04151949755,
+            "default": {
+              "solver_status": "OPTIMAL",
+              "lines": 19,
+              "sku_ids": [
+                "SKU0052",
+                "SKU0053",
+                "SKU0057",
+                "SKU0061",
+                "SKU0064",
+                "SKU0070",
+                "SKU0073",
+                "SKU0075",
+                "SKU0135",
+                "SKU0138",
+                "SKU0179"
+              ],
+              "objective": 108240.67315529569
+            },
+            "breakdown": {
+              "model_error": -0.06093726933472646,
+              "planner": 0.0,
+              "timeouts": 0.0
+            },
+            "timed_out": []
           },
-          "duration_s": 38.87416629999643,
+          "duration_s": 65.74471279999852,
           "extraction": [
             {
               "field": "regions",
@@ -3006,9 +3570,7 @@
               "matched": true
             }
           ],
-          "flagged": [
-            "target_segment"
-          ],
+          "flagged": [],
           "clarification": null,
           "unneeded_asks": [],
           "infeasibility": null,
@@ -3019,15 +3581,19 @@
               "fallback_reason": null
             }
           ],
-          "session_s": 38.85517809999874,
+          "session_s": 41.1861596000017,
+          "llm_s": 23.129773600005137,
           "usage": {
             "calls": 5,
-            "input_tokens": 32563,
-            "output_tokens": 1059,
-            "cost_usd": 0.014719600000000001,
-            "cost_inr": 1.4130816000000002,
+            "input_tokens": 40133,
+            "output_tokens": 1350,
+            "cost_usd": 0.018213200000000002,
+            "cost_inr": 1.7484672,
             "unpriced_models": []
-          }
+          },
+          "cassette_misses": [],
+          "open_issues": [],
+          "passed": true
         }
       ],
       "passed": true,
@@ -3062,20 +3628,19 @@
           "fallbacks": [],
           "revision": {
             "number": 1,
-            "lines": 37,
+            "lines": 34,
             "regions": [
               "North",
               "West"
             ],
             "solver_status": "OPTIMAL",
-            "objective": 149863.21,
-            "promo_cost": 199964.47033387487,
+            "objective": 164407.14,
+            "promo_cost": 178909.63640498673,
             "marketing_budget": 200000.0,
             "sku_ids": [
               "SKU0002",
-              "SKU0005",
+              "SKU0006",
               "SKU0007",
-              "SKU0009",
               "SKU0010",
               "SKU0013",
               "SKU0017",
@@ -3084,12 +3649,12 @@
               "SKU0029",
               "SKU0030",
               "SKU0031",
-              "SKU0032",
-              "SKU0033",
               "SKU0034",
+              "SKU0035",
               "SKU0040",
               "SKU0041",
               "SKU0042",
+              "SKU0048",
               "SKU0049",
               "SKU0050"
             ]
@@ -3097,15 +3662,12 @@
           "constraints": "passed",
           "violations": [],
           "oracle": {
-            "incremental_profit": 69364.91747428558,
-            "clearance_value": 73818.31434857535,
-            "promo_cost": 204184.37078833015,
-            "blended_margin": 0.2598938939882538,
-            "stock_capped_lines": 1,
-            "breaches": [
-              "promo_cost_over_budget",
-              "demand_over_stock"
-            ]
+            "incremental_profit": 64390.121656031435,
+            "clearance_value": 82327.81818124067,
+            "promo_cost": 178541.91757266995,
+            "blended_margin": 0.2647161712893867,
+            "stock_capped_lines": 0,
+            "breaches": []
           },
           "properties": [
             {
@@ -3120,7 +3682,7 @@
             }
           ],
           "quality": {
-            "objective": 143183.23182286095,
+            "objective": 146717.9398372721,
             "rule_based": {
               "sku_ids": [
                 "SKU0023",
@@ -3142,7 +3704,7 @@
             },
             "best": {
               "solver_status": "OPTIMAL",
-              "lines": 35,
+              "lines": 34,
               "sku_ids": [
                 "SKU0002",
                 "SKU0006",
@@ -3152,25 +3714,59 @@
                 "SKU0019",
                 "SKU0023",
                 "SKU0025",
+                "SKU0028",
                 "SKU0029",
                 "SKU0030",
                 "SKU0031",
-                "SKU0032",
-                "SKU0033",
+                "SKU0034",
+                "SKU0035",
+                "SKU0037",
+                "SKU0039",
+                "SKU0040",
+                "SKU0041",
+                "SKU0042",
+                "SKU0048",
+                "SKU0049"
+              ],
+              "objective": 150783.11450494957
+            },
+            "versus_rule_based": "beats",
+            "regret": 0.02696041052755958,
+            "regret_rupees": 4065.1746676774637,
+            "default": {
+              "solver_status": "OPTIMAL",
+              "lines": 34,
+              "sku_ids": [
+                "SKU0002",
+                "SKU0006",
+                "SKU0007",
+                "SKU0010",
+                "SKU0013",
+                "SKU0017",
+                "SKU0019",
+                "SKU0025",
+                "SKU0029",
+                "SKU0030",
+                "SKU0031",
+                "SKU0034",
                 "SKU0035",
                 "SKU0040",
                 "SKU0041",
                 "SKU0042",
+                "SKU0048",
                 "SKU0049",
                 "SKU0050"
               ],
-              "objective": 157802.87388981867
+              "objective": 146717.9398372721
             },
-            "versus_rule_based": "beats",
-            "regret": 0.09264496714530983,
-            "regret_rupees": 14619.64206695772
+            "breakdown": {
+              "model_error": 0.02696041052755958,
+              "planner": 0.0,
+              "timeouts": 0.0
+            },
+            "timed_out": []
           },
-          "duration_s": 170.4056675999891,
+          "duration_s": 114.10387470000569,
           "extraction": [
             {
               "field": "regions",
@@ -3217,15 +3813,23 @@
               "fallback_reason": null
             }
           ],
-          "session_s": 170.38609669997822,
+          "session_s": 68.31848819999868,
+          "llm_s": 0.36708969999017427,
           "usage": {
-            "calls": 10,
-            "input_tokens": 84647,
-            "output_tokens": 2569,
-            "cost_usd": 0.0379692,
-            "cost_inr": 3.6450432,
+            "calls": 11,
+            "input_tokens": 92539,
+            "output_tokens": 2657,
+            "cost_usd": 0.0412668,
+            "cost_inr": 3.9616128,
             "unpriced_models": []
-          }
+          },
+          "cassette_misses": [],
+          "open_issues": [
+            "HEAVY_CANNIBALISATION",
+            "HEAVY_CANNIBALISATION",
+            "HEAVY_CANNIBALISATION"
+          ],
+          "passed": true
         }
       ],
       "passed": true,
@@ -3255,20 +3859,19 @@
           "fallbacks": [],
           "revision": {
             "number": 1,
-            "lines": 37,
+            "lines": 34,
             "regions": [
               "North",
               "West"
             ],
             "solver_status": "OPTIMAL",
-            "objective": 149863.21,
-            "promo_cost": 199964.47033387487,
+            "objective": 164407.14,
+            "promo_cost": 178909.63640498673,
             "marketing_budget": 200000.0,
             "sku_ids": [
               "SKU0002",
-              "SKU0005",
+              "SKU0006",
               "SKU0007",
-              "SKU0009",
               "SKU0010",
               "SKU0013",
               "SKU0017",
@@ -3277,12 +3880,12 @@
               "SKU0029",
               "SKU0030",
               "SKU0031",
-              "SKU0032",
-              "SKU0033",
               "SKU0034",
+              "SKU0035",
               "SKU0040",
               "SKU0041",
               "SKU0042",
+              "SKU0048",
               "SKU0049",
               "SKU0050"
             ]
@@ -3290,15 +3893,12 @@
           "constraints": "passed",
           "violations": [],
           "oracle": {
-            "incremental_profit": 69364.91747428558,
-            "clearance_value": 73818.31434857535,
-            "promo_cost": 204184.37078833015,
-            "blended_margin": 0.2598938939882538,
-            "stock_capped_lines": 1,
-            "breaches": [
-              "promo_cost_over_budget",
-              "demand_over_stock"
-            ]
+            "incremental_profit": 64390.121656031435,
+            "clearance_value": 82327.81818124067,
+            "promo_cost": 178541.91757266995,
+            "blended_margin": 0.2647161712893867,
+            "stock_capped_lines": 0,
+            "breaches": []
           },
           "properties": [
             {
@@ -3313,7 +3913,7 @@
             }
           ],
           "quality": {
-            "objective": 143183.23182286095,
+            "objective": 146717.9398372721,
             "rule_based": {
               "sku_ids": [
                 "SKU0023",
@@ -3335,7 +3935,7 @@
             },
             "best": {
               "solver_status": "OPTIMAL",
-              "lines": 35,
+              "lines": 34,
               "sku_ids": [
                 "SKU0002",
                 "SKU0006",
@@ -3345,25 +3945,59 @@
                 "SKU0019",
                 "SKU0023",
                 "SKU0025",
+                "SKU0028",
                 "SKU0029",
                 "SKU0030",
                 "SKU0031",
-                "SKU0032",
-                "SKU0033",
+                "SKU0034",
+                "SKU0035",
+                "SKU0037",
+                "SKU0039",
+                "SKU0040",
+                "SKU0041",
+                "SKU0042",
+                "SKU0048",
+                "SKU0049"
+              ],
+              "objective": 150783.11450494957
+            },
+            "versus_rule_based": "beats",
+            "regret": 0.02696041052755958,
+            "regret_rupees": 4065.1746676774637,
+            "default": {
+              "solver_status": "OPTIMAL",
+              "lines": 34,
+              "sku_ids": [
+                "SKU0002",
+                "SKU0006",
+                "SKU0007",
+                "SKU0010",
+                "SKU0013",
+                "SKU0017",
+                "SKU0019",
+                "SKU0025",
+                "SKU0029",
+                "SKU0030",
+                "SKU0031",
+                "SKU0034",
                 "SKU0035",
                 "SKU0040",
                 "SKU0041",
                 "SKU0042",
+                "SKU0048",
                 "SKU0049",
                 "SKU0050"
               ],
-              "objective": 157802.87388981867
+              "objective": 146717.9398372721
             },
-            "versus_rule_based": "beats",
-            "regret": 0.09264496714530983,
-            "regret_rupees": 14619.64206695772
+            "breakdown": {
+              "model_error": 0.02696041052755958,
+              "planner": 0.0,
+              "timeouts": 0.0
+            },
+            "timed_out": []
           },
-          "duration_s": 160.50499449996278,
+          "duration_s": 67.3732960999987,
           "extraction": [
             {
               "field": "regions",
@@ -3401,15 +4035,23 @@
               "fallback_reason": null
             }
           ],
-          "session_s": 160.48449119995348,
+          "session_s": 67.07480979999673,
+          "llm_s": 0.292396099990583,
           "usage": {
-            "calls": 9,
-            "input_tokens": 82705,
-            "output_tokens": 2458,
-            "cost_usd": 0.0370148,
-            "cost_inr": 3.5534208,
+            "calls": 10,
+            "input_tokens": 90616,
+            "output_tokens": 2555,
+            "cost_usd": 0.040334400000000006,
+            "cost_inr": 3.8721024,
             "unpriced_models": []
-          }
+          },
+          "cassette_misses": [],
+          "open_issues": [
+            "HEAVY_CANNIBALISATION",
+            "HEAVY_CANNIBALISATION",
+            "HEAVY_CANNIBALISATION"
+          ],
+          "passed": true
         }
       ],
       "passed": true,
@@ -3431,10 +4073,6 @@
             "critic",
             "planner",
             "critic",
-            "planner",
-            "critic",
-            "planner",
-            "critic",
             "explainer",
             "approval"
           ],
@@ -3443,15 +4081,16 @@
           "fallbacks": [],
           "revision": {
             "number": 1,
-            "lines": 16,
+            "lines": 19,
             "regions": [
               "East"
             ],
             "solver_status": "OPTIMAL",
-            "objective": 69051.27,
-            "promo_cost": 78627.89983619645,
+            "objective": 85566.91,
+            "promo_cost": 109802.4670248112,
             "marketing_budget": 150000.0,
             "sku_ids": [
+              "SKU0002",
               "SKU0003",
               "SKU0005",
               "SKU0006",
@@ -3459,11 +4098,13 @@
               "SKU0009",
               "SKU0013",
               "SKU0017",
+              "SKU0019",
               "SKU0025",
               "SKU0052",
               "SKU0053",
               "SKU0057",
               "SKU0061",
+              "SKU0062",
               "SKU0064",
               "SKU0070",
               "SKU0073",
@@ -3474,10 +4115,10 @@
           "constraints": "passed",
           "violations": [],
           "oracle": {
-            "incremental_profit": 2434.3632897146435,
-            "clearance_value": 72800.98557586373,
-            "promo_cost": 79632.17007207111,
-            "blended_margin": 0.1513673446361598,
+            "incremental_profit": 6478.303270293258,
+            "clearance_value": 87417.61797068403,
+            "promo_cost": 113717.45943552742,
+            "blended_margin": 0.15728423797856245,
             "stock_capped_lines": 0,
             "breaches": []
           },
@@ -3504,7 +4145,7 @@
             }
           ],
           "quality": {
-            "objective": 75235.34886557837,
+            "objective": 93895.92124097729,
             "rule_based": {
               "sku_ids": [
                 "SKU0073",
@@ -3526,7 +4167,7 @@
             },
             "best": {
               "solver_status": "OPTIMAL",
-              "lines": 15,
+              "lines": 14,
               "sku_ids": [
                 "SKU0002",
                 "SKU0006",
@@ -3539,20 +4180,52 @@
                 "SKU0041",
                 "SKU0052",
                 "SKU0053",
-                "SKU0057",
                 "SKU0061",
                 "SKU0064",
                 "SKU0070",
                 "SKU0073",
                 "SKU0179"
               ],
-              "objective": 98396.02940558428
+              "objective": 97905.71672462049
             },
             "versus_rule_based": "beats",
-            "regret": 0.23538226775938856,
-            "regret_rupees": 23160.68054000591
+            "regret": 0.04095568285273432,
+            "regret_rupees": 4009.7954836432036,
+            "default": {
+              "solver_status": "OPTIMAL",
+              "lines": 19,
+              "sku_ids": [
+                "SKU0002",
+                "SKU0003",
+                "SKU0005",
+                "SKU0006",
+                "SKU0007",
+                "SKU0009",
+                "SKU0013",
+                "SKU0017",
+                "SKU0019",
+                "SKU0025",
+                "SKU0052",
+                "SKU0053",
+                "SKU0057",
+                "SKU0061",
+                "SKU0062",
+                "SKU0064",
+                "SKU0070",
+                "SKU0073",
+                "SKU0075",
+                "SKU0179"
+              ],
+              "objective": 93895.92124097729
+            },
+            "breakdown": {
+              "model_error": 0.04095568285273432,
+              "planner": 0.0,
+              "timeouts": 0.0
+            },
+            "timed_out": []
           },
-          "duration_s": 151.25042960001156,
+          "duration_s": 80.74346569999761,
           "extraction": [
             {
               "field": "regions",
@@ -3590,15 +4263,23 @@
               "fallback_reason": null
             }
           ],
-          "session_s": 151.23070049996022,
+          "session_s": 58.319028300000355,
+          "llm_s": 39.47078479999618,
           "usage": {
-            "calls": 18,
-            "input_tokens": 120541,
-            "output_tokens": 2312,
-            "cost_usd": 0.051915600000000006,
-            "cost_inr": 4.983897600000001,
+            "calls": 11,
+            "input_tokens": 82902,
+            "output_tokens": 2343,
+            "cost_usd": 0.0369096,
+            "cost_inr": 3.5433216,
             "unpriced_models": []
-          }
+          },
+          "cassette_misses": [],
+          "open_issues": [
+            "OVER_CONCENTRATION",
+            "HEAVY_CANNIBALISATION",
+            "HEAVY_CANNIBALISATION"
+          ],
+          "passed": true
         }
       ],
       "passed": true,
@@ -3650,7 +4331,7 @@
             }
           ],
           "quality": null,
-          "duration_s": 69.43571869999869,
+          "duration_s": 96.5325445999988,
           "extraction": [
             {
               "field": "regions",
@@ -3706,15 +4387,23 @@
               "fallback_reason": null
             }
           ],
-          "session_s": 69.41881539998576,
+          "session_s": 96.50889460000326,
+          "llm_s": 30.181734899997537,
           "usage": {
-            "calls": 10,
-            "input_tokens": 83684,
-            "output_tokens": 1223,
-            "cost_usd": 0.0354304,
-            "cost_inr": 3.4013184,
+            "calls": 9,
+            "input_tokens": 86886,
+            "output_tokens": 1254,
+            "cost_usd": 0.0367608,
+            "cost_inr": 3.5290368,
             "unpriced_models": []
-          }
+          },
+          "cassette_misses": [],
+          "open_issues": [
+            "CLEARANCE_TARGET",
+            "CLEARANCE_TARGET",
+            "CLEARANCE_TARGET"
+          ],
+          "passed": true
         }
       ],
       "passed": true,
@@ -3767,11 +4456,11 @@
             {
               "property": "relaxation_touches: clearance_target",
               "passed": true,
-              "detail": "revision 1's relaxation changes marketing_budget, clearance_target"
+              "detail": "revision 1's relaxation changes clearance_target"
             }
           ],
           "quality": null,
-          "duration_s": 50.3877119999961,
+          "duration_s": 11.01943670000037,
           "extraction": [
             {
               "field": "regions",
@@ -3821,15 +4510,206 @@
               "fallback_reason": null
             }
           ],
-          "session_s": 50.36532270000316,
+          "session_s": 10.994109700004628,
+          "llm_s": 0.260777200004668,
           "usage": {
-            "calls": 11,
-            "input_tokens": 92522,
-            "output_tokens": 1602,
-            "cost_usd": 0.039572,
-            "cost_inr": 3.7989120000000005,
+            "calls": 8,
+            "input_tokens": 49924,
+            "output_tokens": 1069,
+            "cost_usd": 0.02168,
+            "cost_inr": 2.08128,
             "unpriced_models": []
-          }
+          },
+          "cassette_misses": [],
+          "open_issues": [
+            "CLEARANCE_TARGET",
+            "CLEARANCE_TARGET"
+          ],
+          "passed": true
+        }
+      ],
+      "passed": true,
+      "consistency": null
+    },
+    {
+      "name": "infeasible-tiny-budget-accept",
+      "group": "mid_plan_amendments",
+      "as_of_week": 104,
+      "seed": 0,
+      "runs": [
+        {
+          "run": 1,
+          "outcome": "planned",
+          "error": null,
+          "route": [
+            "context",
+            "planner",
+            "critic",
+            "explainer",
+            "approval",
+            "approval",
+            "context",
+            "planner",
+            "critic",
+            "explainer",
+            "approval"
+          ],
+          "questions_asked": [],
+          "amendments_applied": 1,
+          "fallbacks": [],
+          "revision": {
+            "number": 2,
+            "lines": 2,
+            "regions": [
+              "North"
+            ],
+            "solver_status": "OPTIMAL",
+            "objective": 12183.53,
+            "promo_cost": 8630.948458043069,
+            "marketing_budget": 10000.0,
+            "sku_ids": [
+              "SKU0002",
+              "SKU0006"
+            ]
+          },
+          "constraints": "passed",
+          "violations": [],
+          "oracle": {
+            "incremental_profit": 2212.9312988280826,
+            "clearance_value": 5858.858119927797,
+            "promo_cost": 7750.504273971275,
+            "blended_margin": 0.30936644432625904,
+            "stock_capped_lines": 0,
+            "breaches": []
+          },
+          "properties": [
+            {
+              "property": "declares_infeasible: false",
+              "passed": true,
+              "detail": "revision 2 is OPTIMAL"
+            },
+            {
+              "property": "meets_clearance: SKU0002",
+              "passed": true,
+              "detail": "no clearance shortfall in revision 2"
+            },
+            {
+              "property": "meets_clearance: SKU0006",
+              "passed": true,
+              "detail": "no clearance shortfall in revision 2"
+            },
+            {
+              "property": "diff_changes: clearance_targets",
+              "passed": true,
+              "detail": "revision 2's diff changes clearance_targets"
+            }
+          ],
+          "quality": {
+            "objective": 8071.7894187558795,
+            "rule_based": {
+              "sku_ids": [],
+              "dropped_sku_ids": [
+                "SKU0010",
+                "SKU0004",
+                "SKU0013",
+                "SKU0002",
+                "SKU0025",
+                "SKU0005",
+                "SKU0018",
+                "SKU0009",
+                "SKU0020",
+                "SKU0023"
+              ],
+              "lines": 0,
+              "expected_promo_cost": 0.0,
+              "objective": 0.0
+            },
+            "best": {
+              "solver_status": "INFEASIBLE",
+              "lines": 2,
+              "sku_ids": [
+                "SKU0002",
+                "SKU0006"
+              ],
+              "objective": null
+            },
+            "versus_rule_based": "beats",
+            "regret": null,
+            "regret_rupees": null,
+            "default": {
+              "solver_status": "OPTIMAL",
+              "lines": 2,
+              "sku_ids": [
+                "SKU0002",
+                "SKU0006"
+              ],
+              "objective": 8071.7894187558795
+            },
+            "breakdown": null,
+            "timed_out": []
+          },
+          "duration_s": 36.34437280000566,
+          "extraction": [
+            {
+              "field": "regions",
+              "expected": "North",
+              "got": "North",
+              "matched": true
+            },
+            {
+              "field": "categories",
+              "expected": "Snacks",
+              "got": "Snacks",
+              "matched": true
+            },
+            {
+              "field": "promo_window",
+              "expected": "108-109",
+              "got": "108-109",
+              "matched": true
+            },
+            {
+              "field": "marketing_budget",
+              "expected": "10000",
+              "got": "10000",
+              "matched": true
+            },
+            {
+              "field": "clearance_targets",
+              "expected": "SKU0002 0.4083, SKU0006 0.3629",
+              "got": "SKU0002 0.4083, SKU0006 0.3629",
+              "matched": true
+            }
+          ],
+          "flagged": [],
+          "clarification": null,
+          "unneeded_asks": [],
+          "infeasibility": null,
+          "explanations": [
+            {
+              "revision": 1,
+              "source": "llm",
+              "fallback_reason": null
+            },
+            {
+              "revision": 2,
+              "source": "llm",
+              "fallback_reason": null
+            }
+          ],
+          "session_s": 21.094458799998392,
+          "llm_s": 0.32816809998621466,
+          "usage": {
+            "calls": 16,
+            "input_tokens": 99617,
+            "output_tokens": 2409,
+            "cost_usd": 0.0437012,
+            "cost_inr": 4.1953152000000005,
+            "unpriced_models": []
+          },
+          "cassette_misses": [],
+          "open_issues": [],
+          "passed": true
         }
       ],
       "passed": true,
@@ -3862,8 +4742,8 @@
               "North"
             ],
             "solver_status": "OPTIMAL",
-            "objective": 78040.89,
-            "promo_cost": 135715.24172117363,
+            "objective": 76623.92,
+            "promo_cost": 132340.19612887275,
             "marketing_budget": 150000.0,
             "sku_ids": [
               "SKU0002",
@@ -3879,9 +4759,9 @@
               "SKU0029",
               "SKU0030",
               "SKU0031",
-              "SKU0032",
               "SKU0034",
               "SKU0035",
+              "SKU0038",
               "SKU0040",
               "SKU0042",
               "SKU0049",
@@ -3891,14 +4771,12 @@
           "constraints": "passed",
           "violations": [],
           "oracle": {
-            "incremental_profit": 7266.214530951631,
-            "clearance_value": 49329.38911669429,
-            "promo_cost": 134544.61850952555,
-            "blended_margin": 0.22021799351644558,
-            "stock_capped_lines": 1,
-            "breaches": [
-              "demand_over_stock"
-            ]
+            "incremental_profit": 5034.015115293718,
+            "clearance_value": 49532.116155878175,
+            "promo_cost": 131830.88956952494,
+            "blended_margin": 0.22006778817597472,
+            "stock_capped_lines": 0,
+            "breaches": []
           },
           "properties": [
             {
@@ -3923,7 +4801,7 @@
             }
           ],
           "quality": {
-            "objective": 56595.60364764593,
+            "objective": 54566.13127117189,
             "rule_based": {
               "sku_ids": [
                 "SKU0025",
@@ -3960,21 +4838,54 @@
                 "SKU0029",
                 "SKU0030",
                 "SKU0031",
-                "SKU0032",
                 "SKU0034",
                 "SKU0035",
                 "SKU0037",
                 "SKU0040",
+                "SKU0042",
                 "SKU0049",
                 "SKU0050"
               ],
-              "objective": 71758.40305478868
+              "objective": 65087.949294721664
             },
             "versus_rule_based": "beats",
-            "regret": 0.21130346777039777,
-            "regret_rupees": 15162.799407142753
+            "regret": 0.16165539301148396,
+            "regret_rupees": 10521.818023549771,
+            "default": {
+              "solver_status": "OPTIMAL",
+              "lines": 20,
+              "sku_ids": [
+                "SKU0002",
+                "SKU0003",
+                "SKU0005",
+                "SKU0006",
+                "SKU0007",
+                "SKU0009",
+                "SKU0013",
+                "SKU0017",
+                "SKU0019",
+                "SKU0025",
+                "SKU0029",
+                "SKU0030",
+                "SKU0031",
+                "SKU0034",
+                "SKU0035",
+                "SKU0038",
+                "SKU0040",
+                "SKU0042",
+                "SKU0049",
+                "SKU0050"
+              ],
+              "objective": 54566.13127117189
+            },
+            "breakdown": {
+              "model_error": 0.16165539301148396,
+              "planner": 0.0,
+              "timeouts": 0.0
+            },
+            "timed_out": []
           },
-          "duration_s": 56.98192140000174,
+          "duration_s": 63.981371999994735,
           "extraction": [
             {
               "field": "regions",
@@ -4012,15 +4923,19 @@
               "fallback_reason": null
             }
           ],
-          "session_s": 56.960993799963035,
+          "session_s": 37.773931199997605,
+          "llm_s": 21.59261519998836,
           "usage": {
             "calls": 5,
-            "input_tokens": 38919,
-            "output_tokens": 1393,
-            "cost_usd": 0.0177964,
-            "cost_inr": 1.7084544000000002,
+            "input_tokens": 40547,
+            "output_tokens": 1454,
+            "cost_usd": 0.0185452,
+            "cost_inr": 1.7803392,
             "unpriced_models": []
-          }
+          },
+          "cassette_misses": [],
+          "open_issues": [],
+          "passed": true
         }
       ],
       "passed": true,
@@ -4040,6 +4955,8 @@
             "context",
             "planner",
             "critic",
+            "planner",
+            "critic",
             "explainer",
             "approval"
           ],
@@ -4048,17 +4965,16 @@
           "fallbacks": [],
           "revision": {
             "number": 1,
-            "lines": 12,
+            "lines": 11,
             "regions": [
               "South"
             ],
             "solver_status": "OPTIMAL",
-            "objective": 34249.94,
-            "promo_cost": 102296.67732867447,
+            "objective": 31753.27,
+            "promo_cost": 87764.01131166652,
             "marketing_budget": 150000.0,
             "sku_ids": [
               "SKU0002",
-              "SKU0003",
               "SKU0005",
               "SKU0006",
               "SKU0007",
@@ -4074,14 +4990,12 @@
           "constraints": "passed",
           "violations": [],
           "oracle": {
-            "incremental_profit": 9943.87089319015,
-            "clearance_value": 17420.307697659475,
-            "promo_cost": 103969.88453427734,
-            "blended_margin": 0.1485560581431516,
+            "incremental_profit": 11848.6068179484,
+            "clearance_value": 13803.413243278035,
+            "promo_cost": 88555.20441359891,
+            "blended_margin": 0.15350930240060057,
             "stock_capped_lines": 0,
-            "breaches": [
-              "margin_below_minimum"
-            ]
+            "breaches": []
           },
           "properties": [
             {
@@ -4106,7 +5020,7 @@
             }
           ],
           "quality": {
-            "objective": 27364.178590849624,
+            "objective": 25652.020061226434,
             "rule_based": {
               "sku_ids": [],
               "dropped_sku_ids": [
@@ -4139,13 +5053,37 @@
                 "SKU0138",
                 "SKU0149"
               ],
-              "objective": 29912.72381537917
+              "objective": 29103.40985665468
             },
             "versus_rule_based": "beats",
-            "regret": 0.08519937001588769,
-            "regret_rupees": 2548.5452245295455
+            "regret": 0.11859056421318497,
+            "regret_rupees": 3451.3897954282475,
+            "default": {
+              "solver_status": "OPTIMAL",
+              "lines": 11,
+              "sku_ids": [
+                "SKU0002",
+                "SKU0005",
+                "SKU0006",
+                "SKU0007",
+                "SKU0013",
+                "SKU0017",
+                "SKU0019",
+                "SKU0025",
+                "SKU0135",
+                "SKU0138",
+                "SKU0149"
+              ],
+              "objective": 25652.020061226434
+            },
+            "breakdown": {
+              "model_error": 0.11859056421318497,
+              "planner": 0.0,
+              "timeouts": 0.0
+            },
+            "timed_out": []
           },
-          "duration_s": 36.68225110002095,
+          "duration_s": 56.61713279999822,
           "extraction": [
             {
               "field": "regions",
@@ -4183,15 +5121,21 @@
               "fallback_reason": null
             }
           ],
-          "session_s": 36.6644524000003,
+          "session_s": 41.45858849999786,
+          "llm_s": 28.881494799999928,
           "usage": {
-            "calls": 5,
-            "input_tokens": 33276,
-            "output_tokens": 949,
-            "cost_usd": 0.014828800000000001,
-            "cost_inr": 1.4235648,
+            "calls": 10,
+            "input_tokens": 62222,
+            "output_tokens": 1492,
+            "cost_usd": 0.027276,
+            "cost_inr": 2.6184960000000004,
             "unpriced_models": []
-          }
+          },
+          "cassette_misses": [],
+          "open_issues": [
+            "OVER_CONCENTRATION"
+          ],
+          "passed": true
         }
       ],
       "passed": true,
@@ -4226,16 +5170,16 @@
               "North"
             ],
             "solver_status": "OPTIMAL",
-            "objective": 39657.56,
-            "promo_cost": 81876.89385435969,
+            "objective": 43127.51,
+            "promo_cost": 79579.19165834736,
             "marketing_budget": 150000.0,
             "sku_ids": [
               "SKU0028",
               "SKU0029",
+              "SKU0030",
               "SKU0031",
-              "SKU0032",
-              "SKU0033",
               "SKU0034",
+              "SKU0035",
               "SKU0040",
               "SKU0047",
               "SKU0049",
@@ -4248,10 +5192,10 @@
           "constraints": "passed",
           "violations": [],
           "oracle": {
-            "incremental_profit": 15192.081266333622,
-            "clearance_value": 18993.89781088064,
-            "promo_cost": 79574.89643635352,
-            "blended_margin": 0.2290421423172205,
+            "incremental_profit": 9536.758060834774,
+            "clearance_value": 26502.646914483026,
+            "promo_cost": 76998.33378068412,
+            "blended_margin": 0.2161400989386054,
             "stock_capped_lines": 0,
             "breaches": []
           },
@@ -4268,7 +5212,7 @@
             }
           ],
           "quality": {
-            "objective": 34185.97907721426,
+            "objective": 36039.4049753178,
             "rule_based": {
               "sku_ids": [
                 "SKU0033",
@@ -4294,27 +5238,53 @@
               "sku_ids": [
                 "SKU0028",
                 "SKU0029",
+                "SKU0030",
                 "SKU0031",
-                "SKU0032",
-                "SKU0033",
                 "SKU0034",
                 "SKU0035",
                 "SKU0040",
                 "SKU0047",
                 "SKU0049",
+                "SKU0050",
                 "SKU0064",
                 "SKU0179",
                 "SKU0192",
                 "SKU0194",
                 "SKU0198"
               ],
-              "objective": 44141.122566156766
+              "objective": 42330.722010933445
             },
             "versus_rule_based": "beats",
-            "regret": 0.22552991202301612,
-            "regret_rupees": 9955.143488942507
+            "regret": 0.14862295601739764,
+            "regret_rupees": 6291.317035615648,
+            "default": {
+              "solver_status": "OPTIMAL",
+              "lines": 13,
+              "sku_ids": [
+                "SKU0028",
+                "SKU0029",
+                "SKU0030",
+                "SKU0031",
+                "SKU0034",
+                "SKU0035",
+                "SKU0040",
+                "SKU0047",
+                "SKU0049",
+                "SKU0050",
+                "SKU0192",
+                "SKU0194",
+                "SKU0198"
+              ],
+              "objective": 36039.4049753178
+            },
+            "breakdown": {
+              "model_error": 0.14862295601739764,
+              "planner": 0.0,
+              "timeouts": 0.0
+            },
+            "timed_out": []
           },
-          "duration_s": 95.79941139998846,
+          "duration_s": 77.62277899999754,
           "extraction": [
             {
               "field": "regions",
@@ -4358,15 +5328,21 @@
               "fallback_reason": null
             }
           ],
-          "session_s": 95.78269610001007,
+          "session_s": 53.97358520000125,
+          "llm_s": 29.563010400015628,
           "usage": {
-            "calls": 9,
-            "input_tokens": 61574,
-            "output_tokens": 1374,
-            "cost_usd": 0.026828,
-            "cost_inr": 2.575488,
+            "calls": 10,
+            "input_tokens": 70975,
+            "output_tokens": 1507,
+            "cost_usd": 0.0308012,
+            "cost_inr": 2.9569152,
             "unpriced_models": []
-          }
+          },
+          "cassette_misses": [],
+          "open_issues": [
+            "HEAVY_CANNIBALISATION"
+          ],
+          "passed": true
         }
       ],
       "passed": true,
@@ -4400,14 +5376,16 @@
               "West"
             ],
             "solver_status": "OPTIMAL",
-            "objective": 165587.76,
-            "promo_cost": 299972.19164817006,
+            "objective": 157748.99,
+            "promo_cost": 259426.2186118271,
             "marketing_budget": 300000.0,
             "sku_ids": [
               "SKU0102",
               "SKU0103",
               "SKU0105",
+              "SKU0106",
               "SKU0108",
+              "SKU0112",
               "SKU0114",
               "SKU0115",
               "SKU0118",
@@ -4419,10 +5397,10 @@
           "constraints": "passed",
           "violations": [],
           "oracle": {
-            "incremental_profit": 128389.282027157,
-            "clearance_value": 77881.5451234138,
-            "promo_cost": 347280.87346554996,
-            "blended_margin": 0.26853984203433545,
+            "incremental_profit": 128048.3986468867,
+            "clearance_value": 62799.00140244715,
+            "promo_cost": 300054.73988275084,
+            "blended_margin": 0.27351813493143184,
             "stock_capped_lines": 0,
             "breaches": [
               "promo_cost_over_budget"
@@ -4441,7 +5419,7 @@
             }
           ],
           "quality": {
-            "objective": 206270.8271505708,
+            "objective": 190847.40004933384,
             "rule_based": {
               "sku_ids": [
                 "SKU0119"
@@ -4471,19 +5449,43 @@
                 "SKU0108",
                 "SKU0114",
                 "SKU0115",
-                "SKU0118",
                 "SKU0119",
                 "SKU0120",
                 "SKU0124",
                 "SKU0125"
               ],
-              "objective": 193826.38600885984
+              "objective": 174541.9966894393
             },
             "versus_rule_based": "beats",
-            "regret": -0.06420406115987803,
-            "regret_rupees": -12444.441141710966
+            "regret": -0.09341822409025481,
+            "regret_rupees": -16305.403359894553,
+            "default": {
+              "solver_status": "OPTIMAL",
+              "lines": 20,
+              "sku_ids": [
+                "SKU0102",
+                "SKU0103",
+                "SKU0105",
+                "SKU0106",
+                "SKU0108",
+                "SKU0112",
+                "SKU0114",
+                "SKU0115",
+                "SKU0118",
+                "SKU0119",
+                "SKU0120",
+                "SKU0124"
+              ],
+              "objective": 190847.40004933384
+            },
+            "breakdown": {
+              "model_error": -0.09341822409025481,
+              "planner": 0.0,
+              "timeouts": 0.0
+            },
+            "timed_out": []
           },
-          "duration_s": 69.48769869998796,
+          "duration_s": 74.27505119999842,
           "extraction": [
             {
               "field": "regions",
@@ -4527,15 +5529,19 @@
               "fallback_reason": null
             }
           ],
-          "session_s": 69.45915079995757,
+          "session_s": 48.606481599999825,
+          "llm_s": 24.772411900004954,
           "usage": {
-            "calls": 5,
-            "input_tokens": 39196,
-            "output_tokens": 1321,
-            "cost_usd": 0.017792000000000002,
-            "cost_inr": 1.7080320000000002,
+            "calls": 6,
+            "input_tokens": 46785,
+            "output_tokens": 1605,
+            "cost_usd": 0.021282,
+            "cost_inr": 2.043072,
             "unpriced_models": []
-          }
+          },
+          "cassette_misses": [],
+          "open_issues": [],
+          "passed": true
         }
       ],
       "passed": true,
@@ -4569,8 +5575,8 @@
               "West"
             ],
             "solver_status": "OPTIMAL",
-            "objective": 197421.91,
-            "promo_cost": 358537.16117844835,
+            "objective": 180919.76,
+            "promo_cost": 341639.2473995998,
             "marketing_budget": 400000.0,
             "sku_ids": [
               "SKU0091",
@@ -4579,7 +5585,6 @@
               "SKU0108",
               "SKU0114",
               "SKU0115",
-              "SKU0118",
               "SKU0119",
               "SKU0120",
               "SKU0122",
@@ -4594,14 +5599,12 @@
           "constraints": "passed",
           "violations": [],
           "oracle": {
-            "incremental_profit": 163019.2059697791,
-            "clearance_value": 52329.47824972679,
-            "promo_cost": 371861.16447983665,
-            "blended_margin": 0.22317445751166565,
-            "stock_capped_lines": 2,
-            "breaches": [
-              "demand_over_stock"
-            ]
+            "incremental_profit": 144838.03891570197,
+            "clearance_value": 49978.241070247845,
+            "promo_cost": 353005.5890396426,
+            "blended_margin": 0.22235742149388357,
+            "stock_capped_lines": 0,
+            "breaches": []
           },
           "properties": [
             {
@@ -4616,7 +5619,7 @@
             }
           ],
           "quality": {
-            "objective": 215348.6842195059,
+            "objective": 194816.2799859498,
             "rule_based": {
               "sku_ids": [
                 "SKU0140",
@@ -4638,7 +5641,7 @@
             },
             "best": {
               "solver_status": "OPTIMAL",
-              "lines": 27,
+              "lines": 26,
               "sku_ids": [
                 "SKU0102",
                 "SKU0105",
@@ -4656,13 +5659,41 @@
                 "SKU0145",
                 "SKU0149"
               ],
-              "objective": 196771.12266722228
+              "objective": 189540.76397788024
             },
             "versus_rule_based": "beats",
-            "regret": -0.09441203211358323,
-            "regret_rupees": -18577.561552283616
+            "regret": -0.027833147325950564,
+            "regret_rupees": -5275.516008069564,
+            "default": {
+              "solver_status": "OPTIMAL",
+              "lines": 26,
+              "sku_ids": [
+                "SKU0091",
+                "SKU0102",
+                "SKU0105",
+                "SKU0108",
+                "SKU0114",
+                "SKU0115",
+                "SKU0119",
+                "SKU0120",
+                "SKU0122",
+                "SKU0124",
+                "SKU0125",
+                "SKU0135",
+                "SKU0138",
+                "SKU0145",
+                "SKU0149"
+              ],
+              "objective": 194816.2799859498
+            },
+            "breakdown": {
+              "model_error": -0.027833147325950564,
+              "planner": 0.0,
+              "timeouts": 0.0
+            },
+            "timed_out": []
           },
-          "duration_s": 89.58570670004701,
+          "duration_s": 85.63102300000173,
           "extraction": [
             {
               "field": "regions",
@@ -4712,15 +5743,19 @@
               "fallback_reason": null
             }
           ],
-          "session_s": 89.56577330001164,
+          "session_s": 51.827621300006285,
+          "llm_s": 25.873534499995003,
           "usage": {
-            "calls": 5,
-            "input_tokens": 43168,
-            "output_tokens": 1895,
-            "cost_usd": 0.020299200000000003,
-            "cost_inr": 1.9487232000000003,
+            "calls": 6,
+            "input_tokens": 50810,
+            "output_tokens": 1910,
+            "cost_usd": 0.02338,
+            "cost_inr": 2.2444800000000003,
             "unpriced_models": []
-          }
+          },
+          "cassette_misses": [],
+          "open_issues": [],
+          "passed": true
         }
       ],
       "passed": true,
@@ -4745,7 +5780,9 @@
           ],
           "questions_asked": [],
           "amendments_applied": 0,
-          "fallbacks": [],
+          "fallbacks": [
+            "explainer: ungrounded"
+          ],
           "revision": {
             "number": 1,
             "lines": 2,
@@ -4753,8 +5790,8 @@
               "North"
             ],
             "solver_status": "OPTIMAL",
-            "objective": 3344.08,
-            "promo_cost": 26978.13983929001,
+            "objective": 2782.66,
+            "promo_cost": 17191.263666858693,
             "marketing_budget": 200000.0,
             "sku_ids": [
               "SKU0135",
@@ -4764,10 +5801,10 @@
           "constraints": "passed",
           "violations": [],
           "oracle": {
-            "incremental_profit": -2214.4916421326816,
+            "incremental_profit": -152.53304432709956,
             "clearance_value": 0.0,
-            "promo_cost": 25222.090245522995,
-            "blended_margin": 0.16162636237465786,
+            "promo_cost": 16545.874277187104,
+            "blended_margin": 0.16339350134540517,
             "stock_capped_lines": 0,
             "breaches": []
           },
@@ -4784,7 +5821,7 @@
             }
           ],
           "quality": {
-            "objective": -2214.4916421326816,
+            "objective": -152.53304432709956,
             "rule_based": {
               "sku_ids": [
                 "SKU0144",
@@ -4813,10 +5850,25 @@
               "objective": 1575.2006253731888
             },
             "versus_rule_based": "beats",
-            "regret": 2.405847360940474,
-            "regret_rupees": 3789.6922675058704
+            "regret": 1.0968340425150365,
+            "regret_rupees": 1727.7336697002884,
+            "default": {
+              "solver_status": "OPTIMAL",
+              "lines": 2,
+              "sku_ids": [
+                "SKU0135",
+                "SKU0138"
+              ],
+              "objective": -152.53304432709956
+            },
+            "breakdown": {
+              "model_error": 1.0968340425150365,
+              "planner": 0.0,
+              "timeouts": 0.0
+            },
+            "timed_out": []
           },
-          "duration_s": 19.764115899975877,
+          "duration_s": 47.78524830000242,
           "extraction": [
             {
               "field": "regions",
@@ -4862,19 +5914,23 @@
           "explanations": [
             {
               "revision": 1,
-              "source": "llm",
-              "fallback_reason": null
+              "source": "template",
+              "fallback_reason": "ungrounded"
             }
           ],
-          "session_s": 19.74676189996535,
+          "session_s": 40.87421319999703,
+          "llm_s": 36.217064099997515,
           "usage": {
-            "calls": 5,
-            "input_tokens": 27263,
-            "output_tokens": 592,
-            "cost_usd": 0.0118524,
-            "cost_inr": 1.1378304000000001,
+            "calls": 7,
+            "input_tokens": 37667,
+            "output_tokens": 1065,
+            "cost_usd": 0.0167708,
+            "cost_inr": 1.6099968,
             "unpriced_models": []
-          }
+          },
+          "cassette_misses": [],
+          "open_issues": [],
+          "passed": true
         }
       ],
       "passed": true,
@@ -4904,16 +5960,17 @@
           "fallbacks": [],
           "revision": {
             "number": 1,
-            "lines": 3,
+            "lines": 4,
             "regions": [
               "South"
             ],
             "solver_status": "OPTIMAL",
-            "objective": 3478.7,
-            "promo_cost": 6065.963830609015,
+            "objective": 8599.58,
+            "promo_cost": 14254.87097948433,
             "marketing_budget": 25000.0,
             "sku_ids": [
               "SKU0184",
+              "SKU0192",
               "SKU0194",
               "SKU0195"
             ]
@@ -4921,10 +5978,10 @@
           "constraints": "passed",
           "violations": [],
           "oracle": {
-            "incremental_profit": 309.2359549103953,
-            "clearance_value": 2702.5121546411306,
-            "promo_cost": 5926.469911268773,
-            "blended_margin": 0.2260379082348333,
+            "incremental_profit": 6433.814689613306,
+            "clearance_value": 1416.2387364999095,
+            "promo_cost": 13897.995155413468,
+            "blended_margin": 0.19693565965626408,
             "stock_capped_lines": 0,
             "breaches": []
           },
@@ -4941,7 +5998,7 @@
             }
           ],
           "quality": {
-            "objective": 3011.748109551526,
+            "objective": 7850.053426113215,
             "rule_based": {
               "sku_ids": [],
               "dropped_sku_ids": [
@@ -4962,22 +6019,38 @@
             },
             "best": {
               "solver_status": "OPTIMAL",
-              "lines": 5,
+              "lines": 4,
               "sku_ids": [
-                "SKU0038",
+                "SKU0064",
                 "SKU0179",
+                "SKU0184",
+                "SKU0192",
+                "SKU0194"
+              ],
+              "objective": 9402.70169948104
+            },
+            "versus_rule_based": "beats",
+            "regret": 0.16512788802536613,
+            "regret_rupees": 1552.648273367825,
+            "default": {
+              "solver_status": "OPTIMAL",
+              "lines": 4,
+              "sku_ids": [
                 "SKU0184",
                 "SKU0192",
                 "SKU0194",
                 "SKU0195"
               ],
-              "objective": 9977.683948822272
+              "objective": 7850.053426113215
             },
-            "versus_rule_based": "beats",
-            "regret": 0.6981515825717228,
-            "regret_rupees": 6965.935839270746
+            "breakdown": {
+              "model_error": 0.16512788802536613,
+              "planner": 0.0,
+              "timeouts": 0.0
+            },
+            "timed_out": []
           },
-          "duration_s": 42.47306569997454,
+          "duration_s": 67.50784739999654,
           "extraction": [
             {
               "field": "regions",
@@ -5015,15 +6088,21 @@
               "fallback_reason": null
             }
           ],
-          "session_s": 42.45722179999575,
+          "session_s": 57.10953080000036,
+          "llm_s": 47.93515940000361,
           "usage": {
-            "calls": 9,
-            "input_tokens": 51958,
-            "output_tokens": 856,
-            "cost_usd": 0.0221528,
-            "cost_inr": 2.1266688,
+            "calls": 10,
+            "input_tokens": 61735,
+            "output_tokens": 1071,
+            "cost_usd": 0.026407600000000003,
+            "cost_inr": 2.5351296000000003,
             "unpriced_models": []
-          }
+          },
+          "cassette_misses": [],
+          "open_issues": [
+            "OVER_CONCENTRATION"
+          ],
+          "passed": true
         }
       ],
       "passed": true,
@@ -5053,33 +6132,29 @@
           "fallbacks": [],
           "revision": {
             "number": 1,
-            "lines": 15,
+            "lines": 7,
             "regions": [
-              "West",
-              "North"
+              "North",
+              "West"
             ],
             "solver_status": "OPTIMAL",
-            "objective": 15511.12,
-            "promo_cost": 33875.287144995615,
+            "objective": 37723.71,
+            "promo_cost": 35998.769435096016,
             "marketing_budget": 40000.0,
             "sku_ids": [
-              "SKU0003",
-              "SKU0005",
+              "SKU0002",
               "SKU0006",
               "SKU0007",
-              "SKU0009",
-              "SKU0013",
-              "SKU0019",
-              "SKU0025"
+              "SKU0017"
             ]
           },
           "constraints": "passed",
           "violations": [],
           "oracle": {
-            "incremental_profit": 7721.140280939773,
-            "clearance_value": 4833.534111055882,
-            "promo_cost": 34623.652727299646,
-            "blended_margin": 0.2590635026504782,
+            "incremental_profit": 12252.048758230603,
+            "clearance_value": 27322.36925763037,
+            "promo_cost": 38279.65627771273,
+            "blended_margin": 0.26722875431863746,
             "stock_capped_lines": 0,
             "breaches": []
           },
@@ -5091,7 +6166,7 @@
             }
           ],
           "quality": {
-            "objective": 12554.674391995655,
+            "objective": 39574.418015860974,
             "rule_based": {
               "sku_ids": [
                 "SKU0009",
@@ -5113,22 +6188,38 @@
             },
             "best": {
               "solver_status": "OPTIMAL",
-              "lines": 11,
+              "lines": 9,
               "sku_ids": [
                 "SKU0002",
                 "SKU0006",
-                "SKU0007",
                 "SKU0010",
                 "SKU0017",
                 "SKU0025"
               ],
-              "objective": 44223.0594980975
+              "objective": 42663.14891453356
             },
             "versus_rule_based": "beats",
-            "regret": 0.7161057028961154,
-            "regret_rupees": 31668.385106101843
+            "regret": 0.07239809946659567,
+            "regret_rupees": 3088.730898672584,
+            "default": {
+              "solver_status": "OPTIMAL",
+              "lines": 7,
+              "sku_ids": [
+                "SKU0002",
+                "SKU0006",
+                "SKU0007",
+                "SKU0017"
+              ],
+              "objective": 39574.418015860974
+            },
+            "breakdown": {
+              "model_error": 0.07239809946659567,
+              "planner": 0.0,
+              "timeouts": 0.0
+            },
+            "timed_out": []
           },
-          "duration_s": 71.61837330000708,
+          "duration_s": 79.99946949999867,
           "extraction": [
             {
               "field": "regions",
@@ -5166,15 +6257,22 @@
               "fallback_reason": null
             }
           ],
-          "session_s": 71.60107189998962,
+          "session_s": 62.793013900001824,
+          "llm_s": 51.11335490000056,
           "usage": {
-            "calls": 9,
-            "input_tokens": 61390,
-            "output_tokens": 1580,
-            "cost_usd": 0.027084,
-            "cost_inr": 2.600064,
+            "calls": 10,
+            "input_tokens": 67144,
+            "output_tokens": 1349,
+            "cost_usd": 0.029016,
+            "cost_inr": 2.785536,
             "unpriced_models": []
-          }
+          },
+          "cassette_misses": [],
+          "open_issues": [
+            "OVER_CONCENTRATION",
+            "HEAVY_CANNIBALISATION"
+          ],
+          "passed": true
         }
       ],
       "passed": true,
@@ -5194,8 +6292,6 @@
             "context",
             "planner",
             "critic",
-            "planner",
-            "critic",
             "explainer",
             "approval"
           ],
@@ -5206,28 +6302,28 @@
             "number": 1,
             "lines": 8,
             "regions": [
-              "South",
-              "West",
+              "East",
               "North",
-              "East"
+              "South",
+              "West"
             ],
             "solver_status": "OPTIMAL",
-            "objective": 58234.93,
-            "promo_cost": 56071.16564973911,
+            "objective": 85921.09,
+            "promo_cost": 51214.06760004431,
             "marketing_budget": 60000.0,
             "sku_ids": [
               "SKU0077",
-              "SKU0083",
+              "SKU0087",
               "SKU0091"
             ]
           },
           "constraints": "passed",
           "violations": [],
           "oracle": {
-            "incremental_profit": 67979.86336856477,
-            "clearance_value": 5107.891903015607,
-            "promo_cost": 62411.3759599438,
-            "blended_margin": 0.36808820300931594,
+            "incremental_profit": 128372.36864555527,
+            "clearance_value": 2424.2866637294296,
+            "promo_cost": 62515.765435939626,
+            "blended_margin": 0.42094814468573877,
             "stock_capped_lines": 1,
             "breaches": [
               "promo_cost_over_budget",
@@ -5242,7 +6338,7 @@
             }
           ],
           "quality": {
-            "objective": 73087.75527158038,
+            "objective": 130796.6553092847,
             "rule_based": {
               "sku_ids": [
                 "SKU0077"
@@ -5263,19 +6359,35 @@
               "objective": 6541.462935598895
             },
             "best": {
-              "solver_status": "FEASIBLE",
-              "lines": 4,
+              "solver_status": "OPTIMAL",
+              "lines": 8,
               "sku_ids": [
                 "SKU0087",
-                "SKU0090"
+                "SKU0091"
               ],
-              "objective": 9072.526705891449
+              "objective": 112338.65272172548
             },
             "versus_rule_based": "beats",
-            "regret": -7.055942698313492,
-            "regret_rupees": -64015.22856568893
+            "regret": -0.16430678257537606,
+            "regret_rupees": -18458.002587559226,
+            "default": {
+              "solver_status": "OPTIMAL",
+              "lines": 8,
+              "sku_ids": [
+                "SKU0077",
+                "SKU0087",
+                "SKU0091"
+              ],
+              "objective": 130796.6553092847
+            },
+            "breakdown": {
+              "model_error": -0.16430678257537606,
+              "planner": 0.0,
+              "timeouts": 0.0
+            },
+            "timed_out": []
           },
-          "duration_s": 189.70236700004898,
+          "duration_s": 145.16752480000287,
           "extraction": [
             {
               "field": "regions",
@@ -5319,15 +6431,19 @@
               "fallback_reason": null
             }
           ],
-          "session_s": 189.67080730001908,
+          "session_s": 90.75477430000319,
+          "llm_s": 28.57548489999317,
           "usage": {
-            "calls": 9,
-            "input_tokens": 58646,
-            "output_tokens": 1330,
-            "cost_usd": 0.0255864,
-            "cost_inr": 2.4562944,
+            "calls": 5,
+            "input_tokens": 33587,
+            "output_tokens": 1061,
+            "cost_usd": 0.0151324,
+            "cost_inr": 1.4527104,
             "unpriced_models": []
-          }
+          },
+          "cassette_misses": [],
+          "open_issues": [],
+          "passed": true
         }
       ],
       "passed": true,
@@ -5347,6 +6463,12 @@
             "context",
             "planner",
             "critic",
+            "planner",
+            "critic",
+            "planner",
+            "critic",
+            "planner",
+            "critic",
             "explainer",
             "approval"
           ],
@@ -5355,21 +6477,28 @@
           "fallbacks": [],
           "revision": {
             "number": 1,
-            "lines": 0,
-            "regions": [],
-            "solver_status": "FEASIBLE",
-            "objective": 0.0,
-            "promo_cost": 0.0,
+            "lines": 6,
+            "regions": [
+              "North",
+              "West"
+            ],
+            "solver_status": "OPTIMAL",
+            "objective": 58879.67,
+            "promo_cost": 45162.40398505889,
             "marketing_budget": 50000.0,
-            "sku_ids": []
+            "sku_ids": [
+              "SKU0035",
+              "SKU0040",
+              "SKU0049"
+            ]
           },
           "constraints": "passed",
           "violations": [],
           "oracle": {
-            "incremental_profit": 0.0,
-            "clearance_value": 0.0,
-            "promo_cost": 0.0,
-            "blended_margin": null,
+            "incremental_profit": 10272.812507220864,
+            "clearance_value": 34791.324248451216,
+            "promo_cost": 43160.28116273766,
+            "blended_margin": 0.25069397909190394,
             "stock_capped_lines": 0,
             "breaches": []
           },
@@ -5377,11 +6506,11 @@
             {
               "property": "declares_infeasible: false",
               "passed": true,
-              "detail": "revision 1 is FEASIBLE"
+              "detail": "revision 1 is OPTIMAL"
             }
           ],
           "quality": {
-            "objective": 0.0,
+            "objective": 45064.13675567208,
             "rule_based": {
               "sku_ids": [],
               "dropped_sku_ids": [
@@ -5402,22 +6531,37 @@
             },
             "best": {
               "solver_status": "OPTIMAL",
-              "lines": 10,
+              "lines": 8,
               "sku_ids": [
                 "SKU0029",
-                "SKU0031",
                 "SKU0035",
                 "SKU0040",
                 "SKU0047",
                 "SKU0049"
               ],
-              "objective": 59577.10146518816
+              "objective": 56305.63910190544
             },
-            "versus_rule_based": "ties",
-            "regret": 1.0,
-            "regret_rupees": 59577.10146518816
+            "versus_rule_based": "beats",
+            "regret": 0.19965144744894545,
+            "regret_rupees": 11241.502346233363,
+            "default": {
+              "solver_status": "OPTIMAL",
+              "lines": 6,
+              "sku_ids": [
+                "SKU0035",
+                "SKU0040",
+                "SKU0049"
+              ],
+              "objective": 45064.13675567208
+            },
+            "breakdown": {
+              "model_error": 0.19965144744894545,
+              "planner": 0.0,
+              "timeouts": 0.0
+            },
+            "timed_out": []
           },
-          "duration_s": 134.2514283999917,
+          "duration_s": 250.6460181999937,
           "extraction": [
             {
               "field": "regions",
@@ -5455,15 +6599,23 @@
               "fallback_reason": null
             }
           ],
-          "session_s": 134.23443789995508,
+          "session_s": 182.40989029999764,
+          "llm_s": 51.97866530000465,
           "usage": {
-            "calls": 5,
-            "input_tokens": 26298,
-            "output_tokens": 425,
-            "cost_usd": 0.011199200000000001,
-            "cost_inr": 1.0751232000000002,
+            "calls": 21,
+            "input_tokens": 137858,
+            "output_tokens": 2389,
+            "cost_usd": 0.05896560000000001,
+            "cost_inr": 5.660697600000001,
             "unpriced_models": []
-          }
+          },
+          "cassette_misses": [],
+          "open_issues": [
+            "OVER_CONCENTRATION",
+            "HEAVY_CANNIBALISATION",
+            "HEAVY_CANNIBALISATION"
+          ],
+          "passed": true
         }
       ],
       "passed": true,
@@ -5503,17 +6655,17 @@
               "West"
             ],
             "solver_status": "OPTIMAL",
-            "objective": 31923.44,
-            "promo_cost": 58546.50546157795,
+            "objective": 35539.02,
+            "promo_cost": 59271.65033154665,
             "marketing_budget": 100000.0,
             "sku_ids": [
               "SKU0028",
               "SKU0029",
               "SKU0031",
-              "SKU0032",
-              "SKU0033",
               "SKU0034",
+              "SKU0035",
               "SKU0040",
+              "SKU0042",
               "SKU0047",
               "SKU0049",
               "SKU0050",
@@ -5523,10 +6675,10 @@
           "constraints": "passed",
           "violations": [],
           "oracle": {
-            "incremental_profit": 8226.640606231827,
-            "clearance_value": 15213.50894075986,
-            "promo_cost": 56016.37109933763,
-            "blended_margin": 0.24494924644206661,
+            "incremental_profit": 1080.5808125450567,
+            "clearance_value": 22221.237637914764,
+            "promo_cost": 55838.08200479047,
+            "blended_margin": 0.22422074437200223,
             "stock_capped_lines": 0,
             "breaches": []
           },
@@ -5543,7 +6695,7 @@
             }
           ],
           "quality": {
-            "objective": 23440.149546991688,
+            "objective": 23301.81845045982,
             "rule_based": {
               "sku_ids": [
                 "SKU0033",
@@ -5578,13 +6730,37 @@
                 "SKU0047",
                 "SKU0049"
               ],
-              "objective": 30967.991540195027
+              "objective": 28506.976416126
             },
             "versus_rule_based": "beats",
-            "regret": 0.2430846050649603,
-            "regret_rupees": 7527.841993203339
+            "regret": 0.18259242543596074,
+            "regret_rupees": 5205.157965666178,
+            "default": {
+              "solver_status": "OPTIMAL",
+              "lines": 10,
+              "sku_ids": [
+                "SKU0028",
+                "SKU0029",
+                "SKU0031",
+                "SKU0034",
+                "SKU0035",
+                "SKU0040",
+                "SKU0042",
+                "SKU0047",
+                "SKU0049",
+                "SKU0050",
+                "SKU0184"
+              ],
+              "objective": 23301.81845045982
+            },
+            "breakdown": {
+              "model_error": 0.18259242543596074,
+              "planner": 0.0,
+              "timeouts": 0.0
+            },
+            "timed_out": []
           },
-          "duration_s": 69.71172670001397,
+          "duration_s": 59.36535559999902,
           "extraction": [
             {
               "field": "regions",
@@ -5631,15 +6807,21 @@
               "fallback_reason": null
             }
           ],
-          "session_s": 69.69494990003295,
+          "session_s": 46.46522120000009,
+          "llm_s": 35.70730729999923,
           "usage": {
-            "calls": 10,
-            "input_tokens": 59862,
-            "output_tokens": 1311,
-            "cost_usd": 0.0260424,
-            "cost_inr": 2.5000704,
+            "calls": 11,
+            "input_tokens": 69318,
+            "output_tokens": 1586,
+            "cost_usd": 0.0302648,
+            "cost_inr": 2.9054208000000004,
             "unpriced_models": []
-          }
+          },
+          "cassette_misses": [],
+          "open_issues": [
+            "HEAVY_CANNIBALISATION"
+          ],
+          "passed": true
         }
       ],
       "passed": true,

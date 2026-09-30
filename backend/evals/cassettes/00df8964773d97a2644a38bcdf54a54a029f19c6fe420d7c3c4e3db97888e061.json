@@ -1227,7 +1227,7 @@
             "South"
           ]
         },
-        "id": "call_BO9e6KN6jpjmSjPsjEI0fTyM",
+        "id": "call_kxtEC5bYfjJUQ7rg0hgtJhHR",
         "name": "get_scope_data"
       },
       {
@@ -1235,7 +1235,6 @@
           "categories": [
             "Dairy"
           ],
-          "overstocked_only": true,
           "regions": [
             "South"
           ],
@@ -1245,7 +1244,7 @@
             "SKU0061"
           ]
         },
-        "id": "call_agkciuaeYOtOeE7MfQj9Onlq",
+        "id": "call_txzViojX8uuWIL0N23Fs1jFL",
         "name": "get_inventory_status"
       },
       {
@@ -1258,7 +1257,7 @@
             "South"
           ]
         },
-        "id": "call_c3KlgLW8Ml3FpVHznywK18jH",
+        "id": "call_HymBxZ79MOAWxclS22eCO5k6",
         "name": "get_competitor_gaps"
       }
     ]
@@ -1268,7 +1267,7 @@
     {
       "input_tokens": 5591,
       "model": "gpt-4.1-mini",
-      "output_tokens": 114
+      "output_tokens": 107
     }
   ]
 }

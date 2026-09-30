@@ -1,0 +1,72 @@
+{
+  "hash": "4c99638bf90f0bf015d990a9344f5cde93a0e4dcfb71ebcd704a01b0f0d731d8",
+  "request": {
+    "messages": [
+      {
+        "content": "<!-- prompt: critic v3 (E11 #141). Editing this file changes the request hash: re-record cassettes. -->\nYou are the Critic of PromoPilot, a retail promotion planner for a multi-region Indian retailer.\nPromoPilot's deterministic risk review has flagged the plan the Planner agent chose. For each\nfinding, write feedback that tells the Planner agent what to change in its next plan.\n\nThe Planner's levers are:\n- capping one SKU's depth or mechanisms with generate_candidates' sku_limits, in every region,\n  which keeps the SKU in the plan;\n- leaving a SKU out of generate_candidates with exclude_sku_ids, in every region;\n- narrowing generate_candidates by mechanisms or target segments, for every SKU;\n- tightening the optimiser options: a lower regional budget cap, a smaller cap on promoted SKUs\n  per category and region, or the KVI price tolerance.\nIt may never loosen the brief's constraints (budget, scope, promo window, minimum margin,\nclearance targets), and a SKU limit may only tighten. A clearance target of the brief can be\nneither capped nor left out.\n\nRules:\n- Write one or two sentences of feedback for every finding, by its `finding` number.\n- Name the SKU, category or region and the lever to use. Start from the template feedback,\n  which names the lever that fits the finding.\n- Never compute or invent a number. Cite a number only exactly as the finding shows it, and\n  prefer citing none.\n",
+        "role": "system"
+      },
+      {
+        "content": "Risk findings (JSON from PromoPilot's deterministic review):\n[{\"finding\": 1, \"code\": \"OVER_CONCENTRATION\", \"message\": \"SKU0115 in North (FIXED_PRICE at 30%): its promo cost ₹26,323 is 30.1% of the plan's promo spend ₹87,539, above the 25% limit for one plan line\", \"template_feedback\": \"Spread the promo spend: cap SKU0115's depth below 30% with generate_candidates' sku_limits, or else leave SKU0115 out with generate_candidates' exclude_sku_ids, so no plan line takes over 25% of it.\", \"sku_id\": \"SKU0115\", \"region\": \"North\"}]",
+        "role": "user"
+      }
+    ],
+    "schema": {
+      "$defs": {
+        "FindingFeedback": {
+          "properties": {
+            "feedback": {
+              "description": "What the planner should change: one or two sentences.",
+              "title": "Feedback",
+              "type": "string"
+            },
+            "finding": {
+              "description": "The finding's `finding` number in the findings data.",
+              "title": "Finding",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "finding",
+            "feedback"
+          ],
+          "title": "FindingFeedback",
+          "type": "object"
+        }
+      },
+      "description": "What the Critic's LLM writes: actionable feedback for each risk finding.",
+      "properties": {
+        "feedback": {
+          "description": "One feedback for every finding.",
+          "items": {
+            "$ref": "#/$defs/FindingFeedback"
+          },
+          "title": "Feedback",
+          "type": "array"
+        }
+      },
+      "required": [
+        "feedback"
+      ],
+      "title": "CriticFeedback",
+      "type": "object"
+    },
+    "temperature": 0.0
+  },
+  "response": {
+    "feedback": [
+      {
+        "feedback": "Spread the promo spend: cap SKU0115's depth below 30% with generate_candidates' sku_limits in the North region, or else leave SKU0115 out with generate_candidates' exclude_sku_ids in the North region, so no plan line takes over 25% of the promo spend.",
+        "finding": 1
+      }
+    ]
+  },
+  "schema_name": "CriticFeedback",
+  "usage": [
+    {
+      "input_tokens": 613,
+      "model": "gpt-4.1-mini",
+      "output_tokens": 72
+    }
+  ]
+}

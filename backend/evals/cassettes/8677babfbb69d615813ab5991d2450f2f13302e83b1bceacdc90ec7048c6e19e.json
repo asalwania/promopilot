@@ -77,121 +77,121 @@
     "rationales": [
       {
         "line": 1,
-        "rationale": "SKU0029 in North is promoted with a 30% PCT_OFF for 2 weeks as it offers the best clearance value and halo effect despite a negative incremental profit, with zero stockout risk."
+        "rationale": "SKU0029 in North is promoted with a 30% PCT_OFF over 2 weeks as it offers the best clearance value and halo effect despite a negative incremental profit, with zero stockout risk."
       },
       {
         "line": 2,
-        "rationale": "SKU0029 in South uses a 25% PCT_OFF for 2 weeks, chosen for its superior clearance value and halo, balancing a small negative incremental profit and zero stockout probability."
+        "rationale": "SKU0029 in South uses a 25% PCT_OFF for 2 weeks, chosen for its superior clearance value and halo, though it also shows a negative incremental profit but no stockout risk."
       },
       {
         "line": 3,
-        "rationale": "SKU0030 in North is promoted at a 5% FIXED_PRICE for 1 week, selected for its positive incremental profit and zero stockout risk, outperforming other mechanisms."
+        "rationale": "SKU0030 in North is promoted with a 5% FIXED_PRICE for 1 week, selected for its positive incremental profit and good margin, with zero stockout risk."
       },
       {
         "line": 4,
-        "rationale": "SKU0030 in South also uses a 5% FIXED_PRICE for 1 week, chosen for positive incremental profit and minimal stockout risk, making it the best option for the region."
+        "rationale": "SKU0030 in South also uses a 5% FIXED_PRICE for 1 week, chosen for positive incremental profit and low stockout probability, balancing margin and volume."
       },
       {
         "line": 5,
-        "rationale": "SKU0031 in North is promoted with a 5% PCT_OFF over 2 weeks, delivering strong incremental profit and a small halo effect, with low stockout probability."
+        "rationale": "SKU0031 in North is promoted with a 5% PCT_OFF over 2 weeks, delivering strong incremental profit and a small halo effect, with a low stockout probability."
       },
       {
         "line": 6,
-        "rationale": "SKU0031 in South uses a 5% PCT_OFF for 1 week, selected for its positive incremental profit and halo, with zero stockout risk."
+        "rationale": "SKU0031 in South uses a 5% PCT_OFF for 1 week, selected for its positive incremental profit and zero stockout risk, maximizing margin."
       },
       {
         "line": 7,
-        "rationale": "SKU0034 in North is promoted at 5% PCT_OFF for 2 weeks, chosen for its positive incremental profit and halo, with no stockout risk."
+        "rationale": "SKU0034 in North is promoted with a 5% PCT_OFF over 2 weeks, chosen for its positive incremental profit and halo, with no stockout risk."
       },
       {
         "line": 8,
-        "rationale": "SKU0035 in North is promoted with a 5% FIXED_PRICE for 2 weeks, offering high incremental profit and clearance value, with zero stockout risk."
+        "rationale": "SKU0035 in North uses a 5% FIXED_PRICE for 2 weeks, selected for its high incremental profit and clearance value, with zero stockout risk."
       },
       {
         "line": 9,
-        "rationale": "SKU0035 in South also uses a 5% FIXED_PRICE for 2 weeks, selected for its strong incremental profit and clearance value, with zero stockout risk."
+        "rationale": "SKU0035 in South also uses a 5% FIXED_PRICE for 2 weeks, chosen for its strong incremental profit and clearance value, with no stockout risk."
       },
       {
         "line": 10,
-        "rationale": "SKU0038 in North is promoted at 5% PCT_OFF for 2 weeks, chosen for its positive incremental profit and halo, with a low stockout probability of 0.7%."
+        "rationale": "SKU0038 in North is promoted with a 5% PCT_OFF over 2 weeks, selected for its positive incremental profit and halo, with a low stockout probability."
       },
       {
         "line": 11,
-        "rationale": "SKU0040 in North uses a 25% FIXED_PRICE for 2 weeks, despite negative incremental profit, it offers the best clearance value and halo, with zero stockout risk."
+        "rationale": "SKU0040 in North uses a 25% FIXED_PRICE for 2 weeks, chosen for its clearance value and halo despite negative incremental profit, with zero stockout risk."
       },
       {
         "line": 12,
-        "rationale": "SKU0040 in South also uses a 25% FIXED_PRICE for 2 weeks, chosen for its clearance value and halo despite negative incremental profit, with zero stockout risk."
+        "rationale": "SKU0040 in South also uses a 25% FIXED_PRICE for 2 weeks, selected for clearance and halo benefits despite negative incremental profit, with no stockout risk."
       },
       {
         "line": 13,
-        "rationale": "SKU0041 in South is promoted with a 5% PCT_OFF for 1 week targeting Value Seekers, selected for positive incremental profit and halo, with a moderate stockout probability of 2.6%."
+        "rationale": "SKU0041 in South is promoted with a 5% PCT_OFF for 1 week targeting Value Seekers, chosen for positive incremental profit and halo, with a moderate stockout risk."
       },
       {
         "line": 14,
-        "rationale": "SKU0042 in North uses a 5% PCT_OFF for 1 week, chosen for its strong incremental profit and halo, with a low stockout probability of 2.3%."
+        "rationale": "SKU0042 in North uses a 5% PCT_OFF for 1 week, selected for strong incremental profit and halo, with a low stockout probability."
       },
       {
         "line": 15,
-        "rationale": "SKU0042 in South is promoted at 5% PCT_OFF for 1 week, selected for positive incremental profit and halo, with zero stockout risk."
+        "rationale": "SKU0042 in South also uses a 5% PCT_OFF for 1 week, chosen for positive incremental profit and halo, with no stockout risk."
       },
       {
         "line": 16,
-        "rationale": "SKU0047 in South is promoted as a 10% BUNDLE with SKU0184 for 1 week, chosen for its high incremental profit and halo, with zero stockout risk."
+        "rationale": "SKU0047 in South is promoted as a 10% BUNDLE with SKU0184 for 1 week, selected for its high incremental profit and halo, with zero stockout risk."
       },
       {
         "line": 17,
-        "rationale": "SKU0049 in North uses a 5% FIXED_PRICE for 1 week, selected for its very high incremental profit and zero stockout risk."
+        "rationale": "SKU0049 in North uses a 5% FIXED_PRICE for 1 week, chosen for its very high incremental profit and zero stockout risk."
       },
       {
         "line": 18,
-        "rationale": "SKU0049 in South also uses a 5% FIXED_PRICE for 1 week, chosen for its strong incremental profit and zero stockout risk."
+        "rationale": "SKU0049 in South also uses a 5% FIXED_PRICE for 1 week, selected for strong incremental profit and no stockout risk."
       },
       {
         "line": 19,
-        "rationale": "SKU0050 in North is promoted with a 5% FIXED_PRICE for 1 week, selected for positive incremental profit and low stockout risk of 0.5%."
+        "rationale": "SKU0050 in North is promoted with a 5% FIXED_PRICE for 1 week, chosen for positive incremental profit and low stockout risk."
       },
       {
         "line": 20,
-        "rationale": "SKU0050 in South uses a 5% FIXED_PRICE for 1 week, chosen for positive incremental profit and zero stockout risk."
+        "rationale": "SKU0050 in South also uses a 5% FIXED_PRICE for 1 week, selected for positive incremental profit and zero stockout risk."
       },
       {
         "line": 21,
-        "rationale": "SKU0179 in North is promoted with a 20% PCT_OFF for 1 week, chosen for its halo effect despite negative incremental profit, with a low stockout probability of 1.3%."
+        "rationale": "SKU0179 in North is promoted with a 20% PCT_OFF for 1 week, chosen for its halo effect despite negative incremental profit, with a small stockout risk."
       },
       {
         "line": 22,
-        "rationale": "SKU0192 in North uses a 5% PCT_OFF for 2 weeks, selected for its strong incremental profit and halo, with zero stockout risk."
+        "rationale": "SKU0192 in North uses a 5% PCT_OFF over 2 weeks, selected for strong incremental profit and halo, with zero stockout risk."
       },
       {
         "line": 23,
-        "rationale": "SKU0192 in South also uses a 5% PCT_OFF for 2 weeks, chosen for its high incremental profit and halo, with zero stockout risk."
+        "rationale": "SKU0192 in South also uses a 5% PCT_OFF over 2 weeks, chosen for high incremental profit and halo, with no stockout risk."
       },
       {
         "line": 24,
-        "rationale": "SKU0194 in North is promoted with a 5% FIXED_PRICE for 1 week, despite negative incremental profit, it offers the best clearance value and halo, with zero stockout risk."
+        "rationale": "SKU0194 in North is promoted with a 5% FIXED_PRICE for 1 week, chosen for clearance and halo despite negative incremental profit, with zero stockout risk."
       },
       {
         "line": 25,
-        "rationale": "SKU0194 in South uses a 5% FIXED_PRICE for 1 week, chosen for clearance value and halo despite negative incremental profit, with zero stockout risk."
+        "rationale": "SKU0194 in South also uses a 5% FIXED_PRICE for 1 week, selected for clearance and halo despite negative incremental profit, with no stockout risk."
       },
       {
         "line": 26,
-        "rationale": "SKU0195 in North is promoted at 5% PCT_OFF for 1 week, selected for positive incremental profit and halo, with zero stockout risk."
+        "rationale": "SKU0195 in North is promoted with a 5% PCT_OFF for 1 week, chosen for positive incremental profit and halo, with zero stockout risk."
       },
       {
         "line": 27,
-        "rationale": "SKU0195 in South also uses a 5% PCT_OFF for 1 week, chosen for positive incremental profit and halo, with zero stockout risk."
+        "rationale": "SKU0195 in South also uses a 5% PCT_OFF for 1 week, selected for positive incremental profit and halo, with no stockout risk."
       }
     ],
-    "summary": "This promotion plan targets Beverages and Bakery categories across North and South regions during weeks W63 and W64, aiming for an expected incremental profit of ₹1.13 lakh with a planned promo cost of ₹1.99 lakh. The plan is constrained primarily by company policies limiting the number of promoted SKUs per category per region to 10 and restrictions against promoting strong substitutes together. Beverages dominate the promo spend at 84.7%, exceeding the 80% limit for a single category, which is a notable risk. Stockout probabilities are low overall, but competitive pricing pressures exist, especially on certain SKUs where competitors are significantly cheaper, posing margin protection challenges."
+    "summary": "This promotion plan targets Beverages and Bakery categories across North and South regions during weeks W63 and W64, aiming for an expected incremental profit of ₹1.13 lakh with a planned promo cost of ₹1.99 lakh. The plan is constrained primarily by company policies limiting the number of promoted SKUs per category per region to 10 and restrictions against promoting strong substitutes together. Beverages dominate the promo spend at 84.7%, exceeding the 80% limit for a single category, which is a notable risk. Stockout probabilities are low overall, but competitive pricing pressures exist, especially on several SKUs where competitors are significantly cheaper, posing margin protection challenges."
   },
   "schema_name": "ExplainerAnswer",
   "usage": [
     {
       "input_tokens": 13437,
       "model": "gpt-4.1-mini",
-      "output_tokens": 1342
+      "output_tokens": 1303
     }
   ]
 }

@@ -56,7 +56,7 @@
   "response": {
     "feedback": [
       {
-        "feedback": "Balance the plan across categories by setting a lower max_promoted_skus_per_category_per_region for Beverages, or exclude some Beverages SKUs using generate_candidates' exclude_sku_ids, so that Beverages takes at most 80% of the promo spend.",
+        "feedback": "Balance the plan across categories by setting a lower max_promoted_skus_per_category_per_region for Beverages, or exclude some Beverages SKUs using generate_candidates' exclude_sku_ids, so that Beverages accounts for at most 80% of the promo spend.",
         "finding": 1
       }
     ]
@@ -66,7 +66,7 @@
     {
       "input_tokens": 598,
       "model": "gpt-4.1-mini",
-      "output_tokens": 65
+      "output_tokens": 66
     }
   ]
 }
