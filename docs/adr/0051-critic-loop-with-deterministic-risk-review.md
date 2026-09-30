@@ -27,6 +27,7 @@ We chose these with the owner (D1–D10 on #48; every recommended option).
   - Violations keep their own message as their feedback; the LLM does not see them.
   - **This narrows SPEC §9.6's "LLM reviews risks (…) and writes actionable feedback"** to the wording. It keeps the Critic "deterministic first, LLM second", and the LLM never computes a number (ADR 0002).
   - We rejected deterministic checks with template feedback only, which drops the LLM from the Critic. We also rejected a free LLM review with grounding: the LLM would judge the numbers, and loops would become non-deterministic.
+  - **Amended by ADR 0084:** the template feedback for a finding about one SKU leads with capping its depth or mechanisms with `generate_candidates`' `sku_limits`.
 - **D2. The thresholds**, `CRITIC_*` settings in `config.py` and `.env.example`, built into `RiskThresholds` by `build_planning`:
   - **Over-concentration.** A plan line above `CRITIC_LINE_SPEND_SHARE` (25%) of the plan's promo spend. The line check is skipped when the plan has fewer than 1 / threshold lines, because one of them must then take more. Also a category or region above `CRITIC_GROUP_SPEND_SHARE` (80%) of the spend when the scope has more than one.
   - **Heavy cannibalisation.** A plan line whose cannibalised profit is at least `CRITIC_CANNIBALISATION_SHARE` (50%) of its incremental profit. Both come from the line's own option in its mechanism comparison (ADR 0041). Lines with no positive incremental profit are skipped, because they are in the plan for their halo or clearance value.
