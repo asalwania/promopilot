@@ -32,34 +32,19 @@
         "critic",
         "planner",
         "critic",
-        "planner",
-        "critic",
-        "planner",
-        "critic",
         "explainer",
         "approval"
       ],
       "cassettes": [
         "9c322147f616af54a7ba04ef6e80b04c5a8c94f9669aa30f9af833140679f14b",
-        "668b9d18aa2f9ed708280236ced107fc938fc7dcca7e2d35d239ca6067b78ad6",
-        "fb357a88bab8658048934d28208614970bbdc08c5817086122ce654f211aa637",
-        "4cbc520c6a32d2c73de37b4b814502db2039536eddf8b4cc3a15f0af056eab6f",
+        "aa98fb2961b043461e9fedd22c95d0dae88fa1d01158d45fb992552e768fd777",
+        "d3d414239bf7e79afe495a695894eed97bd54026285c6b7a4c98fcccc5001c8d",
+        "f127c5c45055d1c2df1f60ad106f0c275f863f39f8011222a5e6d5d30ec68b92",
         "64d35460eab528b8d6f7166a03d2f92f5579046cf0556cfb197252b89a4fd815",
-        "13b407c9e204bb94f65ebc1e8ef7bbd5463c1e99ca574996a6b8e299f7f45fee",
-        "69b44a45f04f72e552dd65ef18927aeffdb4dac82c5f9fad5d7f8f467f052613",
-        "94a211ec21a3e87db5328682b243b314e0d06953ee768537c0de6022017eccee",
-        "eefbe6428e119eaacd163be43d6c1fe643a60119e1bec7d7b4ef718d79adfe28",
-        "f25cca4348b0d7964ad8b387f03c05dcbc9b32a7eeac19f643e580fe0cb20e6f",
-        "6c46a533312a6db6be5fcf2a34c8151d49da17d0fae3fdb4762583aeb5eb89f3",
-        "0451ff4def60b8dcf3c600e242079058ef040ee2910494b12de1d576cdd2c01d",
-        "af6eff8f2a27ac2905be310ae09d9a484e464d2bcb1a6044a81efacd554a5093",
-        "46c41b7ea33fa87fb8d94d144ba4a9ff5fdc0230c66274163cf7ce3a50a076c1",
-        "2ad2c5367e719bbfd5299c4303ffcacd1080688aeec3db160d479732eb730358",
-        "aa995f0ae1dc92df7512cf25100bf17f868595d8f33c39e363605eb67f7696d7",
-        "62ee43120e4ca6d0127cc725811eb3d9338027c9ffe3ec4cc6035424ebe77462",
-        "b0d444689e39b89c7b0ab154141b0302fd69e02cba259feceee3851767035bfe",
-        "fbffb27d524584622983f7ffc6777eed4e848c40919623f5946de20e6c2974e0",
-        "aa3fe83512173af9710bcbe86adb427d9469a343a1acdab2934f01574e2fea68",
+        "72ca9eb896c41b3056add0cf6fcb0624bf4b0909db00bc544488e327e7d44023",
+        "bfaf2bafabfdb755f69065ae559b397de425f9a9a0062360fec7422db366dbc2",
+        "efe8aafaee867e46d402fc76e1bc10fefd9e274e436773824dce18fc8143a7d9",
+        "932224e3482329c9655bc6d386d17c0383f36427e966666659de7e7fb2eb7252",
         "9d5cd8b048b3eba4e68be871e52719373333fb359ae069666f3125ddace2cbed"
       ],
       "revisions": [
@@ -90,12 +75,6 @@
           {
             "answers": null,
             "amend": null,
-            "accept_relaxation": true,
-            "approve": false
-          },
-          {
-            "answers": null,
-            "amend": null,
             "accept_relaxation": false,
             "approve": true
           }
@@ -117,16 +96,6 @@
         "context",
         "planner",
         "critic",
-        "explainer",
-        "approval",
-        "approval",
-        "context",
-        "planner",
-        "critic",
-        "planner",
-        "critic",
-        "planner",
-        "critic",
         "planner",
         "critic",
         "explainer",
@@ -136,52 +105,33 @@
       ],
       "cassettes": [
         "90f564b87ae46a0063b8110b789a550a3e3630a9aa35f50a6e91068f9171705f",
-        "c496ba628574c1c0a3ea7037c46f0e3737bf7d247e1d77afbfb5d203a90ebe9d",
-        "fb9c11160d1e5d05265438b9ad1c7cfdc2048495247722a0ffb07ed7a7e57107",
-        "b8334a5aef16406191102370e5810fc2ec95b0e88728226dc84c0b93fdc0df89",
-        "97c13e758b60e8dca7f851e5a2c253245f9f4be23e78b2c22c06c8b5691e6d94",
-        "cf4f5d093e0f9f2dae1ab9e615b5904363bebe2176ca7f96da15ad7c1effdc8e",
-        "698266c80526d9f28cb88bc0c257964302b43b6dba5fcdd70374fac372360825",
-        "0c5cfcd6906bacd99fa84f8112a2be1dec45c16460c2e822095ddfca112a5cd8",
-        "a0eac4c3ea73fb8170cb3fb8c4d8d5ecadf36e964786e5366dd36ac1c25ea665",
+        "451528288e0494e113a7bc915b41d3a60ca629b324ac24aaa7924fd22030ff92",
+        "447343e83acc528cf85253b7a04749848ae48e0b5dd041dc4fd49f38494f3d53",
+        "e296334221d6137935a93b2ef6b8ec86de9c86591a5dc24a325370fc45c45dcd",
+        "f98a3e758a6f68112a4d823fbc3b3deec7c3e21f29bed69e1f16f9eb9a55915b",
+        "b13f650dcc6f386d256f52597570b17153063c4dc6f02d8480fd5f01664ae507",
+        "1591658e6625821dab21039b5163417336630a083b1a2eccb1a71db6153b48da",
         "56899e311437c0b2d5fa2ed4d44201a2b393c393d1ad249c6e0f6d3fee3f7136",
-        "3a3960f657a407a1ddc0d25a24c5fafa8da126ea2367d858a4609480fc27a9db",
-        "00835f75f2514aa53fb3033b684f185529dd864055bd6f66672b17ec5ba1a40b",
-        "2a4c7f74e92eefdba59cb9fc5cf7931093e5a77c762c343f8bd020b4b6b381bc",
-        "175bca9d5d66d57cd041cfab45fd26eed2dc91548176498bda68189fbeedf046",
-        "d5c93dfdb25584031d3ca14140e451df79964eb06bb7fc31801b88ceffe01ef1",
-        "a678500312beb50bafe7129259f272f28e2f8ebe013e441169fbdf65112bc2b8",
-        "027b8d3923cbfa4ab055834c623ef0a211ae45e62a689811c6fa0e31d7610db0",
-        "0f5359d968f00388aef2ae8832634703e84f198376efb5e03ff2f6ba2cbac021",
+        "fcf99ebf7b107f0c29c1fe5223443ea8e17d10b63b53162367fe6594ea2e9988",
+        "345d3fec23dbef73e908949c4ad310055af3401c9bf2476f4d8204fe2851b1c5",
+        "ff62ddbbe769a0f4903b9e776829394678b33e4ecafb953aa5d6359ae44c1ff0",
+        "0f52d2a64f9daa4d6e0f23b236142d942e6fcdbb09d551b5af7ebf0d4d57a1cb",
+        "167b2d8a2de63edc588a07942d50e772e359146fbedb3549668053ac5b143c40",
+        "6a414c3e55a350eb0ce9335d3f41b643a5d527d78b1255cbed879d7c0b6672fa",
         "4605a43cd7a50f43e156b2044936c472a7db167a97d21085f6020c793df161c1",
-        "7b059d8c53275ad4451a3ad94fb263d7913beafa9f961cd6e7221f782760fca0",
-        "282d81cfc07a257caa04a06745bb4dccfc0e0d508ae0e698d751b1a956704999",
-        "c83382ebea7e40bfae35c84ebc40b591d63a4298722dbc68a19a7f310ce54549",
-        "d341ea28c2f49442a44624c442aece2d211188cfa176ab9bed1d46952d10845b",
-        "4c9d35c6b97f113deb2709e05dedc012eb25a02be96e09f1c7a09afbc41730d9",
-        "9e4669e888a75c93a0fbbf2b1a6bdf26f527d1bab62c50bbbb02cd4d808d15aa",
-        "5492f9d82d5670e932e521654284f9c69a83a337a46d39777186a32cf768438c",
-        "d565526f64804850be064ae828cdf40968c9ac17e6c888eca8a8f27c4a786a51",
-        "e946582ec81f1bc81d9327c883656e93e714b9699103d79621e2be61e690ef55",
-        "8bf7881648ce9d0289559006c184f3d65e5bff926dab57e821232b5d186d6201",
-        "f278e12087bf6418cc995dd5208c3571fefbadb414b6de6b793732e7fde5aaef",
-        "c21081c83d1a18e5575e5a857e8b2617ca7e9a28a33d66a1b7f422a5cb0ff936",
-        "fac22820a309a4ea852d4d51cb76b009dcf4296186a3bdb566625c7a4c7cdc6e",
-        "54e3883aabe8e5c988fa9f17d8dde1b59658b391e1623022670cfeed4e978cab",
-        "5d29998d12c2c7a1cf243f94e01dc4a11980be8b5cb900874de65b89b3fcc894",
-        "59cd46c80d66e6a4bf8f2082e8390cedea575921073613d46f04909e093222f2",
-        "d9fc110fd8ceb07b3cd15ea7cd2e64f56481278f0962e4149c91975b13993c10",
-        "cda3a64b77e00ef29599b1ad74294b94ae27f34f20676e74fffd42c56c24c2c5",
-        "b2efd5fd159c1da24309dd9641245c3deb1ce5127a0153c216c2138f804af1c7",
-        "c220388e72337b36065c5af27e7ad87bf4ed4468f9ff1640a7cac2749b9f1dee",
-        "b46d05b93ed2ab5cc9dea7e4f48db647ba16e82298da5a47e4a3e5070bc15b8a",
-        "ce04f466f0028f8702ba548bd588823e7836d66c68561543c34f22515d4d0465",
-        "7dae9336c1a51b495e264f50f5209d33dea09f940f6a5daff0a79de46db5e4be",
-        "b961a9ad50f76853f5e756f241e5ca6f208f86d8460fa3b2e6349cb7c6864034",
-        "ff914153ccf6a0cd61a21ef94b10e9d398ffc2ba76bd3d45272c1730cc8fcffc",
-        "f6dd7a3e50f07aac2bf99bee67b0e7abc769646adeb74b1f487e7383b5decccb",
-        "75a43687efee5fd9aa2860521626d609c4a8bbbabd0646d6f01c681101d73867",
-        "0d83d4e74ca01ccb4836c3c588660f9c79d5096749c755c0bedbf972370c9d66"
+        "678630654ce8fa583e66c437ad7b7b2823fae7d8dc0a44d916af2163b91591e5",
+        "b2af5af1a181671f8d7259bdca89ab8c1f3d702ac73a05aac5b710139086db88",
+        "d0227a04b671c16e1799343febc1b91e8215884cb57dd7137b419932bac7e54b",
+        "95196fa7ed855b0b0857bb3905bd2cc753baa50bd9c49b851654e7e757ce13a5",
+        "162d1f9d50ad9e506b7d73c47172638664fde9bf360189401e1bcaab2449045d",
+        "0f015b81bec6ed6eb6ebb29a8e78010fdcf142c8bf3fbb7ee355c85178794d8a",
+        "3689ad33bce184d5d8d292399c79e3712e67238c3b759ca51ae05b0974c95fc4",
+        "4503eacb7a16c99d688ffce16a58548ffa2e04a3e0a37a693cbf086924d91a4b",
+        "dbbb62981458355180b892c629ba0829edde6cd12a8b48b85e8de29c30421d3c",
+        "c3a4ade2f8555140dc948b2c361a62b4ce88c607f95eba7ac2c48ef392441f23",
+        "12c222d9bf57b3d54828f07c55ddcd569501f56151937406ddc72d723692a36b",
+        "b47e1a21c192b4b4654627e816c585e77d00d5f76d00d27f657838c2b20b4110",
+        "8e8e7553af9e2b8ef0cf595c140112a9ce24a322ace71a5c27811a650e8d68b0"
       ],
       "revisions": [
         {
@@ -195,16 +145,11 @@
         {
           "number": 3,
           "explanation": "llm"
-        },
-        {
-          "number": 4,
-          "explanation": "llm"
         }
       ],
       "amendments": [
         "Budget cut to ₹6 lakh",
-        "Drop West",
-        "Accept the smallest relaxation: lower the clearance target for SKU0006 to 59.86% sell-through."
+        "Drop West"
       ]
     },
     "clarify": {
@@ -231,35 +176,20 @@
         "critic",
         "planner",
         "critic",
-        "planner",
-        "critic",
-        "planner",
-        "critic",
         "explainer",
         "approval"
       ],
       "cassettes": [
         "14b120a7d51ff3ad034823a0e83f95cb3d819f7e7eb1b863084ebd6739fe3502",
         "bad66d77289fb2d88d07fb5adf8b8b027947880fc4b61761481dbad87c6e01b5",
-        "b0b7b9e610d05125557aa8a6c504f6860e1d50aef5811d02582d3cd52f20fe95",
-        "54fa9f46c7471bdaad1d56c072b0ebb0b2e329cb88b22effe1adf4e14df46537",
-        "62155c38ba26879a47f502ab27650e619fd96188d5fda3f60af3605acdbadbb1",
+        "d74cecce006c351862d6fe0c86ce510ba04555ab0e6f9e1a7a6c63180c073f97",
+        "6eb87bf319effdfdc3b3f3957e1461a7a1a8ad2f41ff3ce887b488d34924b77f",
+        "e84ff907fe4df3d1a34345078a75c128fe503be96a6d853c20ffb4ea39b7502e",
         "64d35460eab528b8d6f7166a03d2f92f5579046cf0556cfb197252b89a4fd815",
-        "798813033abd748891ed8dc378a31172032497fb6fa12b48b2e575647de5012c",
-        "ee8442dac2934cf7bf25f1b3510bb766aeb780ff60bb8ed03f3be0b8d4b5b7f3",
-        "945bd89d714a29464b4e65ad1195985a65fcf5203be7ff2dafe5b455741a7193",
-        "24bb7979d287eba95e32e193ff4e86751fcf9a368931c9ce98710a6bc41a4e9e",
-        "f25cca4348b0d7964ad8b387f03c05dcbc9b32a7eeac19f643e580fe0cb20e6f",
-        "d8cb17884de9a27dd7c3d3809f04030ffb1e69fbcb33cedd78c68cb88587256d",
-        "be61a61b036627a7504eaa4215cf3f62d4f01b210d9ee534ae43af716c926939",
-        "521b9277439e3ec31795ba907bc76aa455baf71e6f4b43699c847f40f7e2e5f6",
-        "bcdfa7892969e329b0727aefe0ab8967ef0075b1a03a9431b3f06220f75a73d3",
-        "d1e88003cff239cbbe70e5728e5d44486dc19128363a8e8f7bb6ad95dfc97f68",
-        "aa995f0ae1dc92df7512cf25100bf17f868595d8f33c39e363605eb67f7696d7",
-        "ceb2490850e170b5e034c2b36e01b227a5a61817455c59344e92a5a25d86de71",
-        "b4391d8637dba553dfd4deca428bb866c7fc8379002aa7cec2bf525cdcafae22",
-        "260f836e0b721e2562032a7afbc8bb7f68a9255abb69f448d9b96d510a21f546",
-        "bccce34ab8fe9b2eb41100b583be7a2d729e06793c2c19ced5b5b7e23dd96026",
+        "a25ea4238bcec6873a43a3391efc496de60ebcb883bf22b700262fa1e1a586ff",
+        "113e340dffc66849dcc80bf8b8420b9ae6a220db08478bfe9cf6322ad24ed5c0",
+        "172b96cee9c34ba16a267f4d7a86e25ea5792921e85ab720dbb0f7857f0409a8",
+        "6512b9fe05ec4eda124b11c292c45233c892bb768213bf421b7bd3a30461f479",
         "9d5cd8b048b3eba4e68be871e52719373333fb359ae069666f3125ddace2cbed"
       ],
       "revisions": [
@@ -287,14 +217,14 @@
       ],
       "cassettes": [
         "ee53cd6b11b3b7dfca78382b7c5a7b85c779e6b39aa375c9b34b84c67331411e",
-        "51fc9825cfd9cc7210d09cf38ccc3abec2cbbc3afcfcc55920819e464834222f",
-        "809671b78c8a4f578091c9fb617e633e66525a31fc061e29a10f70fc8e002aa1",
-        "6304cd6564cdc2c1245134298ef07830bcc86c64cef4956da975f0748c4851a3",
+        "7a4a8dc706880736d090375c51c58ce7ddfb2ebd6ae56083f183a483ab392f55",
+        "e77ad43571e82edc45d932e1ee18b0945b74ff90f324c5ac3e35720790be8443",
+        "5a60e8c55f41f5c40c3ca71ef138c942a70718341e639997371d00daa30fc6e8",
         "75cea0b44dd769899f0db79642981cc6fa0d652b1056ac64aaf5d881eed81497",
-        "254952643735541cbe7a43ad79dfe7ff82f52ad69e95720a29e094ff250ba1ba",
-        "9dec7a55e0e155ab493e09eb56aad5ba6e60a3626e86aad5f8dcae903f77741a",
-        "5328ba295de6beacadd403a55e8a514885a508b1867fc04da18244d71c617e43",
-        "183fa808b186995961cbdec11ae68e540332eb0e60ce31c094af5a3da09b721a",
+        "ac136f626f91a8c5084b0d562534cbf8316e54e4d03960328bed5b00a6436fa1",
+        "c2da2c0fa25ff89a1bc610291ac7eeb4cb851e9ce0b27f8154136dbd461bfbe6",
+        "d135a9fea3d061109d738d67ae6ed9b014472a3e3c122de0606344f351237e5e",
+        "46b37a5326a6f9d511917cc502d98780acc83493ce99df543f7b7101788511cc",
         "d38c80f6d954bbb988ff0195a0058a20a2af315c8d98dde46469f09b59283ac3"
       ],
       "revisions": [
@@ -304,6 +234,71 @@
         }
       ],
       "amendments": []
+    },
+    "infeasible": {
+      "script": {
+        "name": "infeasible",
+        "brief": "Plan a Diwali promotion for Snacks in North for weeks 108-109, with a marketing budget of ₹10k. We are overstocked on 400g namkeen packs — clear at least 95% of that stock.",
+        "steps": [
+          {
+            "answers": null,
+            "amend": null,
+            "accept_relaxation": true,
+            "approve": false
+          },
+          {
+            "answers": null,
+            "amend": null,
+            "accept_relaxation": false,
+            "approve": true
+          }
+        ]
+      },
+      "route": [
+        "context",
+        "planner",
+        "critic",
+        "explainer",
+        "approval",
+        "approval",
+        "context",
+        "planner",
+        "critic",
+        "explainer",
+        "approval",
+        "approval",
+        "done"
+      ],
+      "cassettes": [
+        "a937cb024e0d3ceb39449fcc7a3e2fe736587841eec3b0ee7fe7e6a307f254ce",
+        "1069492d00abd542bef340a14e12d7d8c474d81a6a3450fb614035ed12b8292f",
+        "36abea2271d894e02b70f88bac0e7f52bd86dee17cc2c4e0f979148e5ed5863e",
+        "017ca90311a50454acc56235475cdbf5c594998ca984bbd76eef2a51209a3c74",
+        "f594b5b1655c151e3f2d0e395105ff2a39a41e0de6c304a6de8d1926997c8f3f",
+        "de8092d645ef9a98970876ffcfe39cd1db9fd3614c7320c01dfabf70f732eb1c",
+        "7807d6b88f2d897be241c68f77b0f3daddac22c458a9507573b6edd13cc1b92e",
+        "67f5f598ef0fc7e1bb453ced9bf0b95a0ac924bc1ed264a0aa06472633dac5e5",
+        "e860c383c39b9ddc8f1e732ccd534bd794084ee07ab9744007c9a78f85333aff",
+        "356890a5e546b65d73e370ba2854a04aa846ea1bd6fb1d815007c8159299b3d9",
+        "2e365e743d29a2ad54a5aed16d2330fb3e1a25a9a75b95669049864ac629b41b",
+        "a27ec78c97639dd7d299be762d7bc48ac791eb96872309ae6a07f46bf232b697",
+        "e2c34fdf6d7c0f472abc64329d061aa9d6f5e0724ca90f5ec07b25e1ad4aa2b1",
+        "0e47b3dbcd319b4ad67a8c319d50ce08688288ee37e958ea3de3c95f311ced77",
+        "ce900bed2b736b5437def91a243f6ff4a603afbe8ee8a6bd0e02b01dcce6979d"
+      ],
+      "revisions": [
+        {
+          "number": 1,
+          "explanation": "llm"
+        },
+        {
+          "number": 2,
+          "explanation": "llm"
+        }
+      ],
+      "amendments": [
+        "Accept the smallest relaxation: lower the clearance target for SKU0002 to 40.83% sell-through; lower the clearance target for SKU0006 to 36.29% sell-through."
+      ]
     }
   }
 }
