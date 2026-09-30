@@ -1,4 +1,5 @@
 import json
+from collections.abc import Iterator
 
 import pytest
 
@@ -11,6 +12,7 @@ from promopilot.models.demand import DemandHistory, DemandModel
 from promopilot.models.relations import Relations
 from promopilot.models.training import DEFAULT_SEED
 from promopilot.optimizer import OptionContext
+from tests.logcapture import restored_logging
 
 LLM_ENV = ("LLM_PROVIDER", "LLM_CASSETTE_DIR", "OPENAI_API_KEY", "OPENAI_MODEL")
 
@@ -20,6 +22,13 @@ def no_llm_config_from_env(monkeypatch: pytest.MonkeyPatch) -> None:
     """`make test` exports .env: a real key or model must never reach a test (SPEC §6)."""
     for name in LLM_ENV:
         monkeypatch.delenv(name, raising=False)
+
+
+@pytest.fixture(autouse=True)
+def logging_as_it_was() -> Iterator[None]:
+    """`build_app` configures logging for the process (ADR 0085); no test keeps it."""
+    with restored_logging():
+        yield
 
 
 SMALL_AS_OF = 52

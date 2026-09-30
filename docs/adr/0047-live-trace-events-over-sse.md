@@ -97,6 +97,8 @@ SPEC and #10 name the event kinds and the endpoint. They do not say how events a
 
   Request ids, redacting secrets and logging briefs only at debug level remain #71's. Uvicorn's own access logs are not changed. We rejected binding the session id without configuring JSON output (the logs would not be structured yet) and doing all of #71 now.
 
+  ADR 0085 (#71) did them: request ids, redaction, briefs only at debug, and uvicorn's access line replaced by the API's own `http.request` line.
+
 ## Testing
 
 - **14. Billed fakes on the test side.** Token usage is tested with `tests/unit/agents/billed.py`'s `BilledProvider`, which wraps `FakeProvider` and reports a scripted `Usage` per call. `FakeProvider` itself is unchanged. No test calls a real LLM.

@@ -318,7 +318,7 @@ The longest one background run of a planning session's agent graph may take befo
 _Avoid_: request timeout, deadline
 
 **Reference id**:
-The id the API gives every request, sent back as `X-Request-ID` and in every error body. A promotions manager quotes it to report a failure; the logs find the request by it (ADR 0071).
+The id the API gives every request, sent back as `X-Request-ID` and in every error body. A promotions manager quotes it to report a failure; every log line of the request, and of the planning run it starts, carries it as `request_id` (ADR 0071, ADR 0085).
 _Avoid_: request number, error id, trace id
 
 **Violation**:
