@@ -842,9 +842,11 @@ async def test_a_finding_goes_away_when_the_next_attempt_caps_its_skus_depth(
     small_models: tuple[DemandModel, Relations],
     request_read: PlanningRequest,
 ) -> None:
-    # On the small world, SKU0008 at 20% off takes 76.4% of the plan's promo spend: over a
-    # 50% limit for one line. At most 10% off it takes under half, and stays in the plan
-    # (ADR 0084). The tools compute every number; the LLM only chooses the calls.
+    # On the small world, SKU0008 at 20% off takes 80.9% of the plan's promo spend: over a
+    # 60% limit for one line. At most 10% off it takes 54.8%, and stays in the plan
+    # (ADR 0084). The safety margin (ADR 0080) prices promo cost at P90, so the capped line
+    # keeps more than half of a smaller plan. The tools compute every number; the LLM only
+    # chooses the calls.
     store = CandidateStore()
     demand = Fixed((entry(ModelKind.DEMAND, 1), small_models[0]))
     relations = Fixed((entry(ModelKind.RELATIONS, 1), small_models[1]))
@@ -890,8 +892,8 @@ async def test_a_finding_goes_away_when_the_next_attempt_caps_its_skus_depth(
             revisions=StoredRevisions(store, planner_of(small_models, data)),
             sleep=Sleeps(),
         ),
-        # The capped plan gives up 10.6% of the objective: within this tolerance (ADR 0078).
-        risk_thresholds=RiskThresholds(line_spend_share=0.5, objective_tolerance=0.15),
+        # The capped plan gives up 12.9% of the objective: within this tolerance (ADR 0078).
+        risk_thresholds=RiskThresholds(line_spend_share=0.6, objective_tolerance=0.15),
         trace=MemoryTrace(),
     )
     graph = build_graph(graph_tools, llm, InMemorySaver(serde=checkpoint_serializer()))
