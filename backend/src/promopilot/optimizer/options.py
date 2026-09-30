@@ -30,7 +30,7 @@ competitor's price, when that depth is not already on the grid (ADR 0031, ADR 00
 
 import math
 from collections import Counter, defaultdict
-from collections.abc import Callable, Iterator, Mapping, Sequence
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Protocol
 
@@ -47,6 +47,7 @@ from promopilot.domain import (
     PromoWindow,
     PruneReason,
     Region,
+    SkuLimit,
     TargetSegment,
 )
 from promopilot.economics import clearance_value, effective_unit_price
@@ -172,13 +173,15 @@ class PromoOptions:
     0077); None for a set built by hand."""
 
 
-_Key = tuple[str, Region, Mechanism, TargetSegment]
+_Key = tuple[str, Region, Mechanism, TargetSegment, str | None, int]
+"""Anchor SKU, region, mechanism, target segment, BUNDLE partner and depth."""
 
 
 @dataclass(frozen=True)
 class _Tally:
-    """Options enumerated, and pruned per reason, per anchor SKU, region, mechanism and target
-    segment: the counts of generation, at the grain every narrowing keeps or drops whole."""
+    """Options enumerated, and pruned per reason, per anchor SKU, region, mechanism, target
+    segment, BUNDLE partner and depth: the counts of generation, at the grain every narrowing
+    keeps or drops whole."""
 
     enumerated: Mapping[_Key, int]
     pruned: Mapping[_Key, Mapping[PruneReason, int]]
@@ -311,14 +314,18 @@ def generate_options(
     target_segments: Sequence[TargetSegment] | None = None,
     sku_ids: Sequence[str] | None = None,
     exclude_sku_ids: Sequence[str] | None = None,
+    sku_limits: Sequence[SkuLimit] | None = None,
     unnarrowed: PromoOptions | None = None,
 ) -> PromoOptions:
     """The promo options for the planning request's scope and promo window.
 
-    `mechanisms`, `target_segments` and `sku_ids` narrow the enumeration further, and
-    `exclude_sku_ids` leaves SKUs out (ADR 0059). A ValueError for: a SKU outside the request's
-    scope, a SKU both kept and left out, leaving out every SKU or a clearance target of the
-    brief, and an option the demand model cannot predict.
+    `mechanisms`, `target_segments` and `sku_ids` narrow the enumeration further,
+    `exclude_sku_ids` leaves SKUs out (ADR 0059), and `sku_limits` caps a SKU's depth or
+    mechanisms, as anchor or BUNDLE partner, in every region (ADR 0084). A ValueError for: a
+    SKU outside the request's scope, a SKU both kept and left out, leaving out every SKU or a
+    clearance target of the brief, a SKU limit that loosens company policy or the call's
+    mechanisms, limits a clearance target or leaves its SKU no option (`_limited`), and an
+    option the demand model cannot predict.
 
     `unnarrowed` is the set generated for the same request in the same context with no
     narrowing. The narrowed set is then read off it, its rows and its counts, instead of
@@ -339,8 +346,14 @@ def generate_options(
     if exclude_sku_ids:
         scoped = _left_out(scoped, context.products, request, sku_ids, exclude_sku_ids, cleared)
     matches = _price_matches(context.competitor_gaps, request, set(scoped), catalogue)
+    limits = _limited(
+        sku_limits or (), scoped, context, request, exclude_sku_ids or (), cleared, chosen, matches
+    )
+    matches = [m for m in matches if limits.allows(m.sku_id, Mechanism.PCT_OFF, m.depth_pct)]
     if unnarrowed is not None and unnarrowed._tally is not None and chosen and targets:
-        return _narrowed(unnarrowed, unnarrowed._tally, set(scoped), chosen, targets, matches)
+        return _narrowed(
+            unnarrowed, unnarrowed._tally, set(scoped), chosen, targets, limits, matches
+        )
 
     pruned: Counter[PruneReason] = Counter()
     enumerated_by: Counter[_Key] = Counter()
@@ -360,6 +373,7 @@ def generate_options(
                 and match.depth_pct not in DEPTHS[Mechanism.PCT_OFF]
             ):
                 levels.append((Mechanism.PCT_OFF, None, match.depth_pct))
+            levels = [level for level in levels if limits.allows_level(sku_id, *level)]
             for mechanism, partner, depth in levels:
                 enumerated += per_price
                 reason = _price_reason(
@@ -371,9 +385,10 @@ def generate_options(
                         reason = PruneReason.DUPLICATE_PRICE
                     charm_prices.add(price)
                 for target in targets:
-                    enumerated_by[sku_id, region, mechanism, target] += len(timings)
+                    key = (sku_id, region, mechanism, target, partner, depth)
+                    enumerated_by[key] += len(timings)
                     if reason is not None:
-                        pruned_by_key[sku_id, region, mechanism, target][reason] += len(timings)
+                        pruned_by_key[key][reason] += len(timings)
                 if reason is not None:
                     pruned[reason] += per_price
                     pruned_by[sku_id, region, mechanism].add(reason)
@@ -429,7 +444,7 @@ def generate_options(
         line = lines[n]
         reason = PruneReason.STOCK if over[n] else PruneReason.PARTNER_STOCK
         pruned_by[line.sku_id, line.region, line.mechanism].add(reason)
-        pruned_by_key[line.sku_id, line.region, line.mechanism, line.target_segment][reason] += 1
+        pruned_by_key[_key(line)][reason] += 1
     keep = ~(over | partner_over)
     kept = [line for line, fits in zip(lines, keep, strict=True) if fits]
     table = table[keep].reset_index(drop=True)
@@ -465,6 +480,17 @@ _PREDICTED_REASONS = (PruneReason.STOCK, PruneReason.PARTNER_STOCK)
 """The reasons an option is pruned for after it is predicted."""
 
 
+def _key(line: PlanLine) -> _Key:
+    return (
+        line.sku_id,
+        line.region,
+        line.mechanism,
+        line.target_segment,
+        line.bundle_partner_sku_id,
+        line.depth_pct,
+    )
+
+
 def _tally(enumerated: Mapping[_Key, int], pruned: Mapping[_Key, Counter[PruneReason]]) -> _Tally:
     return _Tally(dict(enumerated), {key: dict(reasons) for key, reasons in pruned.items()})
 
@@ -475,14 +501,21 @@ def _narrowed(
     skus: set[str],
     mechanisms: list[Mechanism],
     targets: list[TargetSegment],
+    limits: "_Limits",
     matches: list[PriceMatch],
 ) -> PromoOptions:
-    """The options of `unnarrowed` whose anchor SKU, mechanism and target segment the
-    narrowing keeps, with the counts of generation for those alone (ADR 0077)."""
+    """The options of `unnarrowed` whose anchor SKU, mechanism, target segment, BUNDLE
+    partner and depth the narrowing keeps, with the counts of generation for those alone (ADR
+    0077, ADR 0084)."""
 
     def kept(key: _Key) -> bool:
-        sku_id, _, mechanism, target = key
-        return sku_id in skus and mechanism in mechanisms and target in targets
+        sku_id, _, mechanism, target, partner, depth = key
+        return (
+            sku_id in skus
+            and mechanism in mechanisms
+            and target in targets
+            and limits.allows_level(sku_id, mechanism, partner, depth)
+        )
 
     pruned: Counter[PruneReason] = Counter()
     pruned_by: defaultdict[tuple[str, Region, Mechanism], set[PruneReason]] = defaultdict(set)
@@ -491,11 +524,7 @@ def _narrowed(
             for reason, count in reasons.items():
                 pruned[reason] += count
                 pruned_by[key[:3]].add(reason)
-    rows = [
-        n
-        for n, line in enumerate(unnarrowed.lines)
-        if kept((line.sku_id, line.region, line.mechanism, line.target_segment))
-    ]
+    rows = [n for n, line in enumerate(unnarrowed.lines) if kept(_key(line))]
     enumerated = sum(count for key, count in tally.enumerated.items() if kept(key))
     predicted = enumerated - sum(
         count for reason, count in pruned.items() if reason not in _PREDICTED_REASONS
@@ -727,6 +756,86 @@ def _left_out(
     if not kept:
         raise ValueError("leaving these SKUs out leaves no SKU to promote")
     return kept
+
+
+@dataclass(frozen=True)
+class _Limits:
+    """The planner's SKU limits, by SKU (ADR 0084)."""
+
+    by_sku: Mapping[str, SkuLimit] = field(default_factory=dict)
+
+    def allows(self, sku_id: str, mechanism: Mechanism, depth: int) -> bool:
+        """Whether the SKU may be promoted by the mechanism at the depth."""
+        limit = self.by_sku.get(sku_id)
+        if limit is None:
+            return True
+        shallow = limit.max_depth_pct is None or depth <= limit.max_depth_pct
+        return shallow and (limit.mechanisms is None or mechanism in limit.mechanisms)
+
+    def allows_level(
+        self, sku_id: str, mechanism: Mechanism, partner: str | None, depth: int
+    ) -> bool:
+        """Whether an option at this price level keeps the anchor's and its partner's limits:
+        a BUNDLE discounts both at its depth."""
+        return self.allows(sku_id, mechanism, depth) and (
+            partner is None or self.allows(partner, mechanism, depth)
+        )
+
+
+def _limited(
+    sku_limits: Sequence[SkuLimit],
+    scoped: list[str],
+    context: OptionContext,
+    request: PlanningRequest,
+    exclude_sku_ids: Sequence[str],
+    cleared: Sequence[str],
+    chosen: list[Mechanism],
+    matches: list[PriceMatch],
+) -> _Limits:
+    """The SKU limits, checked (ADR 0084). Each names a SKU of the request's scope that the
+    call keeps, once, and never a clearance target of the brief, whose target it could put out
+    of reach. It may only tighten: never a depth above company policy's maximum discount, nor
+    a mechanism the call leaves out. And it leaves its SKU at least one price level."""
+    if not sku_limits:
+        return _Limits()
+    in_scope = set(_in_scope(context.products, request, None))
+    kept, left_out = set(scoped), set(exclude_sku_ids)
+    policy = context.policy
+    named = [limit.sku_id for limit in sku_limits]
+
+    def refuse(problem: str, found: Iterable[str]) -> None:
+        unique = list(dict.fromkeys(found))
+        if unique:
+            raise ValueError(f"{problem}: {', '.join(unique)}")
+
+    refuse("not in the planning request's scope", (s for s in named if s not in in_scope))
+    refuse("both limited and left out", (s for s in named if s in left_out))
+    refuse("limits a SKU the call does not keep", (s for s in named if s not in kept))
+    refuse("limits a SKU twice", (s for s in named if named.count(s) > 1))
+    refuse("may not limit a clearance target of the brief", (s for s in named if s in cleared))
+    limits = _Limits({limit.sku_id: limit for limit in sku_limits})
+    catalogue = _Catalogue.of(context.products)
+    for limit in sku_limits:
+        sku_id, deepest = limit.sku_id, limit.max_depth_pct
+        if deepest is not None and deepest > policy.max_discount_pct:
+            raise ValueError(
+                f"loosens company policy: {sku_id}'s max_depth_pct {deepest} is above the "
+                f"{policy.max_discount_pct}% maximum discount"
+            )
+        outside = [m.value for m in limit.mechanisms or () if m not in chosen]
+        if outside:
+            raise ValueError(
+                f"loosens the call: {sku_id}'s mechanisms name {', '.join(outside)}, which the "
+                "call leaves out"
+            )
+        partners = _partners(sku_id, context.relations, catalogue)
+        levels = [(m, depth) for m, _, depth in _price_levels(chosen, partners)]
+        levels += [(Mechanism.PCT_OFF, m.depth_pct) for m in matches if m.sku_id == sku_id]
+        if not any(limits.allows(sku_id, mechanism, depth) for mechanism, depth in levels):
+            raise ValueError(
+                f"leaves {sku_id} no option: leave it out with exclude_sku_ids instead"
+            )
+    return limits
 
 
 def _timings(window: PromoWindow) -> list[tuple[int, int]]:

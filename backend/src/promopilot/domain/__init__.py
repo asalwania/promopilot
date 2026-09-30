@@ -11,7 +11,13 @@ from promopilot.domain.comparison import MechanismOption, MechanismOutcome
 from promopilot.domain.explanation import ExplanationSource, FallbackReason, PlanExplanation
 from promopilot.domain.plan import PlanLine, PromoPlan
 from promopilot.domain.policy import CompanyPolicy, PolicyFinding
-from promopilot.domain.request import ClearanceTarget, PlanningRequest, PromoWindow, Scope
+from promopilot.domain.request import (
+    ClearanceTarget,
+    PlanningRequest,
+    PromoWindow,
+    Scope,
+    SkuLimit,
+)
 from promopilot.domain.revision import (
     LineChange,
     LineCrossEffect,
@@ -136,6 +142,7 @@ __all__ = [
     "SessionStatus",
     "SessionUsage",
     "SimulatedOutcomes",
+    "SkuLimit",
     "SolveStatus",
     "TargetSegment",
     "TokensUsed",
