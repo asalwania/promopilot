@@ -162,7 +162,7 @@ def test_with_no_minimum_margin_in_the_brief_the_true_margin_is_held_to_the_poli
     assert (below, above) == ((Breach.MARGIN_BELOW_MINIMUM,), ())
 
 
-def test_the_breach_rate_is_reported_with_no_target_and_counts_each_kind() -> None:
+def test_the_breach_rate_has_a_15_percent_target_and_counts_each_kind() -> None:
     runs = [
         run(breaches=(Breach.PROMO_COST_OVER_BUDGET, Breach.DEMAND_OVER_STOCK)),
         run(ConstraintCheck.FAILED, breaches=(Breach.DEMAND_OVER_STOCK,)),
@@ -178,12 +178,20 @@ def test_the_breach_rate_is_reported_with_no_target_and_counts_each_kind() -> No
         3,
         2 / 3,
     )
-    assert (metric.target, metric.passed) == (None, None)
+    # ADR 0080: at most 15% of scored plans may break a constraint in truth.
+    assert (metric.target, metric.direction, metric.passed) == (0.15, "at_most", False)
     assert metric.breakdown == {
         "promo_cost_over_budget": 1,
         "margin_below_minimum": 0,
         "demand_over_stock": 2,
     }
+
+
+def test_a_breach_rate_at_the_target_passes_and_none_scored_is_not_judged() -> None:
+    within = [run(breaches=(Breach.DEMAND_OVER_STOCK,)), *(run() for _ in range(19))]
+
+    assert oracle_breach_rate(within).passed is True
+    assert oracle_breach_rate([run(ConstraintCheck.INFEASIBLE)]).passed is None
 
 
 def test_breaches_do_not_affect_constraint_satisfaction() -> None:

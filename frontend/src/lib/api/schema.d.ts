@@ -1359,6 +1359,7 @@ export interface components {
              */
             policy_findings: components["schemas"]["PolicyFinding"][];
             relaxation?: components["schemas"]["Relaxation"] | null;
+            safety_margin?: components["schemas"]["PlanSafetyMargin"] | null;
             simulation?: components["schemas"]["PlanSimulation"] | null;
             solver_status?: components["schemas"]["SolveStatus"] | null;
         };
@@ -1394,6 +1395,34 @@ export interface components {
             /** Uplift Pct */
             uplift_pct?: number | null;
             why_chosen?: components["schemas"]["WhyChosen"] | null;
+        };
+        /**
+         * PlanSafetyMargin
+         * @description The safety margin a plan revision was planned with, and its promo cost as budgeted.
+         */
+        PlanSafetyMargin: {
+            /**
+             * Budget Margin Waived
+             * @default false
+             */
+            budget_margin_waived: boolean;
+            /**
+             * Budget Quantile
+             * @default 0.5
+             */
+            budget_quantile: number;
+            /**
+             * Margin Quantile
+             * @default 0.5
+             */
+            margin_quantile: number;
+            /** Planned Promo Cost */
+            planned_promo_cost: number;
+            /**
+             * Stock Sigmas
+             * @default 1.2816
+             */
+            stock_sigmas: number;
         };
         /**
          * PlanSimulation

@@ -183,6 +183,8 @@ plan_revisions = Table(
     Column("explanation", JSONB),
     # E8 #50 (ADR 0052): the diff from the previous revision; null for the first.
     Column("diff", JSONB),
+    # E9 #159 (ADR 0080): the safety margin it was planned with; null for revisions before it.
+    Column("safety_margin", JSONB),
 )
 
 plan_lines = Table(

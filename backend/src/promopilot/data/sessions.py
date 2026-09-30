@@ -30,6 +30,7 @@ from promopilot.domain import (
     PlanningSession,
     PlanRevision,
     PlanRevisionLine,
+    PlanSafetyMargin,
     PlanSimulation,
     PolicyFinding,
     Relaxation,
@@ -234,6 +235,9 @@ class SessionStore:
                     if revision.explanation is None
                     else revision.explanation.model_dump(mode="json"),
                     diff=None if revision.diff is None else revision.diff.model_dump(mode="json"),
+                    safety_margin=None
+                    if revision.safety_margin is None
+                    else revision.safety_margin.model_dump(mode="json"),
                 )
             )
             if revision.lines:
@@ -468,6 +472,9 @@ def _revision(row: object, lines: tuple[PlanRevisionLine, ...]) -> PlanRevision:
         if values["explanation"] is None
         else PlanExplanation.model_validate(values["explanation"]),
         diff=None if values["diff"] is None else RevisionDiff.model_validate(values["diff"]),
+        safety_margin=None
+        if values["safety_margin"] is None
+        else PlanSafetyMargin.model_validate(values["safety_margin"]),
     )
 
 

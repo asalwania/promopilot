@@ -2237,6 +2237,16 @@
               }
             ]
           },
+          "safety_margin": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PlanSafetyMargin"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "simulation": {
             "anyOf": [
               {
@@ -2349,6 +2359,46 @@
           "expected_incremental_profit"
         ],
         "title": "PlanRevisionLine",
+        "type": "object"
+      },
+      "PlanSafetyMargin": {
+        "description": "The safety margin a plan revision was planned with, and its promo cost as budgeted.",
+        "properties": {
+          "budget_margin_waived": {
+            "default": false,
+            "title": "Budget Margin Waived",
+            "type": "boolean"
+          },
+          "budget_quantile": {
+            "default": 0.5,
+            "exclusiveMaximum": 1.0,
+            "minimum": 0.5,
+            "title": "Budget Quantile",
+            "type": "number"
+          },
+          "margin_quantile": {
+            "default": 0.5,
+            "exclusiveMinimum": 0.0,
+            "maximum": 0.5,
+            "title": "Margin Quantile",
+            "type": "number"
+          },
+          "planned_promo_cost": {
+            "minimum": 0.0,
+            "title": "Planned Promo Cost",
+            "type": "number"
+          },
+          "stock_sigmas": {
+            "default": 1.2816,
+            "minimum": 1.2816,
+            "title": "Stock Sigmas",
+            "type": "number"
+          }
+        },
+        "required": [
+          "planned_promo_cost"
+        ],
+        "title": "PlanSafetyMargin",
         "type": "object"
       },
       "PlanSimulation": {

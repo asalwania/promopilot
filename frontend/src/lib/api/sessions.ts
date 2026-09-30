@@ -365,6 +365,15 @@ export const revisionDiffSchema = z.object({
   ),
 }) satisfies z.ZodType<Schemas["RevisionDiff"]>;
 
+// The safety margin a plan revision was planned with (ADR 0080).
+export const planSafetyMarginSchema = z.object({
+  budget_quantile: z.number(),
+  stock_sigmas: z.number(),
+  margin_quantile: z.number(),
+  planned_promo_cost: z.number(),
+  budget_margin_waived: z.boolean(),
+}) satisfies z.ZodType<Schemas["PlanSafetyMargin"]>;
+
 export const planRevisionSchema = z.object({
   number: z.number(),
   lines: z.array(planRevisionLineSchema),
@@ -382,6 +391,7 @@ export const planRevisionSchema = z.object({
   open_issues: z.array(openIssueSchema),
   explanation: planExplanationSchema.nullable().optional(),
   diff: revisionDiffSchema.nullable().optional(),
+  safety_margin: planSafetyMarginSchema.nullable().optional(),
 }) satisfies z.ZodType<Schemas["PlanRevision"]>;
 
 export const planningRequestSchema = z.object({

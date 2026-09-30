@@ -19,6 +19,7 @@ from promopilot.domain import (
     ViolationCode,
 )
 from promopilot.economics import blended_margin, effective_unit_price
+from promopilot.guardrails.formatting import format_percentile
 from promopilot.guardrails.limits import plan_limits
 from promopilot.guardrails.safety import (
     budget_z,
@@ -178,8 +179,9 @@ def _costs(plan: PlanFacts) -> list[float]:
 
 
 def _cost_name(plan: PlanFacts) -> str:
-    quantile = plan.safety.budget_quantile
-    return f"P{round(quantile * 100)} promo cost" if budget_z(plan.safety) > 0 else "promo cost"
+    if budget_z(plan.safety) <= 0:
+        return "promo cost"
+    return f"{format_percentile(plan.safety.budget_quantile)} promo cost"
 
 
 def _budget(plan: PlanFacts, request: PlanningRequest) -> list[Violation]:
@@ -230,7 +232,7 @@ def _margins(plan: PlanFacts, request: PlanningRequest, policy: CompanyPolicy) -
             np.array([fact.units_std for fact in plan.lines]),
         )
         blended = planned_margin(np.array(revenue), np.array(profit), cv, plan.safety)
-        what = f"blended margin at its P{round(plan.safety.margin_quantile * 100)}"
+        what = f"blended margin at its {format_percentile(plan.safety.margin_quantile)}"
     else:
         blended = blended_margin(revenue, profit)
     if blended is None:

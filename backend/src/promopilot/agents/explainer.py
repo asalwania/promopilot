@@ -52,6 +52,7 @@ from promopilot.guardrails import (
     PlanFacts,
     check_numeric_grounding,
     format_percent,
+    format_percentile,
     format_rupees,
     format_units,
 )
@@ -266,6 +267,7 @@ def plan_data(
         "solver_status": None if revision.solver_status is None else revision.solver_status.value,
         "objective": None if revision.objective is None else format_rupees(revision.objective),
         "plan_line_count": len(revision.lines),
+        "safety_margin": _safety_data(revision),
         "lines": [
             _line_data(
                 number,
@@ -567,6 +569,7 @@ def _summary(
         )
     if revision.objective is not None and revision.lines:
         parts.append(f"Its objective is {format_rupees(revision.objective)}.")
+    parts += _safety_sentences(revision)
     parts += _constraint_sentences(revision)
     parts += notes
     if open_issues:
@@ -689,6 +692,44 @@ def _constraint_sentences(revision: PlanRevision) -> list[str]:
                 if change.policy_allows is not None and change.sku_id is not None
             ]
     return sentences
+
+
+def _safety_sentences(revision: PlanRevision) -> list[str]:
+    """What the budget counted with the plan's safety margin, or that it was waived for the
+    clearance targets (ADR 0080)."""
+    margin = revision.safety_margin
+    if margin is None or not revision.lines:
+        return []
+    if margin.budget_margin_waived:
+        return [
+            "The budget is planned at the expected promo cost, without a safety margin: the "
+            "clearance targets need all of it."
+        ]
+    if margin.budget_quantile <= 0.5:
+        return []
+    return [
+        f"With its safety margin, the plan's promo cost at its "
+        f"{format_percentile(margin.budget_quantile)} is "
+        f"{format_rupees(margin.planned_promo_cost)} against the marketing budget."
+    ]
+
+
+def _safety_data(revision: PlanRevision) -> dict[str, object] | None:
+    """The safety margin the plan keeps from its limits, as it may be cited (ADR 0080)."""
+    margin = revision.safety_margin
+    if margin is None:
+        return None
+    budget = (
+        "at the expected promo cost, waived: the clearance targets need the whole budget"
+        if margin.budget_margin_waived
+        else f"promo cost at its {format_percentile(margin.budget_quantile)}"
+    )
+    return {
+        "budget": budget,
+        "planned_promo_cost": format_rupees(margin.planned_promo_cost),
+        "stock": f"expected units plus {margin.stock_sigmas:g} std within available stock",
+        "margin": f"blended margin with units at their {format_percentile(margin.margin_quantile)}",
+    }
 
 
 def _change_text(change: RelaxedConstraint) -> str:

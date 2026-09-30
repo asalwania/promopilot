@@ -15,7 +15,12 @@ Context agent's fallback reading (ADR 0053).
 
 from promopilot.domain import Violation, ViolationCode
 from promopilot.guardrails.diff import diff_revisions, request_changes
-from promopilot.guardrails.formatting import format_percent, format_rupees, format_units
+from promopilot.guardrails.formatting import (
+    format_percent,
+    format_percentile,
+    format_rupees,
+    format_units,
+)
 from promopilot.guardrails.grounding import GroundingReport, check_numeric_grounding
 from promopilot.guardrails.limits import PlanLimits, deeper_than_policy, plan_limits
 from promopilot.guardrails.risks import RiskThresholds, review_risks, within_objective_tolerance
@@ -58,6 +63,7 @@ __all__ = [
     "deeper_than_policy",
     "diff_revisions",
     "format_percent",
+    "format_percentile",
     "format_rupees",
     "format_units",
     "margin_shortfall",

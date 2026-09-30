@@ -423,6 +423,23 @@ async def test_regional_caps_hold_and_a_loosening_brief_value_is_recorded(
     ]
 
 
+async def test_a_revision_keeps_the_safety_margin_it_was_planned_with(
+    planner: OptimisingPlanner,
+) -> None:
+    planned = await planner.plan(planning())
+    revision, facts = planned.revision, planned.facts
+
+    # Planned at the default margin (ADR 0080): promo cost at its P90 within the budget.
+    margin = revision.safety_margin
+    assert margin is not None
+    assert (margin.budget_quantile, margin.stock_sigmas, margin.margin_quantile) == (0.9, 2.0, 0.1)
+    assert not margin.budget_margin_waived
+    expected = sum(line.promo_cost for line in revision.lines)
+    assert expected <= margin.planned_promo_cost <= 20_000.0 + 0.01
+    assert facts.safety.budget_quantile == 0.9
+    assert validate_plan(facts, planning(), FREE) == ()
+
+
 async def test_a_clearance_target_outside_the_scope_cannot_be_planned(
     planner: OptimisingPlanner, small_dataset: GeneratedDataset
 ) -> None:

@@ -151,6 +151,57 @@ describe("ConstraintChecklist", () => {
     );
   });
 
+  it("says the budget counted promo cost at its P90 with the safety margin (ADR 0080)", () => {
+    renderChecklist({
+      ...awaitingApprovalSession,
+      plan_revision: {
+        ...awaitingApprovalSession.plan_revision!,
+        safety_margin: {
+          budget_quantile: 0.9,
+          stock_sigmas: 2,
+          margin_quantile: 0.1,
+          planned_promo_cost: 187500,
+          budget_margin_waived: false,
+        },
+      },
+    });
+
+    const budget = rowOf("Budget");
+    expect(budget).toHaveTextContent(
+      "Promo cost at its P90, ₹1.88 lakh, within the marketing budget of ₹2 lakh",
+    );
+    expect(within(budget).getByText("₹1.88 lakh")).toHaveAttribute(
+      "title",
+      expect.stringContaining("Source: run_optimizer"),
+    );
+    expect(rowOf("Stock")).toHaveTextContent(
+      "Every line's expected units plus 2 standard deviations fit its available stock.",
+    );
+    expect(rowOf("Minimum margin")).toHaveTextContent(
+      "Blended margin with units at their P10 at or above the company-policy margin floor.",
+    );
+  });
+
+  it("flags a budget planned without its safety margin for the clearance targets", () => {
+    renderChecklist({
+      ...awaitingApprovalSession,
+      plan_revision: {
+        ...awaitingApprovalSession.plan_revision!,
+        safety_margin: {
+          budget_quantile: 0.5,
+          stock_sigmas: 2,
+          margin_quantile: 0.1,
+          planned_promo_cost: 199000,
+          budget_margin_waived: true,
+        },
+      },
+    });
+
+    expect(rowOf("Budget")).toHaveTextContent(
+      "Planned at the expected promo cost, without a safety margin: the clearance targets need the whole budget.",
+    );
+  });
+
   it("fails clearance from an infeasible revision's shortfalls", () => {
     renderChecklist(infeasibleSession);
 

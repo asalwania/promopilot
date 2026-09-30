@@ -2,8 +2,8 @@
 
 Constraint satisfaction is checked on plan-time values by `validate_plan`, which is independent
 of the optimiser; the oracle breach rate is the share of the same plans whose true outcome
-breaks a constraint, reported with no target (ADR 0012). Expected properties are checked on a
-session's outcome.
+breaks a constraint, at most 15% since plans keep a safety margin (ADR 0012, ADR 0080).
+Expected properties are checked on a session's outcome.
 """
 
 from collections.abc import Sequence
@@ -32,6 +32,8 @@ from promopilot.evals.scenarios import (
 from promopilot.evals.substitutes import SubstitutePair, check_no_strong_substitutes
 from promopilot.guardrails import PlanFacts, plan_limits, validate_plan
 
+ORACLE_BREACH_TARGET = 0.15
+"""At most this share of scored plans may break a constraint in truth (ADR 0080)."""
 ONE_PAISA = 0.01
 """Money within a paisa of its limit keeps it, as plan validation allows."""
 _SCORED = (ConstraintCheck.PASSED, ConstraintCheck.FAILED)
@@ -97,15 +99,19 @@ def constraint_satisfaction(runs: Sequence[RunResult]) -> Metric:
 
 def oracle_breach_rate(runs: Sequence[RunResult]) -> Metric:
     """The share of scored final plans whose true outcome breaks a constraint, with how many
-    break each; reported, with no target (SPEC §12.2, ADR 0012)."""
+    break each; target at most 15% (SPEC §12.2, ADR 0012, ADR 0080)."""
     scored = [run.oracle for run in runs if run.oracle is not None]
     breached = sum(bool(score.breaches) for score in scored)
+    value = _share(breached, len(scored))
     return Metric(
         name="oracle_breach_rate",
         label="Oracle breach rate",
-        value=_share(breached, len(scored)),
+        value=value,
         count=breached,
         of=len(scored),
+        target=ORACLE_BREACH_TARGET,
+        direction="at_most",
+        passed=None if value is None else value <= ORACLE_BREACH_TARGET + 1e-12,
         breakdown={
             breach.value: sum(breach in score.breaches for score in scored) for breach in Breach
         },

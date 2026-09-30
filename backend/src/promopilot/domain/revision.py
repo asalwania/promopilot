@@ -9,6 +9,7 @@ from promopilot.domain.explanation import PlanExplanation
 from promopilot.domain.plan import PlanLine, PromoPlan
 from promopilot.domain.policy import PolicyFinding
 from promopilot.domain.risk import OpenIssue
+from promopilot.domain.safety import PlanSafetyMargin
 from promopilot.domain.selection import (
     BindingConstraint,
     ClearanceShortfall,
@@ -172,6 +173,9 @@ class PlanRevision(BaseModel):
     and for revisions planned before #49."""
     diff: RevisionDiff | None = None
     """What changed from the previous plan revision (ADR 0052); None for the first."""
+    safety_margin: PlanSafetyMargin | None = None
+    """The safety margin the plan was made with, and its promo cost as budgeted (ADR 0080);
+    None for revisions planned before it."""
 
     @model_validator(mode="after")
     def _is_a_valid_promo_plan(self) -> Self:
