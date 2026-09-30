@@ -133,11 +133,17 @@ class SessionService:
     async def start(self, brief: str) -> UUID:
         graph = self._require_graph()
         session_id = await self._store.create(brief)
-        self._spawn(
-            self._drive(
-                graph, session_id, lambda: start_planning(graph, str(session_id), session_id, brief)
+        # The run inherits the session id, and the request's, on every line (ADR 0085).
+        with structlog.contextvars.bound_contextvars(session_id=str(session_id)):
+            log.info("sessions.created", brief_chars=len(brief))
+            log.debug("sessions.brief", brief=brief)
+            self._spawn(
+                self._drive(
+                    graph,
+                    session_id,
+                    lambda: start_planning(graph, str(session_id), session_id, brief),
+                )
             )
-        )
         return session_id
 
     async def get(self, session_id: UUID) -> SessionResponse | None:
@@ -226,6 +232,8 @@ class SessionService:
                 await self._store.answer_clarifications(
                     session_id, session.clarifications + answered
                 )
+                log.info("sessions.clarified", answer_count=len(answered))
+                log.debug("sessions.answers", answers=dict(answers))
                 self._spawn(
                     self._drive(
                         graph, session_id, lambda: resume_with_answers(graph, thread_id, answers)
@@ -276,6 +284,13 @@ class SessionService:
                         "the session's agent graph is not waiting at approval"
                     )
                 await self._store.amend(session_id, text, latest.number, relaxation)
+                log.info(
+                    "sessions.amended",
+                    revision_number=latest.number,
+                    accept_relaxation=accept_relaxation,
+                    amendment_chars=len(text),
+                )
+                log.debug("sessions.amendment", amendment=text)
                 amendment = text
                 self._spawn(
                     self._drive(
@@ -372,6 +387,9 @@ class SessionService:
                 raise SessionConflictError(
                     "the session's agent graph is not waiting for a decision"
                 )
+            log.info("sessions.decided", decision=decision.value, revision_number=revision_number)
+            if reason is not None:
+                log.debug("sessions.rejection_reason", rejection_reason=reason)
             await resume_with_decision(
                 graph, thread_id, decision, revision_number=revision_number, reason=reason
             )

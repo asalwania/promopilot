@@ -120,8 +120,9 @@ def create_app(
 def build_app() -> FastAPI:
     """Production entry point: `uvicorn --factory promopilot.api.main:build_app`."""
     settings = Settings()
-    # JSON lines that name the session they came from (ADR 0047).
-    configure_logging(settings.log_format)
+    # JSON lines that name the request and session they came from, with no secret and, above
+    # debug, no manager's text (ADR 0047, ADR 0085).
+    configure_logging(settings.log_format, level=settings.log_level, secrets=settings.log_secrets())
     probe = PostgresDatabaseProbe(settings.database_url)
     engine = create_async_engine(settings.database_url, pool_pre_ping=True)
     planning = build_planning(settings, engine)

@@ -11,14 +11,19 @@ The routers keep raising `HTTPException`. `install_error_handling` turns it, req
 validation, an oversized body and any unexpected exception into this schema, and makes the
 OpenAPI contract say so. No body shows a stack trace, an exception's own text or the input it
 rejected.
+
+It also makes every log line of a request traceable (E11 #71, ADR 0085): the guard binds the
+request id for the whole request and ends it with one `http.request` line, and a route with a
+`session_id` in its path binds that too. A background run the request starts inherits both.
 """
 
-from collections.abc import Callable, Mapping, Sequence
+import time
+from collections.abc import AsyncIterator, Callable, Mapping, Sequence
 from typing import Any, Final, Literal
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import structlog
-from fastapi import FastAPI, Request
+from fastapi import Depends, FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
@@ -98,13 +103,62 @@ def install_error_handling(
         raise ValueError("max_request_body_bytes must be at least 1")
     app.add_exception_handler(StarletteHTTPException, _http_error)  # type: ignore[arg-type]
     app.add_exception_handler(RequestValidationError, _validation_error)  # type: ignore[arg-type]
+    # Added last, so the outermost middleware: every line of a request, a 429's too, has its id.
     app.add_middleware(RequestGuard, max_body_bytes=max_request_body_bytes)
+    # Every route included from now on binds its path's session id (ADR 0085).
+    app.router.dependencies.append(Depends(bind_path_ids))
     app.openapi = _documented(app, app.openapi)  # type: ignore[method-assign]
 
 
+async def bind_path_ids(request: Request) -> AsyncIterator[None]:
+    """Binds the path's `session_id`, when it is one, to every log line of the request."""
+    session_id = _session_id(request.scope)
+    if session_id is None:
+        yield
+        return
+    with structlog.contextvars.bound_contextvars(session_id=session_id):
+        yield
+
+
+def _path_ids(scope: Scope) -> dict[str, str]:
+    """The ids in the matched route's path that every line of the request carries."""
+    session_id = _session_id(scope)
+    return {} if session_id is None else {"session_id": session_id}
+
+
+def _session_id(scope: Scope) -> str | None:
+    raw = scope.get("path_params", {}).get("session_id")
+    if raw is None:
+        return None
+    try:
+        return str(UUID(str(raw)))
+    except ValueError:
+        return None  # the client's own text, which the route answers 422
+
+
+_QUIET_ROUTES: Final = frozenset({"/health", "/api/health"})
+"""The container healthcheck's routes: their access line is debug, not info."""
+
+
+def _log_request(scope: Scope, status_code: int | None, began: float) -> None:
+    """The request's access line: its route template, never its path's or query's text."""
+    route = scope.get("route")
+    template = getattr(route, "path", None)
+    level = "debug" if template in _QUIET_ROUTES else "info"
+    getattr(log, level)(
+        "http.request",
+        method=scope["method"],
+        route=template if isinstance(template, str) else None,
+        status=status_code,
+        duration_ms=round((time.perf_counter() - began) * 1000, 1),
+        **_path_ids(scope),
+    )
+
+
 class RequestGuard:
-    """Gives every HTTP request an id, refuses a body over the limit before the app reads it,
-    and answers an unexpected exception with a 500 that names only the request id."""
+    """Gives every HTTP request an id, bound to every log line of the request; refuses a body
+    over the limit before the app reads it; answers an unexpected exception with a 500 that
+    names only the request id; and logs one `http.request` line when the request ends."""
 
     def __init__(self, app: ASGIApp, *, max_body_bytes: int) -> None:
         self._app = app
@@ -116,6 +170,21 @@ class RequestGuard:
             return
         request_id = str(uuid4())
         scope.setdefault("state", {})["request_id"] = request_id
+        began = time.perf_counter()
+        statuses: list[int] = []
+
+        async def send_recorded(message: Message) -> None:
+            if message["type"] == "http.response.start":
+                statuses.append(message["status"])
+            await send(message)
+
+        with structlog.contextvars.bound_contextvars(request_id=request_id):
+            try:
+                await self._guard(scope, receive, send_recorded, request_id)
+            finally:
+                _log_request(scope, statuses[0] if statuses else None, began)
+
+    async def _guard(self, scope: Scope, receive: Receive, send: Send, request_id: str) -> None:
         started = False
 
         async def send_with_id(message: Message) -> None:
@@ -144,7 +213,7 @@ class RequestGuard:
         except Exception:
             if started:
                 raise
-            log.exception("api.unexpected_error", reference_id=request_id)
+            log.exception("api.unexpected_error", reference_id=request_id, **_path_ids(scope))
             failed = _error_json(
                 request_id,
                 500,
