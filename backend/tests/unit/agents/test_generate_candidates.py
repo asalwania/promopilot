@@ -16,7 +16,7 @@ from promopilot.agents.tools.generate_candidates import (
     generate_candidates_tool,
 )
 from promopilot.datagen import GeneratedDataset
-from promopilot.domain import CompanyPolicy, Mechanism
+from promopilot.domain import CompanyPolicy, Mechanism, TargetSegment
 from promopilot.models.demand import DemandHistory, DemandModel
 from promopilot.models.registry import ModelKind, RegisteredModel
 from promopilot.models.relations import Relations
@@ -149,6 +149,46 @@ async def test_the_planner_can_narrow_the_mechanisms(
         Mechanism.PCT_OFF,
         Mechanism.FIXED_PRICE,
     }
+
+
+async def test_narrowing_never_limits_a_clearance_target_and_the_summary_says_so(
+    tools: ToolRegistry, store: CandidateStore, small_history: DemandHistory
+) -> None:
+    # ADR 0086: "Target families" must not put a clearance target out of reach.
+    cleared = first_category_skus(small_history)[0]
+    targets = [{"sku_id": cleared, "sell_through": 0.5}]
+    narrowing = {"mechanisms": ["BOGO"], "target_segments": ["Families"]}
+
+    result = await tools.call(
+        "generate_candidates",
+        arguments(small_history, request={"clearance_targets": targets}, **narrowing),
+    )
+    whole = await tools.call(
+        "generate_candidates", arguments(small_history, request={"clearance_targets": targets})
+    )
+
+    assert isinstance(result, ToolOk), result
+    assert isinstance(whole, ToolOk), whole
+    assert isinstance(result.output, GenerateCandidatesOutput)
+    assert isinstance(whole.output, GenerateCandidatesOutput)
+    assert result.output.not_narrowed == [cleared]
+    assert whole.output.not_narrowed == []
+    stored = store.get(result.output.candidate_set_id)
+    unnarrowed = store.get(whole.output.candidate_set_id)
+    assert stored is not None
+    assert unnarrowed is not None
+    spared = [line for line in stored.options.lines if line.sku_id == cleared]
+    assert spared == [line for line in unnarrowed.options.lines if line.sku_id == cleared]
+    assert {line.target_segment for line in spared} > {TargetSegment.FAMILIES}
+    others = {
+        (line.mechanism, line.target_segment)
+        for line in stored.options.lines
+        if line.sku_id != cleared
+    }
+    assert others <= {(Mechanism.BOGO, TargetSegment.FAMILIES)}
+    assert "never narrow a SKU the request names for clearance" in " ".join(
+        tools.specs()[0].description.split()
+    )
 
 
 async def test_the_same_call_on_models_fitted_alike_gets_the_same_candidate_set_id(

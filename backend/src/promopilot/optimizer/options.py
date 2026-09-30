@@ -321,11 +321,13 @@ def generate_options(
 
     `mechanisms`, `target_segments` and `sku_ids` narrow the enumeration further,
     `exclude_sku_ids` leaves SKUs out (ADR 0059), and `sku_limits` caps a SKU's depth or
-    mechanisms, as anchor or BUNDLE partner, in every region (ADR 0084). A ValueError for: a
-    SKU outside the request's scope, a SKU both kept and left out, leaving out every SKU or a
-    clearance target of the brief, a SKU limit that loosens company policy or the call's
-    mechanisms, limits a clearance target or leaves its SKU no option (`_limited`), and an
-    option the demand model cannot predict.
+    mechanisms, as anchor or BUNDLE partner, in every region (ADR 0084). `mechanisms` and
+    `target_segments` never narrow a SKU the brief names for clearance: it keeps every
+    mechanism and segment, so a narrowing cannot put its target out of reach (ADR 0086). A
+    ValueError for: a SKU outside the request's scope, a SKU both kept and left out, leaving
+    out every SKU or a clearance target of the brief, a SKU limit that loosens company policy
+    or the call's mechanisms, limits a clearance target or leaves its SKU no option
+    (`_limited`), and an option the demand model cannot predict.
 
     `unnarrowed` is the set generated for the same request in the same context with no
     narrowing. The narrowed set is then read off it, its rows and its counts, instead of
@@ -341,7 +343,6 @@ def generate_options(
         target for target in TargetSegment if target_segments is None or target in target_segments
     ]
     chosen = [mechanism for mechanism in Mechanism if mechanisms is None or mechanism in mechanisms]
-    per_price = len(timings) * len(targets)
     scoped = _in_scope(context.products, request, sku_ids)
     if exclude_sku_ids:
         scoped = _left_out(scoped, context.products, request, sku_ids, exclude_sku_ids, cleared)
@@ -352,7 +353,14 @@ def generate_options(
     matches = [m for m in matches if limits.allows(m.sku_id, Mechanism.PCT_OFF, m.depth_pct)]
     if unnarrowed is not None and unnarrowed._tally is not None and chosen and targets:
         return _narrowed(
-            unnarrowed, unnarrowed._tally, set(scoped), chosen, targets, limits, matches
+            unnarrowed,
+            unnarrowed._tally,
+            set(scoped),
+            chosen,
+            targets,
+            limits,
+            matches,
+            set(cleared),
         )
 
     pruned: Counter[PruneReason] = Counter()
@@ -363,13 +371,18 @@ def generate_options(
     lines: list[PlanLine] = []
     for sku_id in scoped:
         partners = _partners(sku_id, context.relations, catalogue)
+        # Narrowing never limits a clearance target of the brief (ADR 0086).
+        sku_chosen, sku_targets = (
+            (list(Mechanism), list(TargetSegment)) if sku_id in cleared else (chosen, targets)
+        )
+        per_price = len(timings) * len(sku_targets)
         for region in request.scope.regions:
             charm_prices: set[float] = set()
-            levels = list(_price_levels(chosen, partners))
+            levels = list(_price_levels(sku_chosen, partners))
             match = next((m for m in matches if (m.sku_id, m.region) == (sku_id, region)), None)
             if (
                 match is not None
-                and Mechanism.PCT_OFF in chosen
+                and Mechanism.PCT_OFF in sku_chosen
                 and match.depth_pct not in DEPTHS[Mechanism.PCT_OFF]
             ):
                 levels.append((Mechanism.PCT_OFF, None, match.depth_pct))
@@ -384,7 +397,7 @@ def generate_options(
                     if price in charm_prices:
                         reason = PruneReason.DUPLICATE_PRICE
                     charm_prices.add(price)
-                for target in targets:
+                for target in sku_targets:
                     key = (sku_id, region, mechanism, target, partner, depth)
                     enumerated_by[key] += len(timings)
                     if reason is not None:
@@ -405,7 +418,7 @@ def generate_options(
                         bundle_partner_sku_id=partner,
                     )
                     for start, duration in timings
-                    for target in targets
+                    for target in sku_targets
                 ]
 
     prediction_context = PredictionContext(
@@ -503,17 +516,18 @@ def _narrowed(
     targets: list[TargetSegment],
     limits: "_Limits",
     matches: list[PriceMatch],
+    cleared: set[str],
 ) -> PromoOptions:
     """The options of `unnarrowed` whose anchor SKU, mechanism, target segment, BUNDLE
     partner and depth the narrowing keeps, with the counts of generation for those alone (ADR
-    0077, ADR 0084)."""
+    0077, ADR 0084). A clearance target of the brief keeps every mechanism and segment (ADR
+    0086)."""
 
     def kept(key: _Key) -> bool:
         sku_id, _, mechanism, target, partner, depth = key
         return (
             sku_id in skus
-            and mechanism in mechanisms
-            and target in targets
+            and (sku_id in cleared or (mechanism in mechanisms and target in targets))
             and limits.allows_level(sku_id, mechanism, partner, depth)
         )
 

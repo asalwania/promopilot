@@ -268,6 +268,30 @@ def test_the_planner_can_narrow_mechanisms_segments_and_skus() -> None:
         generate_options(request(), context(), sku_ids=["C"])
 
 
+def test_narrowing_mechanisms_or_segments_never_limits_a_clearance_target() -> None:
+    # ADR 0086: a segment-exclusive offer sells only to its segment, so narrowing a SKU the
+    # brief names for clearance could put its target out of reach, as "Target families" did
+    # to the demo's SKU0006. The brief's clearance SKUs keep every mechanism and segment.
+    planning = request(clearance_targets=cleared("D"))
+    narrowing: dict[str, Any] = {
+        "mechanisms": [Mechanism.BOGO],
+        "target_segments": [TargetSegment.FAMILIES],
+    }
+    unnarrowed = generate_options(planning, context(PathDemand()))
+
+    for options in (
+        generate_options(planning, context(PathDemand()), **narrowing),
+        generate_options(planning, context(PathDemand()), unnarrowed=unnarrowed, **narrowing),
+    ):
+        assert lines_of(options, sku_id="D") == lines_of(unnarrowed, sku_id="D")
+        assert {line.mechanism for line in lines_of(options, sku_id="D")} > {Mechanism.BOGO}
+        assert {line.target_segment for line in lines_of(options, sku_id="D")} == set(TargetSegment)
+        others = {
+            (line.mechanism, line.target_segment) for line in options.lines if line.sku_id != "D"
+        }
+        assert others == {(Mechanism.BOGO, TargetSegment.FAMILIES)}
+
+
 # --- bundles ---------------------------------------------------------------------------
 
 
