@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-09-30T14:54:13.205438Z",
-  "provider": "openai (recording)",
+  "generated_at": "2026-10-01T17:07:27.698874Z",
+  "provider": "replay",
   "world_seed": 42,
   "runs_per_scenario": 1,
   "planning_settings": {
@@ -128,15 +128,15 @@
     {
       "name": "grounding",
       "label": "Grounding",
-      "value": 0.9743589743589743,
-      "count": 38,
+      "value": 1.0,
+      "count": 39,
       "of": 39,
       "target": 0.98,
       "direction": "at_least",
-      "passed": false,
+      "passed": true,
       "breakdown": {
-        "llm": 38,
-        "ungrounded": 1,
+        "llm": 39,
+        "ungrounded": 0,
         "invalid_answer": 0,
         "llm_unavailable": 0
       },
@@ -146,15 +146,15 @@
     {
       "name": "session_latency_p50",
       "label": "P50 session time",
-      "value": 68.31848819999868,
+      "value": 18.00385720000486,
       "count": 33,
       "of": 33,
       "target": null,
       "direction": null,
       "passed": null,
       "breakdown": {
-        "max_s": 297,
-        "llm_p50_s": 36
+        "max_s": 131,
+        "llm_p50_s": 0
       },
       "unit": "seconds",
       "aim": null
@@ -162,16 +162,16 @@
     {
       "name": "session_cost_p50",
       "label": "P50 session cost",
-      "value": 3.5433216,
+      "value": 3.5234688000000003,
       "count": 33,
       "of": 33,
       "target": null,
       "direction": null,
       "passed": null,
       "breakdown": {
-        "calls": 448,
-        "input_tokens": 3447129,
-        "output_tokens": 78762,
+        "calls": 446,
+        "input_tokens": 3446566,
+        "output_tokens": 79094,
         "unpriced_runs": 0
       },
       "unit": "rupees",
@@ -485,7 +485,7 @@
             },
             "timed_out": []
           },
-          "duration_s": 428.9424394000016,
+          "duration_s": 141.66971690001083,
           "extraction": [
             {
               "field": "regions",
@@ -533,14 +533,14 @@
               "fallback_reason": null
             }
           ],
-          "session_s": 266.085665300001,
-          "llm_s": 101.87013520001346,
+          "session_s": 67.03768439998385,
+          "llm_s": 0.13980079992325045,
           "usage": {
             "calls": 29,
-            "input_tokens": 217868,
-            "output_tokens": 5410,
-            "cost_usd": 0.0958032,
-            "cost_inr": 9.1971072,
+            "input_tokens": 218409,
+            "output_tokens": 5240,
+            "cost_usd": 0.0957476,
+            "cost_inr": 9.1917696,
             "unpriced_models": []
           },
           "cassette_misses": [],
@@ -717,7 +717,7 @@
             },
             "timed_out": []
           },
-          "duration_s": 417.66549769999983,
+          "duration_s": 147.06442100001732,
           "extraction": [
             {
               "field": "regions",
@@ -760,14 +760,14 @@
               "fallback_reason": null
             }
           ],
-          "session_s": 296.57632329999615,
-          "llm_s": 118.64312130003964,
+          "session_s": 88.22410170000512,
+          "llm_s": 0.13134209989220835,
           "usage": {
             "calls": 40,
-            "input_tokens": 330283,
-            "output_tokens": 5241,
-            "cost_usd": 0.1404988,
-            "cost_inr": 13.487884800000002,
+            "input_tokens": 330647,
+            "output_tokens": 5625,
+            "cost_usd": 0.14125880000000002,
+            "cost_inr": 13.560844800000002,
             "unpriced_models": []
           },
           "cassette_misses": [],
@@ -900,7 +900,7 @@
             },
             "timed_out": []
           },
-          "duration_s": 218.07354930000292,
+          "duration_s": 129.35372980000102,
           "extraction": [
             {
               "field": "regions",
@@ -938,14 +938,14 @@
               "fallback_reason": null
             }
           ],
-          "session_s": 72.69433199999912,
-          "llm_s": 49.26291319998563,
+          "session_s": 12.105616700020619,
+          "llm_s": 0.06865200007450767,
           "usage": {
             "calls": 21,
-            "input_tokens": 130875,
-            "output_tokens": 2308,
-            "cost_usd": 0.0560428,
-            "cost_inr": 5.3801088,
+            "input_tokens": 131058,
+            "output_tokens": 2283,
+            "cost_usd": 0.056076,
+            "cost_inr": 5.383296,
             "unpriced_models": []
           },
           "cassette_misses": [],
@@ -1095,7 +1095,7 @@
             },
             "timed_out": []
           },
-          "duration_s": 89.11689189999743,
+          "duration_s": 23.532546800008276,
           "extraction": [
             {
               "field": "regions",
@@ -1133,14 +1133,14 @@
               "fallback_reason": null
             }
           ],
-          "session_s": 69.73863400000118,
-          "llm_s": 42.49119349998364,
+          "session_s": 15.634599399985746,
+          "llm_s": 0.06867820009938441,
           "usage": {
             "calls": 21,
-            "input_tokens": 146100,
-            "output_tokens": 2825,
-            "cost_usd": 0.06296,
-            "cost_inr": 6.044160000000001,
+            "input_tokens": 146280,
+            "output_tokens": 2822,
+            "cost_usd": 0.0630272,
+            "cost_inr": 6.0506112000000005,
             "unpriced_models": []
           },
           "cassette_misses": [],
@@ -1295,7 +1295,7 @@
             },
             "timed_out": []
           },
-          "duration_s": 193.59256939999614,
+          "duration_s": 77.318255900027,
           "extraction": [
             {
               "field": "regions",
@@ -1333,14 +1333,14 @@
               "fallback_reason": null
             }
           ],
-          "session_s": 133.80525569999736,
-          "llm_s": 31.617576899996493,
+          "session_s": 53.18437719999929,
+          "llm_s": 0.04486550000729039,
           "usage": {
             "calls": 10,
-            "input_tokens": 75918,
-            "output_tokens": 1782,
-            "cost_usd": 0.0332184,
-            "cost_inr": 3.1889664000000004,
+            "input_tokens": 76100,
+            "output_tokens": 1879,
+            "cost_usd": 0.0334464,
+            "cost_inr": 3.2108544000000006,
             "unpriced_models": []
           },
           "cassette_misses": [],
@@ -1508,7 +1508,7 @@
             },
             "timed_out": []
           },
-          "duration_s": 180.32855389999895,
+          "duration_s": 49.17457249999279,
           "extraction": [
             {
               "field": "regions",
@@ -1546,14 +1546,14 @@
               "fallback_reason": null
             }
           ],
-          "session_s": 143.10749140000553,
-          "llm_s": 58.97815900002024,
+          "session_s": 36.71019919999526,
+          "llm_s": 0.08060639997711405,
           "usage": {
             "calls": 21,
-            "input_tokens": 163336,
-            "output_tokens": 2532,
-            "cost_usd": 0.0693856,
-            "cost_inr": 6.6610176,
+            "input_tokens": 163518,
+            "output_tokens": 2913,
+            "cost_usd": 0.070068,
+            "cost_inr": 6.726528,
             "unpriced_models": []
           },
           "cassette_misses": [],
@@ -1716,7 +1716,7 @@
             },
             "timed_out": []
           },
-          "duration_s": 119.3390939000019,
+          "duration_s": 30.59483809999074,
           "extraction": [
             {
               "field": "regions",
@@ -1754,14 +1754,14 @@
               "fallback_reason": null
             }
           ],
-          "session_s": 82.2110360000006,
-          "llm_s": 43.748709500003315,
+          "session_s": 18.00385720000486,
+          "llm_s": 0.06362470000749454,
           "usage": {
             "calls": 14,
-            "input_tokens": 125142,
-            "output_tokens": 2323,
-            "cost_usd": 0.053773600000000005,
-            "cost_inr": 5.1622656000000005,
+            "input_tokens": 125322,
+            "output_tokens": 2420,
+            "cost_usd": 0.0540008,
+            "cost_inr": 5.184076800000001,
             "unpriced_models": []
           },
           "cassette_misses": [],
@@ -1826,7 +1826,7 @@
             }
           ],
           "quality": null,
-          "duration_s": 240.62378609999723,
+          "duration_s": 103.05571480002254,
           "extraction": [
             {
               "field": "regions",
@@ -1870,14 +1870,14 @@
               "fallback_reason": null
             }
           ],
-          "session_s": 168.76646469999832,
-          "llm_s": 44.359265099978074,
+          "session_s": 54.01941290000104,
+          "llm_s": 0.04818019998492673,
           "usage": {
-            "calls": 11,
-            "input_tokens": 118357,
-            "output_tokens": 3135,
-            "cost_usd": 0.052358800000000004,
-            "cost_inr": 5.0264448,
+            "calls": 10,
+            "input_tokens": 108026,
+            "output_tokens": 2165,
+            "cost_usd": 0.046674400000000005,
+            "cost_inr": 4.4807424000000005,
             "unpriced_models": []
           },
           "cassette_misses": [],
@@ -2013,7 +2013,7 @@
             },
             "timed_out": []
           },
-          "duration_s": 183.55266109999502,
+          "duration_s": 53.68713219999336,
           "extraction": [
             {
               "field": "regions",
@@ -2057,14 +2057,14 @@
               "fallback_reason": null
             }
           ],
-          "session_s": 123.15117029999965,
-          "llm_s": 35.16074630001822,
+          "session_s": 35.30573629998253,
+          "llm_s": 0.04272359996684827,
           "usage": {
             "calls": 12,
-            "input_tokens": 76659,
-            "output_tokens": 1600,
-            "cost_usd": 0.0332236,
-            "cost_inr": 3.1894656,
+            "input_tokens": 76837,
+            "output_tokens": 1599,
+            "cost_usd": 0.0332932,
+            "cost_inr": 3.1961472,
             "unpriced_models": []
           },
           "cassette_misses": [],
@@ -2215,7 +2215,7 @@
             },
             "timed_out": []
           },
-          "duration_s": 112.4986726000061,
+          "duration_s": 33.634723899973324,
           "extraction": [
             {
               "field": "regions",
@@ -2259,14 +2259,14 @@
               "fallback_reason": null
             }
           ],
-          "session_s": 73.55725800000073,
-          "llm_s": 17.03348620000179,
+          "session_s": 21.76701179999509,
+          "llm_s": 0.02443320001475513,
           "usage": {
             "calls": 5,
-            "input_tokens": 40908,
-            "output_tokens": 1357,
-            "cost_usd": 0.0185344,
-            "cost_inr": 1.7793024,
+            "input_tokens": 41088,
+            "output_tokens": 1679,
+            "cost_usd": 0.019121600000000002,
+            "cost_inr": 1.8356736,
             "unpriced_models": []
           },
           "cassette_misses": [],
@@ -2421,7 +2421,7 @@
             },
             "timed_out": []
           },
-          "duration_s": 338.6759927000021,
+          "duration_s": 144.2606193999818,
           "extraction": [
             {
               "field": "regions",
@@ -2471,14 +2471,14 @@
               "fallback_reason": null
             }
           ],
-          "session_s": 290.96658939999907,
-          "llm_s": 54.09823109998251,
+          "session_s": 130.51575260001118,
+          "llm_s": 0.08348260005004704,
           "usage": {
             "calls": 25,
-            "input_tokens": 170934,
-            "output_tokens": 3198,
-            "cost_usd": 0.07349040000000001,
-            "cost_inr": 7.0550784,
+            "input_tokens": 171114,
+            "output_tokens": 3196,
+            "cost_usd": 0.0735592,
+            "cost_inr": 7.061683200000001,
             "unpriced_models": []
           },
           "cassette_misses": [],
@@ -2622,7 +2622,7 @@
             },
             "timed_out": []
           },
-          "duration_s": 76.84380059999967,
+          "duration_s": 11.86467530002119,
           "extraction": [
             {
               "field": "regions",
@@ -2677,14 +2677,14 @@
               "fallback_reason": null
             }
           ],
-          "session_s": 64.92101589999947,
-          "llm_s": 46.174058499978855,
+          "session_s": 6.602193699975032,
+          "llm_s": 0.06403749997843988,
           "usage": {
             "calls": 19,
-            "input_tokens": 121923,
-            "output_tokens": 2185,
-            "cost_usd": 0.0522652,
-            "cost_inr": 5.0174592,
+            "input_tokens": 122104,
+            "output_tokens": 2218,
+            "cost_usd": 0.052390400000000004,
+            "cost_inr": 5.0294784,
             "unpriced_models": []
           },
           "cassette_misses": [],
@@ -2875,7 +2875,7 @@
             },
             "timed_out": []
           },
-          "duration_s": 92.03592030000436,
+          "duration_s": 30.800025700009428,
           "extraction": [
             {
               "field": "regions",
@@ -2931,14 +2931,14 @@
               "fallback_reason": null
             }
           ],
-          "session_s": 60.81499210000038,
-          "llm_s": 0.974790899999789,
+          "session_s": 22.291331099986564,
+          "llm_s": 0.12340289991698228,
           "usage": {
-            "calls": 29,
-            "input_tokens": 258031,
-            "output_tokens": 5732,
-            "cost_usd": 0.1123836,
-            "cost_inr": 10.788825600000001,
+            "calls": 27,
+            "input_tokens": 234562,
+            "output_tokens": 5290,
+            "cost_usd": 0.1022888,
+            "cost_inr": 9.8197248,
             "unpriced_models": []
           },
           "cassette_misses": [],
@@ -3121,7 +3121,7 @@
             },
             "timed_out": []
           },
-          "duration_s": 307.7537450000018,
+          "duration_s": 117.12626090002595,
           "extraction": [
             {
               "field": "regions",
@@ -3159,14 +3159,14 @@
               "fallback_reason": null
             }
           ],
-          "session_s": 193.39194660000067,
-          "llm_s": 55.58773199997813,
+          "session_s": 86.39084559999174,
+          "llm_s": 0.07762559998081997,
           "usage": {
             "calls": 10,
-            "input_tokens": 128761,
-            "output_tokens": 5147,
-            "cost_usd": 0.059739600000000004,
-            "cost_inr": 5.7350016,
+            "input_tokens": 129002,
+            "output_tokens": 5267,
+            "cost_usd": 0.060028,
+            "cost_inr": 5.762688000000001,
             "unpriced_models": []
           },
           "cassette_misses": [],
@@ -3345,7 +3345,7 @@
             },
             "timed_out": []
           },
-          "duration_s": 247.90149050000036,
+          "duration_s": 74.15027169999667,
           "extraction": [
             {
               "field": "regions",
@@ -3389,14 +3389,14 @@
               "fallback_reason": null
             }
           ],
-          "session_s": 161.49853849999636,
-          "llm_s": 46.78191220000008,
+          "session_s": 51.695602699997835,
+          "llm_s": 0.052541600016411394,
           "usage": {
             "calls": 10,
-            "input_tokens": 120769,
-            "output_tokens": 3861,
-            "cost_usd": 0.054485200000000004,
-            "cost_inr": 5.2305792,
+            "input_tokens": 120950,
+            "output_tokens": 4279,
+            "cost_usd": 0.0552264,
+            "cost_inr": 5.3017344,
             "unpriced_models": []
           },
           "cassette_misses": [],
@@ -3537,7 +3537,7 @@
             },
             "timed_out": []
           },
-          "duration_s": 65.74471279999852,
+          "duration_s": 13.454727300006198,
           "extraction": [
             {
               "field": "regions",
@@ -3581,14 +3581,14 @@
               "fallback_reason": null
             }
           ],
-          "session_s": 41.1861596000017,
-          "llm_s": 23.129773600005137,
+          "session_s": 6.354670399974566,
+          "llm_s": 0.030180899979313836,
           "usage": {
             "calls": 5,
-            "input_tokens": 40133,
-            "output_tokens": 1350,
-            "cost_usd": 0.018213200000000002,
-            "cost_inr": 1.7484672,
+            "input_tokens": 40317,
+            "output_tokens": 1440,
+            "cost_usd": 0.0184308,
+            "cost_inr": 1.7693568000000002,
             "unpriced_models": []
           },
           "cassette_misses": [],
@@ -3766,7 +3766,7 @@
             },
             "timed_out": []
           },
-          "duration_s": 114.10387470000569,
+          "duration_s": 35.447329600021476,
           "extraction": [
             {
               "field": "regions",
@@ -3813,14 +3813,14 @@
               "fallback_reason": null
             }
           ],
-          "session_s": 68.31848819999868,
-          "llm_s": 0.36708969999017427,
+          "session_s": 22.759451500023715,
+          "llm_s": 0.07693029995425604,
           "usage": {
-            "calls": 11,
-            "input_tokens": 92539,
-            "output_tokens": 2657,
-            "cost_usd": 0.0412668,
-            "cost_inr": 3.9616128,
+            "calls": 12,
+            "input_tokens": 99377,
+            "output_tokens": 3121,
+            "cost_usd": 0.044744400000000004,
+            "cost_inr": 4.2954624,
             "unpriced_models": []
           },
           "cassette_misses": [],
@@ -3997,7 +3997,7 @@
             },
             "timed_out": []
           },
-          "duration_s": 67.3732960999987,
+          "duration_s": 22.99223040000652,
           "extraction": [
             {
               "field": "regions",
@@ -4035,14 +4035,14 @@
               "fallback_reason": null
             }
           ],
-          "session_s": 67.07480979999673,
-          "llm_s": 0.292396099990583,
+          "session_s": 22.941789000004064,
+          "llm_s": 0.04861009999876842,
           "usage": {
             "calls": 10,
-            "input_tokens": 90616,
-            "output_tokens": 2555,
-            "cost_usd": 0.040334400000000006,
-            "cost_inr": 3.8721024,
+            "input_tokens": 90904,
+            "output_tokens": 2923,
+            "cost_usd": 0.0410384,
+            "cost_inr": 3.9396864000000003,
             "unpriced_models": []
           },
           "cassette_misses": [],
@@ -4225,7 +4225,7 @@
             },
             "timed_out": []
           },
-          "duration_s": 80.74346569999761,
+          "duration_s": 12.122798099997453,
           "extraction": [
             {
               "field": "regions",
@@ -4263,14 +4263,14 @@
               "fallback_reason": null
             }
           ],
-          "session_s": 58.319028300000355,
-          "llm_s": 39.47078479999618,
+          "session_s": 6.533114599995315,
+          "llm_s": 0.05759260000195354,
           "usage": {
             "calls": 11,
-            "input_tokens": 82902,
-            "output_tokens": 2343,
-            "cost_usd": 0.0369096,
-            "cost_inr": 3.5433216,
+            "input_tokens": 83084,
+            "output_tokens": 2150,
+            "cost_usd": 0.0366736,
+            "cost_inr": 3.5206656,
             "unpriced_models": []
           },
           "cassette_misses": [],
@@ -4331,7 +4331,7 @@
             }
           ],
           "quality": null,
-          "duration_s": 96.5325445999988,
+          "duration_s": 20.75203150001471,
           "extraction": [
             {
               "field": "regions",
@@ -4387,14 +4387,14 @@
               "fallback_reason": null
             }
           ],
-          "session_s": 96.50889460000326,
-          "llm_s": 30.181734899997537,
+          "session_s": 20.740992200007895,
+          "llm_s": 0.04660700005479157,
           "usage": {
             "calls": 9,
-            "input_tokens": 86886,
-            "output_tokens": 1254,
-            "cost_usd": 0.0367608,
-            "cost_inr": 3.5290368,
+            "input_tokens": 87061,
+            "output_tokens": 1174,
+            "cost_usd": 0.0367028,
+            "cost_inr": 3.5234688000000003,
             "unpriced_models": []
           },
           "cassette_misses": [],
@@ -4431,17 +4431,18 @@
           "fallbacks": [],
           "revision": {
             "number": 1,
-            "lines": 2,
+            "lines": 3,
             "regions": [
               "North"
             ],
             "solver_status": "INFEASIBLE",
-            "objective": 12183.53,
-            "promo_cost": 8630.948458043069,
+            "objective": 8353.32,
+            "promo_cost": 8984.883955926744,
             "marketing_budget": 10000.0,
             "sku_ids": [
               "SKU0002",
-              "SKU0006"
+              "SKU0006",
+              "SKU0017"
             ]
           },
           "constraints": "infeasible",
@@ -4456,11 +4457,11 @@
             {
               "property": "relaxation_touches: clearance_target",
               "passed": true,
-              "detail": "revision 1's relaxation changes clearance_target"
+              "detail": "revision 1's relaxation changes marketing_budget, clearance_target"
             }
           ],
           "quality": null,
-          "duration_s": 11.01943670000037,
+          "duration_s": 3.8822293000121135,
           "extraction": [
             {
               "field": "regions",
@@ -4510,14 +4511,14 @@
               "fallback_reason": null
             }
           ],
-          "session_s": 10.994109700004628,
-          "llm_s": 0.260777200004668,
+          "session_s": 3.8747480000020005,
+          "llm_s": 0.04185110004618764,
           "usage": {
             "calls": 8,
-            "input_tokens": 49924,
-            "output_tokens": 1069,
-            "cost_usd": 0.02168,
-            "cost_inr": 2.08128,
+            "input_tokens": 55484,
+            "output_tokens": 872,
+            "cost_usd": 0.023588800000000004,
+            "cost_inr": 2.2645248000000002,
             "unpriced_models": []
           },
           "cassette_misses": [],
@@ -4566,7 +4567,7 @@
             "solver_status": "OPTIMAL",
             "objective": 12183.53,
             "promo_cost": 8630.948458043069,
-            "marketing_budget": 10000.0,
+            "marketing_budget": 10189.63,
             "sku_ids": [
               "SKU0002",
               "SKU0006"
@@ -4601,7 +4602,7 @@
             {
               "property": "diff_changes: clearance_targets",
               "passed": true,
-              "detail": "revision 2's diff changes clearance_targets"
+              "detail": "revision 2's diff changes marketing_budget, clearance_targets"
             }
           ],
           "quality": {
@@ -4648,7 +4649,7 @@
             "breakdown": null,
             "timed_out": []
           },
-          "duration_s": 36.34437280000566,
+          "duration_s": 11.836973400000716,
           "extraction": [
             {
               "field": "regions",
@@ -4670,14 +4671,14 @@
             },
             {
               "field": "marketing_budget",
-              "expected": "10000",
-              "got": "10000",
+              "expected": "10189.63",
+              "got": "10189.63",
               "matched": true
             },
             {
               "field": "clearance_targets",
-              "expected": "SKU0002 0.4083, SKU0006 0.3629",
-              "got": "SKU0002 0.4083, SKU0006 0.3629",
+              "expected": "SKU0002 0.3465, SKU0006 0.3629",
+              "got": "SKU0002 0.3465, SKU0006 0.3629",
               "matched": true
             }
           ],
@@ -4697,14 +4698,14 @@
               "fallback_reason": null
             }
           ],
-          "session_s": 21.094458799998392,
-          "llm_s": 0.32816809998621466,
+          "session_s": 7.5020940999966115,
+          "llm_s": 0.0637599999899976,
           "usage": {
             "calls": 16,
-            "input_tokens": 99617,
-            "output_tokens": 2409,
-            "cost_usd": 0.0437012,
-            "cost_inr": 4.1953152000000005,
+            "input_tokens": 110549,
+            "output_tokens": 1963,
+            "cost_usd": 0.047360400000000004,
+            "cost_inr": 4.546598400000001,
             "unpriced_models": []
           },
           "cassette_misses": [],
@@ -4885,7 +4886,7 @@
             },
             "timed_out": []
           },
-          "duration_s": 63.981371999994735,
+          "duration_s": 12.407790700002806,
           "extraction": [
             {
               "field": "regions",
@@ -4923,14 +4924,14 @@
               "fallback_reason": null
             }
           ],
-          "session_s": 37.773931199997605,
-          "llm_s": 21.59261519998836,
+          "session_s": 5.274544399988372,
+          "llm_s": 0.021451699954923242,
           "usage": {
             "calls": 5,
-            "input_tokens": 40547,
-            "output_tokens": 1454,
-            "cost_usd": 0.0185452,
-            "cost_inr": 1.7803392,
+            "input_tokens": 40727,
+            "output_tokens": 1383,
+            "cost_usd": 0.018503600000000002,
+            "cost_inr": 1.7763456000000002,
             "unpriced_models": []
           },
           "cassette_misses": [],
@@ -5083,7 +5084,7 @@
             },
             "timed_out": []
           },
-          "duration_s": 56.61713279999822,
+          "duration_s": 10.682747199985897,
           "extraction": [
             {
               "field": "regions",
@@ -5121,14 +5122,14 @@
               "fallback_reason": null
             }
           ],
-          "session_s": 41.45858849999786,
-          "llm_s": 28.881494799999928,
+          "session_s": 5.680571599979885,
+          "llm_s": 0.04248160001588985,
           "usage": {
             "calls": 10,
-            "input_tokens": 62222,
-            "output_tokens": 1492,
-            "cost_usd": 0.027276,
-            "cost_inr": 2.6184960000000004,
+            "input_tokens": 62403,
+            "output_tokens": 1403,
+            "cost_usd": 0.027206,
+            "cost_inr": 2.6117760000000003,
             "unpriced_models": []
           },
           "cassette_misses": [],
@@ -5284,7 +5285,7 @@
             },
             "timed_out": []
           },
-          "duration_s": 77.62277899999754,
+          "duration_s": 15.965917199995602,
           "extraction": [
             {
               "field": "regions",
@@ -5328,14 +5329,14 @@
               "fallback_reason": null
             }
           ],
-          "session_s": 53.97358520000125,
-          "llm_s": 29.563010400015628,
+          "session_s": 9.059522600000491,
+          "llm_s": 0.04518749995622784,
           "usage": {
             "calls": 10,
-            "input_tokens": 70975,
-            "output_tokens": 1507,
-            "cost_usd": 0.0308012,
-            "cost_inr": 2.9569152,
+            "input_tokens": 71156,
+            "output_tokens": 1479,
+            "cost_usd": 0.0308288,
+            "cost_inr": 2.9595648,
             "unpriced_models": []
           },
           "cassette_misses": [],
@@ -5485,7 +5486,7 @@
             },
             "timed_out": []
           },
-          "duration_s": 74.27505119999842,
+          "duration_s": 16.449170299980324,
           "extraction": [
             {
               "field": "regions",
@@ -5529,14 +5530,14 @@
               "fallback_reason": null
             }
           ],
-          "session_s": 48.606481599999825,
-          "llm_s": 24.772411900004954,
+          "session_s": 9.123727400001371,
+          "llm_s": 0.031967599992640316,
           "usage": {
             "calls": 6,
-            "input_tokens": 46785,
-            "output_tokens": 1605,
-            "cost_usd": 0.021282,
-            "cost_inr": 2.043072,
+            "input_tokens": 46968,
+            "output_tokens": 1606,
+            "cost_usd": 0.0213568,
+            "cost_inr": 2.0502528,
             "unpriced_models": []
           },
           "cassette_misses": [],
@@ -5693,7 +5694,7 @@
             },
             "timed_out": []
           },
-          "duration_s": 85.63102300000173,
+          "duration_s": 20.07393559999764,
           "extraction": [
             {
               "field": "regions",
@@ -5743,14 +5744,14 @@
               "fallback_reason": null
             }
           ],
-          "session_s": 51.827621300006285,
-          "llm_s": 25.873534499995003,
+          "session_s": 10.339734500012128,
+          "llm_s": 0.02227030004723929,
           "usage": {
             "calls": 6,
-            "input_tokens": 50810,
-            "output_tokens": 1910,
-            "cost_usd": 0.02338,
-            "cost_inr": 2.2444800000000003,
+            "input_tokens": 50993,
+            "output_tokens": 1798,
+            "cost_usd": 0.023274,
+            "cost_inr": 2.2343040000000003,
             "unpriced_models": []
           },
           "cassette_misses": [],
@@ -5780,9 +5781,7 @@
           ],
           "questions_asked": [],
           "amendments_applied": 0,
-          "fallbacks": [
-            "explainer: ungrounded"
-          ],
+          "fallbacks": [],
           "revision": {
             "number": 1,
             "lines": 2,
@@ -5868,7 +5867,7 @@
             },
             "timed_out": []
           },
-          "duration_s": 47.78524830000242,
+          "duration_s": 3.8053436999907717,
           "extraction": [
             {
               "field": "regions",
@@ -5914,18 +5913,18 @@
           "explanations": [
             {
               "revision": 1,
-              "source": "template",
-              "fallback_reason": "ungrounded"
+              "source": "llm",
+              "fallback_reason": null
             }
           ],
-          "session_s": 40.87421319999703,
-          "llm_s": 36.217064099997515,
+          "session_s": 1.7639581999974325,
+          "llm_s": 0.029637500003445894,
           "usage": {
-            "calls": 7,
-            "input_tokens": 37667,
-            "output_tokens": 1065,
-            "cost_usd": 0.0167708,
-            "cost_inr": 1.6099968,
+            "calls": 6,
+            "input_tokens": 34957,
+            "output_tokens": 736,
+            "cost_usd": 0.0151604,
+            "cost_inr": 1.4553984,
             "unpriced_models": []
           },
           "cassette_misses": [],
@@ -6050,7 +6049,7 @@
             },
             "timed_out": []
           },
-          "duration_s": 67.50784739999654,
+          "duration_s": 6.465563300007489,
           "extraction": [
             {
               "field": "regions",
@@ -6088,14 +6087,14 @@
               "fallback_reason": null
             }
           ],
-          "session_s": 57.10953080000036,
-          "llm_s": 47.93515940000361,
+          "session_s": 3.3063060000131372,
+          "llm_s": 0.046420799946645275,
           "usage": {
             "calls": 10,
-            "input_tokens": 61735,
-            "output_tokens": 1071,
-            "cost_usd": 0.026407600000000003,
-            "cost_inr": 2.5351296000000003,
+            "input_tokens": 61916,
+            "output_tokens": 1109,
+            "cost_usd": 0.026540800000000003,
+            "cost_inr": 2.5479168000000003,
             "unpriced_models": []
           },
           "cassette_misses": [],
@@ -6219,7 +6218,7 @@
             },
             "timed_out": []
           },
-          "duration_s": 79.99946949999867,
+          "duration_s": 10.768500500009395,
           "extraction": [
             {
               "field": "regions",
@@ -6257,14 +6256,14 @@
               "fallback_reason": null
             }
           ],
-          "session_s": 62.793013900001824,
-          "llm_s": 51.11335490000056,
+          "session_s": 4.942727299989201,
+          "llm_s": 0.04948729995521717,
           "usage": {
             "calls": 10,
-            "input_tokens": 67144,
-            "output_tokens": 1349,
-            "cost_usd": 0.029016,
-            "cost_inr": 2.785536,
+            "input_tokens": 67323,
+            "output_tokens": 1262,
+            "cost_usd": 0.0289484,
+            "cost_inr": 2.7790464,
             "unpriced_models": []
           },
           "cassette_misses": [],
@@ -6387,7 +6386,7 @@
             },
             "timed_out": []
           },
-          "duration_s": 145.16752480000287,
+          "duration_s": 49.23071689999779,
           "extraction": [
             {
               "field": "regions",
@@ -6431,14 +6430,14 @@
               "fallback_reason": null
             }
           ],
-          "session_s": 90.75477430000319,
-          "llm_s": 28.57548489999317,
+          "session_s": 29.45961619997979,
+          "llm_s": 0.02474890003213659,
           "usage": {
             "calls": 5,
-            "input_tokens": 33587,
-            "output_tokens": 1061,
-            "cost_usd": 0.0151324,
-            "cost_inr": 1.4527104,
+            "input_tokens": 33768,
+            "output_tokens": 942,
+            "cost_usd": 0.0150144,
+            "cost_inr": 1.4413824,
             "unpriced_models": []
           },
           "cassette_misses": [],
@@ -6561,7 +6560,7 @@
             },
             "timed_out": []
           },
-          "duration_s": 250.6460181999937,
+          "duration_s": 81.39110469998559,
           "extraction": [
             {
               "field": "regions",
@@ -6599,14 +6598,14 @@
               "fallback_reason": null
             }
           ],
-          "session_s": 182.40989029999764,
-          "llm_s": 51.97866530000465,
+          "session_s": 58.70022299999255,
+          "llm_s": 0.0956007999193389,
           "usage": {
             "calls": 21,
-            "input_tokens": 137858,
-            "output_tokens": 2389,
-            "cost_usd": 0.05896560000000001,
-            "cost_inr": 5.660697600000001,
+            "input_tokens": 138037,
+            "output_tokens": 2388,
+            "cost_usd": 0.0590356,
+            "cost_inr": 5.6674176,
             "unpriced_models": []
           },
           "cassette_misses": [],
@@ -6760,7 +6759,7 @@
             },
             "timed_out": []
           },
-          "duration_s": 59.36535559999902,
+          "duration_s": 11.49617309999303,
           "extraction": [
             {
               "field": "regions",
@@ -6807,14 +6806,14 @@
               "fallback_reason": null
             }
           ],
-          "session_s": 46.46522120000009,
-          "llm_s": 35.70730729999923,
+          "session_s": 6.935594599985052,
+          "llm_s": 0.05992369996965863,
           "usage": {
-            "calls": 11,
-            "input_tokens": 69318,
-            "output_tokens": 1586,
-            "cost_usd": 0.0302648,
-            "cost_inr": 2.9054208000000004,
+            "calls": 12,
+            "input_tokens": 76525,
+            "output_tokens": 2470,
+            "cost_usd": 0.034562,
+            "cost_inr": 3.3179520000000005,
             "unpriced_models": []
           },
           "cassette_misses": [],

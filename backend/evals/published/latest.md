@@ -1,6 +1,6 @@
 # PromoPilot eval report
 
-Generated 2026-09-30T14:54:13.205438+00:00 with the `openai (recording)` provider on the seed-42 world: 33 scenarios, 1 run(s) each, 33 sessions.
+Generated 2026-10-01T17:07:27.698874+00:00 with the `replay` provider on the seed-42 world: 33 scenarios, 1 run(s) each, 33 sessions.
 
 ## Metrics
 
@@ -12,9 +12,9 @@ Generated 2026-09-30T14:54:13.205438+00:00 with the `openai (recording)` provide
 | Extraction accuracy | 100.0% (152 of 152) | ≥ 95% | pass |
 | Clarification behaviour | 100.0% (3 of 3) | ≥ 100% | pass |
 | Infeasibility handling | 100.0% (2 of 2) | ≥ 100% | pass |
-| Grounding | 97.4% (38 of 39) | ≥ 98% | **fail** |
-| P50 session time | 68.3 s (33 of 33) | report | — |
-| P50 session cost | ₹3.54 (33 of 33) | report | — |
+| Grounding | 100.0% (39 of 39) | ≥ 98% | pass |
+| P50 session time | 18.0 s (33 of 33) | report | — |
+| P50 session cost | ₹3.52 (33 of 33) | report | — |
 | Elasticity recovery (median abs % error) | 8.1% (679 of 800) | ≤ 20% | pass |
 | Substitute precision | 86.7% (91 of 105) | ≥ 80% | pass |
 | Substitute recall | 100.0% (91 of 91) | ≥ 70% | pass |
@@ -32,9 +32,9 @@ Generated 2026-09-30T14:54:13.205438+00:00 with the `openai (recording)` provide
 - Open issues per plan (median): total 41, HEAVY_CANNIBALISATION 18, OVER_CONCENTRATION 14, CLEARANCE_TARGET 9
 - Clarification behaviour: asked 2, flagged_only 1, neither 0, unneeded_asks 0
 - Infeasibility handling: not_declared 0, no_relaxation 0, nothing_binds 0, no_plan 0
-- Grounding: llm 38, ungrounded 1, invalid_answer 0, llm_unavailable 0
-- P50 session time: max_s 297, llm_p50_s 36
-- P50 session cost: calls 448, input_tokens 3447129, output_tokens 78762, unpriced_runs 0
+- Grounding: llm 39, ungrounded 0, invalid_answer 0, llm_unavailable 0
+- P50 session time: max_s 131, llm_p50_s 0
+- P50 session cost: calls 446, input_tokens 3446566, output_tokens 79094, unpriced_runs 0
 - Plan quality (beats the rule-based baseline): beats 30, ties 0, loses 0
 - Regret (median, against the best plan): best_infeasible 1, best_timed_out 0, largest_model_error 16, largest_planner 1, largest_timeouts 0
 
@@ -62,7 +62,7 @@ Generated 2026-09-30T14:54:13.205438+00:00 with the `openai (recording)` provide
 | diwali-snacks-beverages | standard_festive | 1 | planned | rev 1: 34 lines, OPTIMAL | passed | none | 2/2 | pass |
 | durga-puja-2025-east | regional_holidays | 1 | planned | rev 1: 19 lines, OPTIMAL | passed | none | 4/4 | pass |
 | infeasible-clearance-high-margin | infeasible_constraints | 1 | planned | rev 1: 0 lines, INFEASIBLE | infeasible | — | 2/2 | pass |
-| infeasible-clearance-tiny-budget | infeasible_constraints | 1 | planned | rev 1: 2 lines, INFEASIBLE | infeasible | — | 2/2 | pass |
+| infeasible-clearance-tiny-budget | infeasible_constraints | 1 | planned | rev 1: 3 lines, INFEASIBLE | infeasible | — | 2/2 | pass |
 | infeasible-tiny-budget-accept | mid_plan_amendments | 1 | planned | rev 2: 2 lines, OPTIMAL | passed | none | 4/4 | pass |
 | lohri-2026-north | regional_holidays | 1 | planned | rev 1: 20 lines, OPTIMAL | passed | none | 4/4 | pass |
 | pongal-2026-south | regional_holidays | 1 | planned | rev 1: 11 lines, OPTIMAL | passed | none | 4/4 | pass |
@@ -80,39 +80,39 @@ Generated 2026-09-30T14:54:13.205438+00:00 with the `openai (recording)` provide
 
 | Scenario | Run | Extraction | Asked | Flagged | Explainer | Session | Cost |
 |---|---|---|---|---|---|---|---|
-| amend-add-region-extend-offseason | 1 | 4/4 | — | — | llm, llm, llm | 266.1 s (LLM 101.9 s) | ₹9.20, 29 calls |
-| amend-budget-cut-christmas-2025 | 1 | 4/4 | — | — | llm, llm | 296.6 s (LLM 118.6 s) | ₹13.49, 40 calls |
-| cannibal-bakery-diwali-2026 | 1 | 4/4 | — | — | llm | 72.7 s (LLM 49.3 s) | ₹5.38, 21 calls |
-| cannibal-frozen-christmas-2025 | 1 | 4/4 | — | — | llm | 69.7 s (LLM 42.5 s) | ₹6.04, 21 calls |
-| cannibal-personal-care-offseason | 1 | 4/4 | — | — | llm | 133.8 s (LLM 31.6 s) | ₹3.19, 10 calls |
-| christmas-2025-bakery-beverages | 1 | 4/4 | — | — | llm | 143.1 s (LLM 59.0 s) | ₹6.66, 21 calls |
-| christmas-2026-frozen-snacks | 1 | 4/4 | — | — | llm | 82.2 s (LLM 43.7 s) | ₹5.16, 14 calls |
-| clear-curd-diwali-2025 | 1 | 5/5 | — | — | llm | 168.8 s (LLM 44.4 s) | ₹5.03, 11 calls |
-| clear-dishwash-offseason | 1 | 5/5 | — | — | llm | 123.2 s (LLM 35.2 s) | ₹3.19, 12 calls |
-| clear-juices-christmas-2025 | 1 | 5/5 | — | — | llm | 73.6 s (LLM 17.0 s) | ₹1.78, 5 calls |
-| clear-shampoo-diwali-2026 | 1 | 6/6 | — | — | llm | 291.0 s (LLM 54.1 s) | ₹7.06, 25 calls |
-| conflict-margin-below-floor | 1 | 5/5 | — | min_margin | llm | 64.9 s (LLM 46.2 s) | ₹5.02, 19 calls |
-| demo-budget-cut-drop-west | 1 | 5/5 | — | target_segment | llm, llm, llm | 60.8 s (LLM 1.0 s) | ₹10.79, 29 calls |
-| diwali-2025-home-personal-care | 1 | 4/4 | — | — | llm | 193.4 s (LLM 55.6 s) | ₹5.74, 10 calls |
-| diwali-2025-snacks-beverages-east-cap | 1 | 5/5 | — | — | llm | 161.5 s (LLM 46.8 s) | ₹5.23, 10 calls |
-| diwali-2026-staples-dairy-margin | 1 | 5/5 | — | — | llm | 41.2 s (LLM 23.1 s) | ₹1.75, 5 calls |
-| diwali-no-budget | 1 | 4/4 | marketing_budget | — | llm | 68.3 s (LLM 0.4 s) | ₹3.96, 11 calls |
-| diwali-snacks-beverages | 1 | 4/4 | — | — | llm | 67.1 s (LLM 0.3 s) | ₹3.87, 10 calls |
-| durga-puja-2025-east | 1 | 4/4 | — | — | llm | 58.3 s (LLM 39.5 s) | ₹3.54, 11 calls |
-| infeasible-clearance-high-margin | 1 | 6/6 | — | — | llm | 96.5 s (LLM 30.2 s) | ₹3.53, 9 calls |
-| infeasible-clearance-tiny-budget | 1 | 5/5 | — | — | llm | 11.0 s (LLM 0.3 s) | ₹2.08, 8 calls |
-| infeasible-tiny-budget-accept | 1 | 5/5 | — | — | llm, llm | 21.1 s (LLM 0.3 s) | ₹4.20, 16 calls |
-| lohri-2026-north | 1 | 4/4 | — | — | llm | 37.8 s (LLM 21.6 s) | ₹1.78, 5 calls |
-| pongal-2026-south | 1 | 4/4 | — | — | llm | 41.5 s (LLM 28.9 s) | ₹2.62, 10 calls |
-| price-war-bakery-beverages-offseason | 1 | 5/5 | — | — | llm | 54.0 s (LLM 29.6 s) | ₹2.96, 10 calls |
-| price-war-home-care-diwali-2025 | 1 | 5/5 | — | — | llm | 48.6 s (LLM 24.8 s) | ₹2.04, 6 calls |
-| price-war-home-care-staples-diwali-2026 | 1 | 6/6 | — | — | llm | 51.8 s (LLM 25.9 s) | ₹2.24, 6 calls |
-| price-war-staples-christmas-2025 | 1 | 6/6 | — | — | template (ungrounded) | 40.9 s (LLM 36.2 s) | ₹1.61, 7 calls |
-| tight-christmas-2025-bakery | 1 | 4/4 | — | — | llm | 57.1 s (LLM 47.9 s) | ₹2.54, 10 calls |
-| tight-diwali-2025-snacks | 1 | 4/4 | — | — | llm | 62.8 s (LLM 51.1 s) | ₹2.79, 10 calls |
-| tight-diwali-2026-personal-care | 1 | 5/5 | — | — | llm | 90.8 s (LLM 28.6 s) | ₹1.45, 5 calls |
-| tight-offseason-beverages | 1 | 4/4 | — | — | llm | 182.4 s (LLM 52.0 s) | ₹5.66, 21 calls |
-| vague-no-category | 1 | 4/4 | scope.categories | — | llm | 46.5 s (LLM 35.7 s) | ₹2.91, 11 calls |
+| amend-add-region-extend-offseason | 1 | 4/4 | — | — | llm, llm, llm | 67.0 s (LLM 0.1 s) | ₹9.19, 29 calls |
+| amend-budget-cut-christmas-2025 | 1 | 4/4 | — | — | llm, llm | 88.2 s (LLM 0.1 s) | ₹13.56, 40 calls |
+| cannibal-bakery-diwali-2026 | 1 | 4/4 | — | — | llm | 12.1 s (LLM 0.1 s) | ₹5.38, 21 calls |
+| cannibal-frozen-christmas-2025 | 1 | 4/4 | — | — | llm | 15.6 s (LLM 0.1 s) | ₹6.05, 21 calls |
+| cannibal-personal-care-offseason | 1 | 4/4 | — | — | llm | 53.2 s (LLM 0.0 s) | ₹3.21, 10 calls |
+| christmas-2025-bakery-beverages | 1 | 4/4 | — | — | llm | 36.7 s (LLM 0.1 s) | ₹6.73, 21 calls |
+| christmas-2026-frozen-snacks | 1 | 4/4 | — | — | llm | 18.0 s (LLM 0.1 s) | ₹5.18, 14 calls |
+| clear-curd-diwali-2025 | 1 | 5/5 | — | — | llm | 54.0 s (LLM 0.0 s) | ₹4.48, 10 calls |
+| clear-dishwash-offseason | 1 | 5/5 | — | — | llm | 35.3 s (LLM 0.0 s) | ₹3.20, 12 calls |
+| clear-juices-christmas-2025 | 1 | 5/5 | — | — | llm | 21.8 s (LLM 0.0 s) | ₹1.84, 5 calls |
+| clear-shampoo-diwali-2026 | 1 | 6/6 | — | — | llm | 130.5 s (LLM 0.1 s) | ₹7.06, 25 calls |
+| conflict-margin-below-floor | 1 | 5/5 | — | min_margin | llm | 6.6 s (LLM 0.1 s) | ₹5.03, 19 calls |
+| demo-budget-cut-drop-west | 1 | 5/5 | — | target_segment | llm, llm, llm | 22.3 s (LLM 0.1 s) | ₹9.82, 27 calls |
+| diwali-2025-home-personal-care | 1 | 4/4 | — | — | llm | 86.4 s (LLM 0.1 s) | ₹5.76, 10 calls |
+| diwali-2025-snacks-beverages-east-cap | 1 | 5/5 | — | — | llm | 51.7 s (LLM 0.1 s) | ₹5.30, 10 calls |
+| diwali-2026-staples-dairy-margin | 1 | 5/5 | — | — | llm | 6.4 s (LLM 0.0 s) | ₹1.77, 5 calls |
+| diwali-no-budget | 1 | 4/4 | marketing_budget | — | llm | 22.8 s (LLM 0.1 s) | ₹4.30, 12 calls |
+| diwali-snacks-beverages | 1 | 4/4 | — | — | llm | 22.9 s (LLM 0.0 s) | ₹3.94, 10 calls |
+| durga-puja-2025-east | 1 | 4/4 | — | — | llm | 6.5 s (LLM 0.1 s) | ₹3.52, 11 calls |
+| infeasible-clearance-high-margin | 1 | 6/6 | — | — | llm | 20.7 s (LLM 0.0 s) | ₹3.52, 9 calls |
+| infeasible-clearance-tiny-budget | 1 | 5/5 | — | — | llm | 3.9 s (LLM 0.0 s) | ₹2.26, 8 calls |
+| infeasible-tiny-budget-accept | 1 | 5/5 | — | — | llm, llm | 7.5 s (LLM 0.1 s) | ₹4.55, 16 calls |
+| lohri-2026-north | 1 | 4/4 | — | — | llm | 5.3 s (LLM 0.0 s) | ₹1.78, 5 calls |
+| pongal-2026-south | 1 | 4/4 | — | — | llm | 5.7 s (LLM 0.0 s) | ₹2.61, 10 calls |
+| price-war-bakery-beverages-offseason | 1 | 5/5 | — | — | llm | 9.1 s (LLM 0.0 s) | ₹2.96, 10 calls |
+| price-war-home-care-diwali-2025 | 1 | 5/5 | — | — | llm | 9.1 s (LLM 0.0 s) | ₹2.05, 6 calls |
+| price-war-home-care-staples-diwali-2026 | 1 | 6/6 | — | — | llm | 10.3 s (LLM 0.0 s) | ₹2.23, 6 calls |
+| price-war-staples-christmas-2025 | 1 | 6/6 | — | — | llm | 1.8 s (LLM 0.0 s) | ₹1.46, 6 calls |
+| tight-christmas-2025-bakery | 1 | 4/4 | — | — | llm | 3.3 s (LLM 0.0 s) | ₹2.55, 10 calls |
+| tight-diwali-2025-snacks | 1 | 4/4 | — | — | llm | 4.9 s (LLM 0.0 s) | ₹2.78, 10 calls |
+| tight-diwali-2026-personal-care | 1 | 5/5 | — | — | llm | 29.5 s (LLM 0.0 s) | ₹1.44, 5 calls |
+| tight-offseason-beverages | 1 | 4/4 | — | — | llm | 58.7 s (LLM 0.1 s) | ₹5.67, 21 calls |
+| vague-no-category | 1 | 4/4 | scope.categories | — | llm | 6.9 s (LLM 0.1 s) | ₹3.32, 12 calls |
 
 ## Plan quality
 
