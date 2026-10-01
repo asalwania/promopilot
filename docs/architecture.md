@@ -91,6 +91,26 @@ Everything under `backend/src/promopilot/` is one Python package. The modules be
 | `evals` | Scenario runner, oracle, metrics and report; the only reader of ground truth besides `datagen` ([ADR 0056](adr/0056-eval-runner-and-scenarios.md)) | `python -m promopilot.evals` |
 | `api` | FastAPI routers, error schema, rate limits, OpenAPI export | [docs/api.md](api.md) |
 
+Which module uses which is drawn below. An arrow means "uses directly, and not only through another module in the diagram", so each module's other dependencies follow the arrows. The foundation modules `domain`, `economics` and `config` are left out because every module uses them. So are `cassettes`, `demo` and `logs`, which are wiring and scripts, and `evals`, the offline harness that plays the whole stack and is drawn in the process flow above.
+
+```mermaid
+flowchart TD
+  %% module-dependencies
+  api --> agents
+  agents --> mechanisms
+  agents --> simulator
+  agents --> llm
+  mechanisms --> optimizer
+  simulator --> models
+  optimizer --> models
+  optimizer --> competitors
+  optimizer --> guardrails
+  models --> data
+  datagen --> data
+```
+
+A test in `backend/tests/architecture/test_architecture_doc.py` reads the imports under `backend/src/promopilot/` and fails if this diagram's arrows stop being their transitive reduction, so the diagram cannot drift from the code ([ADR 0092](adr/0092-module-dependency-diagram-is-tested-against-imports.md)).
+
 The web app in `frontend/` is Next.js (App Router), TypeScript, Tailwind CSS and shadcn/ui, with TanStack Query and Recharts. Its API types are generated from [docs/openapi.json](openapi.json). The pages are:
 
 - `/`: the brief composer;
@@ -144,7 +164,7 @@ What each node does:
   - The loop stops early when a plan is clean, infeasible or planned by the default sequence, or when an attempt's findings repeat the previous attempt's exactly.
   - The best attempt becomes the plan revision, with its findings as open issues. Best means the fewest violations, then the fewest risk findings within 5% of the best objective, then the highest objective ([ADR 0078](adr/0078-regret-by-cause-and-the-critics-objective-tolerance.md)).
 - **Explainer** (LLM, checked). It writes a summary and a rationale per plan line, from tool outputs in which every amount is pre-formatted as it may be cited.
-  - `check_numeric_grounding` checks every number. An answer that fails is regenerated once. A second failure, or an LLM error, falls back to a template explanation.
+  - `check_numeric_grounding` checks every number. An answer that fails is regenerated once. A second failure, or an LLM error, falls back to a template explanation. It is shown the plan totals and the budget left, so it never has to add figures up itself ([ADR 0090](adr/0090-the-explainer-is-shown-the-totals-it-would-derive.md)).
   - For an amended revision, it also says what changed and why, from the deterministic diff.
 - **Clarify** and **Approval** are LangGraph interrupts. Approving an infeasible revision is refused. **Done** ends the session.
 

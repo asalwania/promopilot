@@ -89,3 +89,5 @@ Every decision PromoPilot made that SPEC.md did not settle, oldest first. Each r
 - [ADR 0086: Narrowing candidates never limits a clearance target; the demo brief plans feasibly, and accepting a relaxation moves to an infeasible session](0086-narrowing-never-limits-a-clearance-target.md)
 - [ADR 0087: Demand prediction computes each store-invariant term once, and every number is unchanged bit for bit](0087-demand-prediction-reads-store-invariant-terms-once.md)
 - [ADR 0088: The README is a short entry point for judges, the reference moves to docs/, and the tool contracts and agent-graph diagram are checked against the code](0088-readme-for-judges-and-docs-checked-against-code.md)
+- [ADR 0090: The Explainer is shown the totals and the budget left it would otherwise work out itself, so it never cites a figure no tool output shows; a refused recording dumps the Explainer's requests and answers](0090-the-explainer-is-shown-the-totals-it-would-derive.md)
+- [ADR 0092: The architecture document's module diagram shows the transitive reduction of the real imports, and a test checks it](0092-module-dependency-diagram-is-tested-against-imports.md)
