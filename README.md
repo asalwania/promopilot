@@ -575,6 +575,7 @@ docs/agents/ Agent workflow config (issue tracker, triage labels, domain docs)
 - [ADR 0086: Narrowing candidates never limits a clearance target; the demo brief plans feasibly, and accepting a relaxation moves to an infeasible session](docs/adr/0086-narrowing-never-limits-a-clearance-target.md)
 - [ADR 0089: The nine-blocker claim is kept at D2 only by a stated rule, on numbers from one clean live recording; the evidence matrix cites code, pytest ids, demo moments and metrics](docs/adr/0089-nine-blocker-claim-and-evidence-rules.md)
 - [ADR 0090: The Explainer is shown the totals and the budget left it would otherwise work out itself, so it never cites a figure no tool output shows; a refused recording dumps the Explainer's requests and answers](docs/adr/0090-the-explainer-is-shown-the-totals-it-would-derive.md)
+- [ADR 0091: The evidence matrix cites files and symbols, not line numbers, and a test resolves every citation](docs/adr/0091-the-matrix-cites-files-and-symbols-and-a-test-resolves-them.md)
 
 The domain glossary is [CONTEXT.md](CONTEXT.md).
 
