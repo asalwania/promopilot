@@ -4,7 +4,7 @@ Target running time **3:50**. The submission form takes 2–4 minutes and an mp4
 
 Everything on screen is one of the **recorded example briefs** of the home page, played on `make demo` with no API key: the planner, optimiser and simulator run live, and only the LLM's answers are replayed from cassettes (ADR 0054, ADR 0073). Anyone can reproduce every take. Do not type a brief of your own: it is not in the recordings and the demo says so.
 
-The `/evals` numbers are from `backend/evals/published/latest.md` (generated 2026-09-30, 33 scenarios, seed-42 world). Say them as written; do not round a miss into a pass.
+The `/evals` numbers are from `backend/evals/published/latest.md` (generated 2026-10-01, 33 scenarios, seed-42 world, `replay` provider). Say them as written; do not round a miss into a pass.
 
 ## Timing at a glance
 
@@ -88,11 +88,10 @@ Type the two amendments **exactly** as written: the recordings are keyed on thei
 
 **Screen:** `/evals`: metric cards, then the scenario table.
 
-> We scored 33 scenarios against a hidden ground truth. Thirty of thirty plans beat the rule-based baseline; every final plan passes every hard constraint. Elasticity recovery is eight percent error, against a target of twenty. And we show our misses: grounding is 97.4 percent against 98, and median regret is 12.3 percent against 10, caused by model error, which a learning loop on real data would address.
+> We scored 33 scenarios against a hidden ground truth. Thirty of thirty plans beat the rule-based baseline; every final plan passes every hard constraint. Elasticity recovery is eight percent error, against a target of twenty. Every explanation passes the numeric grounding check, thirty-nine of thirty-nine. And we show our miss: median regret is 12.3 percent against a target of 10, caused by model error, which a learning loop on real data would address.
 
-<!-- LATE: Grounding 97.4% moves when PR #187 (Explainer grounding fix) re-records the cassettes: re-read the grounding sentence against the new backend/evals/published/latest.md before recording. -->
-<!-- LATE: Consistency is n/a until a `make eval RUNS=5` run; if it has run by recording time, add one clause with its number, or leave it out. Do not say it passed before it has. -->
-<!-- LATE: the 30 of 30, 8 percent (8.1%) and 12.3 percent figures come from the current latest.md: re-check all of them if it is re-published. -->
+<!-- LATE: Consistency is n/a until the live `make eval RUNS=5` run; if it has run by recording time, add one clause with its number, or leave it out. Do not say it passed before it has. -->
+<!-- The 30 of 30, 8.1%, 39 of 39 and 12.3% figures are from the 2026-10-01 latest.md. -->
 
 ### 3:45–4:00 Closing summary
 

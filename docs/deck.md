@@ -29,7 +29,8 @@ HOW TO TURN THIS INTO THE PDF DECK
    `backend/evals/published/latest.md` and `docs/nine-blocker.md`.
 
 NUMBERS. Every figure below is from `backend/evals/published/latest.md`: generated
-2026-09-30T14:54:13Z, provider `openai (recording)`, seed-42 world, 33 scenarios x 1 run.
+2026-10-01T17:07:27Z, provider `replay` (it replays the recorded live LLM answers), seed-42 world,
+33 scenarios x 1 run. The one exception is session time: see slide 10.
 CLAIM RULE (ADR 0089, docs/adr/0089-nine-blocker-claim-and-evidence-rules.md, lands with
 PR #182): D2 holds when most of the 13 targeted metrics pass and constraint satisfaction,
 clarification, infeasibility handling and grounding each pass or miss only narrowly with a
@@ -100,14 +101,13 @@ Every final plan is scored against the hidden ground truth of a synthetic world 
 
 **Where we stand against the D2 targets (33 scenarios, seed-42 world):**
 
-- **10 of the 13 targeted metrics pass**, including constraint satisfaction 100%, extraction 100%, clarification 100%, infeasibility handling 100%, elasticity recovery, substitute and complement detection, and plan quality 100%.
-- **2 miss:** Grounding 97.4% (target 98%) and Regret 12.3% (target 10%).
+- **11 of the 13 targeted metrics pass**, including constraint satisfaction 100%, extraction 100%, clarification 100%, infeasibility handling 100%, grounding 100% (39 of 39), elasticity recovery, substitute and complement detection, and plan quality 100%.
+- **1 target misses:** Regret 12.3% (target 10%).
 - **1 is not measured yet:** Consistency (n/a).
 
-**Why D2 stands.** Our rule (ADR 0089): D2 is kept when most targets pass and the four critical ones (constraint satisfaction, clarification, infeasibility handling, grounding) each pass or miss only narrowly with a stated cause. Grounding misses by 0.6 points: 38 of 39 explanations passed, and the one that did not fell back to a template. Regret's miss has a cause (next slide). If the targets had mostly failed, we would have claimed D1.
+**Why D2 stands.** Our rule (ADR 0089): D2 is kept when most targets pass and the four critical ones (constraint satisfaction, clarification, infeasibility handling, grounding) each pass, or miss only narrowly with a stated cause. All four pass outright. D2 is kept on the strength of the other targets, and the one miss, Regret, is reported with its cause (next slide). If the targets had mostly failed, we would have claimed D1.
 
-<!-- LATE: Grounding is 97.4% (38 of 39) until PR #187 (Explainer grounding fix) re-records the cassettes; then update this slide, slide 9 and slide 11, and the count "10 of the 13" (it becomes 11 if Grounding reaches 98%). If it passes, drop "misses only narrowly" and say grounding passes. -->
-<!-- LATE: Consistency is n/a until a `make eval RUNS=5` run (ADR 0089 D4); then say its number and whether it passes (target 90%), and update "1 is not measured yet" and the 10-of-13 count. -->
+<!-- LATE: Consistency is n/a until the live `make eval RUNS=5` run (ADR 0089 D4); then say its number and whether it passes (target 90%), and update "1 is not measured yet" and the 11-of-13 count (12 of 13 if it passes; if it fails it becomes a second miss and the count stays 11). -->
 
 ---
 
@@ -215,7 +215,7 @@ The recorded **Diwali demo** brief, end to end, on `make demo` with no API key:
 
 # 9. Reliability evidence: measured against hidden truth
 
-33 scenarios in 9 groups, scored by an oracle that knows the true demand function. Provider: `openai (recording)`, seed-42 world, 1 run each, generated 2026-09-30.
+33 scenarios in 9 groups, scored by an oracle that knows the true demand function. Provider: `replay` (the recorded live answers), seed-42 world, 1 run each, generated 2026-10-01.
 
 | Metric | Result | Target | |
 |---|---|---|---|
@@ -224,7 +224,7 @@ The recorded **Diwali demo** brief, end to end, on `make demo` with no API key:
 | Extraction accuracy | 100.0% (152 of 152) | ≥ 95% | pass |
 | Clarification behaviour | 100.0% (3 of 3) | 100% | pass |
 | Infeasibility handling | 100.0% (2 of 2) | 100% | pass |
-| **Grounding** | **97.4% (38 of 39)** | ≥ 98% | **miss** |
+| Grounding | 100.0% (39 of 39) | ≥ 98% | pass |
 | Elasticity recovery (median abs error) | 8.1% | ≤ 20% | pass |
 | Substitute precision / recall | 86.7% / 100% | ≥ 80% / ≥ 70% | pass |
 | Complement precision / recall | 100% / 97.5% | ≥ 80% / ≥ 70% | pass |
@@ -232,15 +232,13 @@ The recorded **Diwali demo** brief, end to end, on `make demo` with no API key:
 | **Regret (median vs best plan)** | **12.3% (12 of 29 within 10%)** | ≤ 10% | **miss** |
 | Consistency (Jaccard over 5 runs) | n/a | ≥ 90% | not measured |
 
-- **Grounding miss:** 1 of 39 explanations had a number the check could not match to tool output, and fell back to the template (`price-war-staples-christmas-2025`).
+- **Grounding:** all 39 explanations passed the numeric check; none fell back to the template.
 - **Regret miss, with its cause:** of the 17 runs above 10%, **16 are model error** (the demand model over-values the options the optimiser picks), 1 is the planner's choices, 0 are timeouts. By cause the median is: model error 9.1%, planner 0.0%, timeouts 0.0%. One more run was not counted because its best plan was infeasible.
 - **Baseline forecast (reported, aim ≤ 25% WAPE):** 13.5% at region × SKU, 25.1% at store × SKU, 43.5% at store × SKU × segment.
 
 ![w:560](../frontend/screenshots/21-evals-dashboard.png) ![w:560](../frontend/screenshots/22-evals-scenarios.png)
 
-<!-- LATE: Grounding 97.4% (38 of 39) moves when PR #187 re-records the cassettes: update the row, the "Grounding miss" bullet (or delete it if it passes) and the table's result column. -->
-<!-- LATE: Consistency n/a gets a number from a `make eval RUNS=5` run; fill the row with its value and its own timestamp (ADR 0089 D4). -->
-<!-- LATE: if the main session re-publishes backend/evals/published/ after #187, re-check every number on this slide (generated_at, counts, regret) against the new latest.md. -->
+<!-- LATE: Consistency n/a gets a number from the live `make eval RUNS=5` run; fill the row with its value and its own timestamp (ADR 0089 D4). -->
 
 ---
 
@@ -254,13 +252,12 @@ Over the 30 scored plans, against the rule-based baseline ("20% off the top 10 s
 - **Profit uplift:** the 30 plans earn **₹28.2 lakh** of oracle objective (incremental profit plus clearance value) in total, against **−₹11.1 lakh** for the baseline. Median per scenario: **₹66,540** against **−₹33,885**.
 - **Clearance:** the clearance scenarios plan to their stock target without breaking margin; where a target cannot be met (1 of 4), the plan declares it infeasible and proposes the smallest relaxation (infeasibility handling 100%).
 - **Constraint breaks:** **zero** in 30 of 30 final plans at plan time (every hard constraint checked by `validate_plan`). Against the hidden truth, 4 of 30 plans (13.3%) break a limit once demand is realised; the target is 15% or less, and plans keep a safety margin by design.
-- **Speed and cost:** P50 session **68.3 s** (LLM 36 s, the rest the optimiser and simulator) and **₹3.54** of LLM cost, against the ₹20 target. SPEC asks for under 60 s for a 2-region × 2-category plan: we are close and over.
+- **Speed and cost:** P50 session **68.3 s** with a live LLM (LLM 36 s, the rest the optimiser and simulator; from the live recording run of 2026-09-30, since the 2026-10-01 report replays recorded answers and its 18.0 s excludes LLM time) and **₹3.52** of LLM cost, against the ₹20 target (token-based, so it holds under replay). SPEC asks for under 60 s for a 2-region × 2-category plan: we are close and over.
 - **Planner time saved:** not measured against spreadsheet planning; we claim only the 68 s per plan.
 
 ![w:560](../frontend/screenshots/21-evals-dashboard.png) ![w:560](../frontend/screenshots/09-constraint-checklist.png)
 
-<!-- LATE: P50 session time (68.3 s, LLM 36 s) and cost (₹3.54) can move if PR #187's re-record changes the Explainer's calls; re-check them against the new latest.md. -->
-<!-- LATE: the "30 of 30", ₹28.2 lakh and −₹11.1 lakh figures are sums of the Ours and Rule-based columns of latest.md's Plan quality table; recompute them (node or a spreadsheet) if latest.md is re-published. -->
+<!-- The ₹28.2 lakh and −₹11.1 lakh sums are of the Ours and Rule-based columns of the 2026-10-01 latest.md Plan quality table (30 rows). -->
 
 ---
 
@@ -271,14 +268,13 @@ Over the 30 scored plans, against the rule-based baseline ("20% off the top 10 s
 - **Per-region scale:** one joint optimiser solve over region-level plan lines with pooled stock; candidate pruning and solver work limits keep it fast; plans are seeded and reproducible.
 - **Human approval:** nothing is final until a person approves. A rejection keeps its reason; an infeasible plan cannot be approved.
 - **Audit trail:** every amendment, relaxation, approval and rejection is listed, oldest first.
-- **Grounding:** every number in an explanation is checked against tool output; a failed check regenerates once, then falls back to a template. Today **97.4%** of explanations pass the check (target 98%).
+- **Grounding:** every number in an explanation is checked against tool output; a failed check regenerates once, then falls back to a template. **100%** of explanations pass the check today (39 of 39; target 98%).
 - **Fault tolerance:** retries with backoff, a fallback LLM provider, deterministic fallbacks (the optimiser runs if the LLM is down), replay mode, checkpointed state.
 - **Safe by design:** the brief is data, never instructions; input limits; per-client rate limits; API keys redacted in logs; behavioural segments only; synthetic data, no PII.
 - **Assumptions are always visible**, each with its source and confidence.
 
 ![w:380](../frontend/screenshots/17-approve-confirm.png) ![w:380](../frontend/screenshots/19-reject-plan.png) ![w:380](../frontend/screenshots/20-infeasibility-panel.png)
 
-<!-- LATE: the 97.4% grounding figure here follows slides 4 and 9: update it when PR #187 lands. -->
 
 ---
 
