@@ -175,6 +175,18 @@ jobs:
       - run: cd frontend && pnpm install --frozen-lockfile
       - run: cd frontend && pnpm exec playwright install --with-deps chromium
       - run: cd frontend && pnpm test:e2e
+      # The deck screenshot set (#78): every key screen at 1920x1080, from the recorded
+      # example briefs only (no key). The script fails if a screen is missing from the set.
+      - name: Capture the deck screenshots
+        timeout-minutes: 15
+        run: cd frontend && pnpm screenshots
+      - if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: deck-screenshots
+          path: frontend/screenshots/
+          retention-days: 30
+          if-no-files-found: warn
       # A later start reuses the data and models: the init step skips both.
       - name: make demo again (restart)
         timeout-minutes: 5

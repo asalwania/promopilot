@@ -21,6 +21,8 @@ node_modules/
 coverage/
 playwright-report/
 test-results/
+# the deck screenshots `make screenshots` captures (CI uploads them as an artifact)
+frontend/screenshots/
 
 # data produced by `make data` (ground truth must never be committed)
 data/generated/
