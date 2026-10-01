@@ -8,11 +8,11 @@ PromoPilot claims **F3 × D2** on the hackathon's 3×3 grid (SPEC §1.1, §2.1):
 
 The claim rule, the evidence format and the source of every number are recorded in [ADR 0089](adr/0089-nine-blocker-claim-and-evidence-rules.md); how the evidence is cited, and checked, is [ADR 0091](adr/0091-the-matrix-cites-files-and-symbols-and-a-test-resolves-them.md). Vocabulary follows [CONTEXT.md](../CONTEXT.md); how the system is built is in the architecture document. <!-- LATE: link the architecture document (docs/architecture.md) once #75 (PR #183) merges -->
 
-<!-- LATE: the numbers below are copied from backend/evals/published/latest.md, run 2026-09-30T14:54:13Z. Four things move them, and each is marked "LATE:" in place (search this file for "LATE:"): (1) the re-record after #187 (PR #187, Explainer totals) republishes the report, which moves grounding, session time and session cost and may move the rest, so re-copy every number and the timestamp if it does; (2) the `make eval RUNS=5 SMOKE=1` consistency run, which is not measured yet; (3) the verdict, which applies ADR 0089 D3 to the final numbers; (4) the re-check of the demo moments against the re-recorded sessions. -->
+<!-- LATE: the only numbers still open are consistency (the `make eval RUNS=5 SMOKE=1` live run, not measured yet) and what depends on it: the "n of 13" count and the verdict. Search this file for "LATE:". Everything else is copied from `backend/evals/published/latest.md`, run 2026-10-01T17:07:27Z. -->
 
 ## Headline numbers
 
-All numbers below come from one report: `backend/evals/published/latest.json`, generated 2026-09-30T14:54:13Z (run `20260930T145413Z`) with the `openai (recording)` provider on the seed-42 world, 33 scenarios, 1 run each, published in commit `de5d749` (#186). Consistency comes from a supplementary live run (see [Consistency](#consistency)). <!-- LATE: if the #187 re-record republishes latest.*, update this timestamp, provider and commit -->
+All numbers below, except latency, come from one report: `backend/evals/published/latest.json`, generated 2026-10-01T17:07:27Z (run `20261001T170727Z`) with the `replay` provider on the seed-42 world, 33 scenarios, 1 run each, published in commit `96b53e9` (#189) after the Explainer fix of #187 (#185). The `replay` provider answers from the committed cassettes, which were recorded live (#186, #189), so its plans and Explainer answers are the live model's. Its session time is replay-only and is not used as latency: latency is cited from the earlier live run (see [Where we fall short](#where-we-fall-short)). Consistency comes from a supplementary live run (see [Consistency](#consistency)).
 
 | | Result | Target |
 |---|---|---|
@@ -20,10 +20,10 @@ All numbers below come from one report: `backend/evals/published/latest.json`, g
 | Final plans passing every hard constraint | 100.0% (30 of 30; 3 revisions are declared `INFEASIBLE` and counted apart) | 100% |
 | Infeasible requests declared, with a relaxation | 100.0% (2 of 2) | 100% |
 | Vague or conflicting briefs that ask or flag | 100.0% (3 of 3) | 100% |
-| Explanations passing numeric grounding | 97.4% (38 of 39) **miss** <!-- LATE: grounding moves with the #187 re-record (PR #187 fixes the one ungrounded answer's cause) --> | ≥ 98% |
-| §12.2 targeted metrics met | 10 of 13 pass; 2 miss (grounding, regret); consistency not yet measured <!-- LATE: n of 13 after the #187 re-record (grounding) and the RUNS=5 consistency run --> | most, per ADR 0089 D3 |
+| Explanations passing numeric grounding | 100.0% (39 of 39) | ≥ 98% |
+| §12.2 targeted metrics met | 11 of 13 pass; regret misses; consistency not yet measured <!-- LATE: n of 13 after the RUNS=5 consistency run --> | most, per ADR 0089 D3 |
 
-**Verdict:** D2 holds, on the strength of ADR 0089 D3: ten of the 13 targeted metrics pass, constraint satisfaction, clarification and infeasibility handling pass outright, and the two misses are listed in [Where we fall short](#where-we-fall-short) with their causes (grounding by one answer in 39, regret at 12.3% against 10%). <!-- LATE: re-apply ADR 0089 D3 after the #187 re-record and the RUNS=5 consistency run; "D2 holds" stands unless grounding, constraint satisfaction, clarification or infeasibility handling fail by more than a narrow, explained margin or fewer than seven metrics pass -->
+**Verdict:** D2 holds, on the strength of ADR 0089 D3: eleven of the 13 targeted metrics pass, constraint satisfaction, clarification behaviour, infeasibility handling and grounding all pass outright, and the one miss, regret at 12.3% against 10%, is listed in [Where we fall short](#where-we-fall-short) with its cause. <!-- LATE: re-apply ADR 0089 D3 once the RUNS=5 consistency result is in; "D2 holds" stands unless fewer than seven metrics pass -->
 
 ## Justification
 
@@ -101,7 +101,7 @@ SPEC §16, filled in. Code is cited by file and function or class (ADR 0091), no
   - `tests/unit/models/test_promo_response.py::test_mechanism_effects_are_estimated_from_promo_history`
   - `tests/unit/optimizer/test_generate_options.py::test_a_bundle_appears_only_with_a_detected_complement_even_outside_the_scope`
   - `frontend/tests/unit/mechanism-drawer.test.tsx`
-- **Demo moment.** "Compare mechanisms for …" on a plan line opens the mechanism drawer with the chosen mechanism marked (`frontend/tests/e2e/brief-to-plan.spec.ts`). In the recorded demo session the chosen mechanisms are `PCT_OFF` and `FIXED_PRICE`, with `BOGO` and `BUNDLE` compared. <!-- LATE: re-check against the sessions re-recorded for #187 -->
+- **Demo moment.** "Compare mechanisms for …" on a plan line opens the mechanism drawer with the chosen mechanism marked (`frontend/tests/e2e/brief-to-plan.spec.ts`). In the recorded demo session the chosen mechanisms are `PCT_OFF` and `FIXED_PRICE`, with `BOGO` and `BUNDLE` compared.
 - **Eval metric.** Plan quality: 100.0% (30 of 30). There is no mechanism-specific metric; the mechanism is one of the decisions the oracle scores.
 
 ### F-03 Optimise the discount and customise other strategies
@@ -134,7 +134,7 @@ SPEC §16, filled in. Code is cited by file and function or class (ADR 0091), no
   - `tests/unit/optimizer/test_solve_substitutes.py::test_two_strong_substitutes_are_never_promoted_together`
   - `tests/unit/guardrails/test_validate_plan.py::test_two_strong_substitutes_promoted_together_are_flagged`
   - `frontend/tests/unit/cross-effect-callouts.test.tsx`
-- **Demo moment.** The cannibalisation callout on a plan line: "Promoting A reduces B's units by N%" (`frontend/tests/unit/cross-effect-callouts.test.tsx`). In the recorded `regional` and `e2e` sessions the Critic raises a heavy-cannibalisation finding, for example "SKU0035 in North … the cannibalisation of its substitutes ₹935 is 266.3% of its incremental profit ₹351", shown as a Critic finding in the trace timeline. The callout itself is not asserted in a recorded session's end-to-end test (ADR 0089 D9). <!-- LATE: re-check the finding against the sessions re-recorded for #187 -->
+- **Demo moment.** The cannibalisation callout on a plan line: "Promoting A reduces B's units by N%" (`frontend/tests/unit/cross-effect-callouts.test.tsx`). In the recorded `regional` and `e2e` sessions the Critic raises a heavy-cannibalisation finding, for example "SKU0035 in North … the cannibalisation of its substitutes ₹935 is 266.3% of its incremental profit ₹351", shown as a Critic finding in the trace timeline. The callout itself is not asserted in a recorded session's end-to-end test (ADR 0089 D9).
 - **Eval metric.**
   - Substitute detection: precision 86.7% (91 of 105; target ≥ 80%), recall 100.0% (91 of 91; target ≥ 70%).
   - Heavy-cannibalisation scenarios passing `no_strong_substitutes_together`: 3 of 3.
@@ -151,7 +151,7 @@ SPEC §16, filled in. Code is cited by file and function or class (ADR 0091), no
   - `tests/unit/models/test_cross_effects.py::test_a_line_lifts_a_complement_in_its_region_and_counts_it_as_halo`
   - `tests/unit/mechanisms/test_compare.py::test_a_bundle_suggestion_lists_the_pair_its_lift_and_its_incremental_profit`
   - `frontend/tests/unit/cross-effect-callouts.test.tsx`
-- **Demo moment.** The `BUNDLE` row of the mechanism drawer, compared on plan lines of the recorded demo, `regional` and `e2e` sessions, and the halo callout on a plan line. None of the five recorded demo sessions chooses a `BUNDLE` line, so a chosen bundle and a halo callout are shown by `test_a_bundle_suggestion_lists_the_pair_its_lift_and_its_incremental_profit`, `frontend/tests/unit/cross-effect-callouts.test.tsx` and the complement recovery below; the eval recording does hold plan lines with a bundle partner (ADR 0089 D9). <!-- LATE: re-check against the sessions and eval cassettes re-recorded for #187 -->
+- **Demo moment.** The `BUNDLE` row of the mechanism drawer, compared on plan lines of the recorded demo, `regional` and `e2e` sessions, and the halo callout on a plan line. None of the five recorded demo sessions chooses a `BUNDLE` line, so a chosen bundle and a halo callout are shown by `test_a_bundle_suggestion_lists_the_pair_its_lift_and_its_incremental_profit`, `frontend/tests/unit/cross-effect-callouts.test.tsx` and the complement recovery below; the eval recording does hold plan lines with a bundle partner (ADR 0089 D9).
 - **Eval metric.** Complement detection: precision 100.0% (39 of 39; target ≥ 80%), recall 97.5% (39 of 40; target ≥ 70%).
 
 ### F-06 Consider inventory constraints
@@ -250,7 +250,7 @@ SPEC §16, filled in. Code is cited by file and function or class (ADR 0091), no
 | SF-04 Human oversight | the approval interrupt in `agents/graph.py` `build_graph`; approve and reject in `api/sessions.py` (ADR 0046) | `tests/unit/agents/test_graph.py::test_rejecting_records_the_reason_and_waits_at_approval_again`, `frontend/tests/e2e/approve.spec.ts`, `frontend/tests/e2e/reject.spec.ts` | approve after a confirm, reject with a reason, the audit trail |
 | SF-05 Explainability | `guardrails/grounding.py` `check_numeric_grounding`, `agents/explainer.py` `explain_plan` (ADR 0028, ADR 0050) | `tests/unit/agents/test_grounded_explainer.py::test_a_second_ungrounded_answer_falls_back_to_the_template`, `tests/architecture/test_recorded_sessions_are_grounded.py::test_every_number_in_a_recorded_explanation_or_critique_is_in_its_tool_data` | each plan line's rationale; every number's source tooltip |
 
-Eval metrics: grounding 97.4% (38 of 39; target ≥ 98%, a miss) <!-- LATE: grounding after the #187 re-record -->; consistency not yet measured (target ≥ 0.9) <!-- LATE: mean Jaccard from the RUNS=5 report -->.
+Eval metrics: grounding 100.0% (39 of 39; target ≥ 98%); consistency not yet measured (target ≥ 0.9) <!-- LATE: mean Jaccard from the RUNS=5 report -->.
 
 ## Agentic capabilities
 
@@ -267,7 +267,7 @@ SPEC §5 AG-01…AG-06, judged under evaluation criterion 5 (ADR 0089 D6).
 
 ## Final eval numbers
 
-Copied from `backend/evals/published/latest.md`, generated 2026-09-30T14:54:13Z (`openai (recording)` provider, seed-42 world, 33 scenarios, 1 run each). <!-- LATE: re-copy the whole table if the #187 re-record republishes latest.* -->
+Copied from `backend/evals/published/latest.md`, generated 2026-10-01T17:07:27Z (`replay` provider, seed-42 world, 33 scenarios, 1 run each), except the session time, which is replay-only and so replaced by the live figure of an earlier run.
 
 | Metric | Value | Target | Result |
 |---|---|---|---|
@@ -276,7 +276,7 @@ Copied from `backend/evals/published/latest.md`, generated 2026-09-30T14:54:13Z 
 | Extraction accuracy | 100.0% (152 of 152) | ≥ 95% | pass |
 | Clarification behaviour | 100.0% (3 of 3) | 100% | pass |
 | Infeasibility handling | 100.0% (2 of 2) | 100% | pass |
-| Grounding | 97.4% (38 of 39) <!-- LATE: grounding after the #187 re-record --> | ≥ 98% | **miss** <!-- LATE: result after the #187 re-record --> |
+| Grounding | 100.0% (39 of 39) | ≥ 98% | pass |
 | Elasticity recovery (median abs % error) | 8.1% (679 of 800) | ≤ 20% | pass |
 | Substitute precision / recall | 86.7% (91 of 105) / 100.0% (91 of 91) | ≥ 0.8 / ≥ 0.7 | pass |
 | Complement precision / recall | 100.0% (39 of 39) / 97.5% (39 of 40) | ≥ 0.8 / ≥ 0.7 | pass |
@@ -285,8 +285,8 @@ Copied from `backend/evals/published/latest.md`, generated 2026-09-30T14:54:13Z 
 | Regret (median, against the best plan) | 12.3% (12 of 29 runs within 10%) | ≤ 10% | **miss** |
 | Consistency (Jaccard across 5 runs) | not measured <!-- LATE: mean Jaccard from the RUNS=5 report --> | ≥ 0.9 | <!-- LATE: pass or miss --> pending |
 | Open issues per final plan (median) | 1 (21 of 33 plans have at least one; 41 in all) | report | — |
-| P50 session time | 68.3 s (slowest 297 s; LLM P50 36 s) <!-- LATE: session time after the #187 re-record --> | report (SPEC §6: under 60 s) | — |
-| P50 session cost | ₹3.54 (448 LLM calls in all) <!-- LATE: session cost after the #187 re-record --> | report (SPEC §6: under ₹20) | — |
+| P50 session time | 68.3 s, slowest 297 s, LLM P50 36 s: from the live run `20260930T145413Z` (2026-09-30, `openai (recording)`), not this report. This report's 18.0 s (slowest 131 s, LLM P50 0 s) is replay-only and excludes LLM time. | report (SPEC §6: under 60 s) | — |
+| P50 session cost | ₹3.52 (446 LLM calls in all, priced from the recorded token counts) | report (SPEC §6: under ₹20) | — |
 
 Scenarios passing by group (a scenario passes when its final plan meets its expected properties):
 
@@ -313,10 +313,9 @@ Under replay a scenario's runs are identical by construction (ADR 0063), so cons
 Every miss against a §12.2 target or a SPEC §6 requirement, with its cause (ADR 0089 D3, D8).
 
 - **Regret: median 12.3% against ≤ 10% (a miss).** Twelve of 29 counted runs are within 10%; the best plan of one more run is infeasible and is not counted. Of the 17 runs above 10%, model error is the largest part in 16 and the planner's choices in 1 (`demo-budget-cut-drop-west`, 60.5% of its 69.5%); timeouts are never the largest part. Over all counted runs the median model-error part is 9.1% (₹150,918 in all) against 0.0% for the planner (₹67,913) and for timeouts. The cause is the optimiser's curse: the optimiser selects the options the fitted model overestimates (#170, ADR 0078). The tail is long: `price-war-staples-christmas-2025` shows 109.7% because its best plan earns only ₹1,575. We keep D2 on the strength of the other targets (ADR 0089 D3); the miss is not hidden.
-- **Grounding: 97.4% (38 of 39) against ≥ 98% (a miss).** One Explainer answer, in `price-war-staples-christmas-2025`, fell back to the template after its regenerated answer was still ungrounded, and every other answer passed. The cause is an Explainer figure the plan data does not show, which the guard rejects because the LLM never computes numbers. PR #187 (#185) puts the plan totals the LLM tends to derive into the plan data and re-records the Explainer; only that re-record shows whether this scenario then passes. <!-- LATE: grounding after the #187 re-record; drop this entry if it reaches 98% -->
 - **Consistency: not measured on this report.** Replay cannot vary a scenario's runs; the supplementary live run is pending. <!-- LATE: consistency result from the RUNS=5 report; add a miss entry here if it is below 0.9 -->
 - **Baseline forecast WAPE** is 13.5% by region × SKU and 25.1% by store × SKU, at the aim of 25%, and 43.5% by store × SKU × segment, above it. SPEC §12.2 asks to report it with an aim, not to meet a target.
-- **Latency: P50 session 68.3 s over the 33 scenarios, slowest 297 s, against SPEC §6's 60 s for a 2 regions × 2 categories plan.** The median covers scenarios larger than that benchmark and the amendment sessions' several rounds, and it counts recorded LLM calls the harness replayed from cassettes, so the LLM share (P50 36 s) is understated for a fully live run. The solver is the cause on the largest scopes (#166, #168 below). #113 cut `generate_options` on the demo brief from about 16.6 s to about 4.2 s on a loaded machine (ADR 0087). Cost per session, ₹3.54 at the median, is well within the ₹20 target. <!-- LATE: latency and cost after the #187 re-record -->
+- **Latency: P50 session 68.3 s over the 33 scenarios, slowest 297 s, against SPEC §6's 60 s for a 2 regions × 2 categories plan.** These are the live figures of the earlier published run `20260930T145413Z` (2026-09-30, `openai (recording)` provider). The current report (`replay`, 2026-10-01) shows a P50 of 18.0 s, slowest 131 s and an LLM P50 of 0 s, which is replay-only and excludes LLM time, so it is not the latency. The live median covers scenarios larger than that benchmark and the amendment sessions' several rounds, and the recording replayed the calls a cassette already held, so its LLM share (P50 36 s) is understated for a fully live run. The solver is the cause on the largest scopes (#166, #168 below). #113 cut `generate_options` on the demo brief from about 16.6 s to about 4.2 s on a loaded machine (ADR 0087). Cost per session, ₹3.52 at the median in the current report, is well within the ₹20 target.
 
 ### Known gaps
 
