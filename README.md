@@ -180,17 +180,27 @@ The scenarios, metrics and targets are explained in [docs/guide/evals.md](docs/g
 
 ## Results
 
-<!-- LATE: headline eval numbers. Fill every value from the final published run (backend/evals/published/latest.md), and Consistency from the RUNS=5 run. Copy them as the report states them, with its timestamp, and keep them equal to docs/nine-blocker.md. The targets are SPEC §12.2's. -->
+From the published report `backend/evals/published/latest.md`, generated **2026-10-01T17:07:27Z** on the seed-42 world: 33 scenarios, one run each, with the LLM calls replayed from the recordings made live (provider `replay`). The values are copied as the report states them. Targets are SPEC §12.2's.
 
-| Metric | Result | Target |
-|---|---|---|
-| Plans beating the rule-based baseline | _pending_ | ≥ 90% |
-| Final plans passing every hard constraint | _pending_ | 100% |
-| Grounding: explanation numbers traced to a tool output | _pending_ | ≥ 98% |
-| Regret, median against the best plan | _pending_ | ≤ 10% |
-| Consistency: the same SKUs chosen across runs | _pending_ | ≥ 90% |
+| Metric | Result | Target | |
+|---|---|---|---|
+| Plans beating the rule-based baseline | 100.0% (30 of 30) | ≥ 90% | pass |
+| Final plans passing every hard constraint | 100.0% (30 of 30) | 100% | pass |
+| Grounding: explanation numbers traced to a tool output | 100.0% (39 of 39) | ≥ 98% | pass |
+| Regret, median against the best plan | 12.3% (12 of 29) | ≤ 10% | **miss** |
+| Consistency: the same SKUs chosen across runs | <!-- LATE: Consistency from the live RUNS=5 run; fill with its value, run timestamp and pass or miss. Must equal docs/nine-blocker.md. -->_pending_ | ≥ 90% | |
 
-Every number is from one report, with the run's timestamp: _pending_. How each is measured, and the verdict on the claim, are in [docs/nine-blocker.md](docs/nine-blocker.md).
+- **Regret misses its target.** The median plan is 12.3% worse than the best plan found on the true parameters, against a target of 10%. Model error is the largest cause ([#170](https://github.com/asalwania/promopilot/issues/170)).
+- **Also in the report.**
+  - Oracle breach rate 13.3% (4 of 30; target ≤ 15%).
+  - Extraction accuracy 100.0% (152 of 152; target ≥ 95%).
+  - Clarification 3 of 3 and infeasibility handling 2 of 2 (both target 100%).
+  - Elasticity recovery 8.1% median absolute error (target ≤ 20%).
+  - Substitute precision 86.7% and recall 100.0%; complement precision 100.0% and recall 97.5%.
+- **The demand baseline** is reported against an aim of 25% WAPE: 43.5% at store × SKU × segment, 25.1% at store × SKU and 13.5% at region × SKU. The plan works at region level.
+- **Latency and cost.** The last live run (`20260930T145413Z`) had a P50 session time of 68.3 s and a P50 cost of ₹3.54. A replayed run holds no LLM time, so the latest report's session time is not a latency figure.
+
+How each is measured, and the verdict on the claim, are in [docs/nine-blocker.md](docs/nine-blocker.md).
 
 ## Known gaps
 
@@ -203,7 +213,7 @@ These are open issues, listed so no one has to find them. Each is a gap in speed
 - **Clearance asks by SKU id ([#174](https://github.com/asalwania/promopilot/issues/174)).** A free-text clearance ask cannot name SKU ids, and when a brief makes several asks the first wins.
 - **The Critic's tolerance ([#181](https://github.com/asalwania/promopilot/issues/181)).** The Critic keeps a risk-reducing attempt only within 5% of the best objective, so a per-SKU depth cap is often discarded and its finding stays open. The tolerance is to be tuned from the full eval.
 
-<!-- LATE: check each gap above against its issue before submission; drop one that was closed and add any new one that still affects a result. -->
+<!-- LATE: all six gaps were open on 2026-10-01. Recheck each against its issue at submission; drop one that was closed and add any new one that still affects a result. -->
 
 ## Demo video
 
