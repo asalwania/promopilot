@@ -1251,15 +1251,27 @@
           "sku_limits": [
             {
               "max_depth_pct": 4,
+              "mechanisms": [
+                "PCT_OFF",
+                "BOGO",
+                "BUNDLE",
+                "FIXED_PRICE"
+              ],
               "sku_id": "SKU0006"
             },
             {
               "max_depth_pct": 4,
+              "mechanisms": [
+                "PCT_OFF",
+                "BOGO",
+                "BUNDLE",
+                "FIXED_PRICE"
+              ],
               "sku_id": "SKU0035"
             }
           ]
         },
-        "id": "call_98VpxFCsRwGdKJpzN8LT5Kqw",
+        "id": "call_BogvUEtdeyxzQVXVOMcZmTnC",
         "name": "generate_candidates"
       }
     ]
@@ -1269,7 +1281,7 @@
     {
       "input_tokens": 6000,
       "model": "gpt-4.1-mini",
-      "output_tokens": 128
+      "output_tokens": 164
     }
   ]
 }

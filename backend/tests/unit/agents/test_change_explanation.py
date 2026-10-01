@@ -189,5 +189,5 @@ def test_the_template_change_explanation_always_passes_grounding(
 def test_the_explainer_prompt_is_versioned_and_asks_what_changed() -> None:
     prompt = explainer_prompt()
 
-    assert prompt.startswith("<!-- prompt: explainer v2")
+    assert prompt.startswith("<!-- prompt: explainer v3")
     assert "changes_from_previous" in prompt

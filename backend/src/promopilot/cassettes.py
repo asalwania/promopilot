@@ -9,6 +9,9 @@ re-records just the named sessions and keeps the others (ADR 0019, ADR 0022, ADR
 `--check` plays the same scripts on the cassettes alone, whatever LLM_PROVIDER says, and exits
 non-zero naming every miss or fallback, so CI proves the stack replays whole sessions with no
 key (ADR 0054).
+
+A refused recording keeps the cassettes but writes the Explainer's live requests and answers to
+`cassettes/failed/`, to see what it was shown and wrote when it fell back (ADR 0090).
 """
 
 import argparse
@@ -31,6 +34,10 @@ from promopilot.agents import (
 from promopilot.api.planning import build_planning
 from promopilot.config import Settings
 from promopilot.llm import build_provider, track_usage
+
+FAILED_DIR = "failed"
+"""Where a refused recording leaves the Explainer's requests and answers, inside the cassette
+folder (git-ignored), to see why it fell back (ADR 0090)."""
 
 
 async def run(argv: Sequence[str] | None = None) -> int:
@@ -72,6 +79,7 @@ async def run(argv: Sequence[str] | None = None) -> int:
                 settings.llm_cassette_dir,
                 planning,
                 only=args.only,
+                failed_dir=settings.llm_cassette_dir / FAILED_DIR,
             )
     except (RecordingError, PlanningError, LookupError, ValueError) as error:
         print(f"{error}", file=sys.stderr)

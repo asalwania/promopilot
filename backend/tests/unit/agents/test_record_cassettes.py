@@ -302,6 +302,39 @@ async def test_an_explanation_that_falls_back_to_the_template_fails_the_run(
     assert names(tmp_path) == before
 
 
+async def test_a_failed_run_dumps_the_explainers_requests_and_answers_to_look_at(
+    data: InMemoryRetailData, tmp_path: Path
+) -> None:
+    # A fallback changes no cassette, yet what the Explainer was shown and wrote is what
+    # tells why it fell back (#185).
+    failed = tmp_path / "failed"
+    live = FakeProvider([reading(), *round_turns(await request_for(data)), UNGROUNDED, UNGROUNDED])
+
+    with pytest.raises(RecordingError, match="Explainer fell back") as error:
+        await record_cassettes(
+            [script()], live, data, tmp_path / "recorded", planning(), failed_dir=failed
+        )
+
+    dumped = [json.loads(path.read_text(encoding="utf-8")) for path in cassette_paths(failed)]
+    assert {cassette["schema_name"] for cassette in dumped} == {"ExplainerAnswer"}
+    assert len(dumped) == 2, "the first answer and its regeneration"
+    shown = next(m for m in dumped[0]["request"]["messages"] if m["role"] == "user")
+    assert "Plan data" in shown["content"]
+    assert {c["response"]["summary"] for c in dumped} == {UNGROUNDED.summary}
+    assert str(failed) in str(error.value)
+
+
+async def test_a_run_that_succeeds_dumps_nothing(data: InMemoryRetailData, tmp_path: Path) -> None:
+    failed = tmp_path / "failed"
+    live = FakeProvider([reading(), *round_turns(await request_for(data)), GROUNDED])
+
+    await record_cassettes(
+        [script()], live, data, tmp_path / "recorded", planning(), failed_dir=failed
+    )
+
+    assert not failed.exists()
+
+
 # --- pruning, and re-recording some sessions -------------------------------------------------
 
 

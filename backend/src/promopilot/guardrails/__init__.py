@@ -9,7 +9,8 @@ outputs, and `format_rupees`, `format_percent` and `format_units` show numbers s
 always accepts them (ADR 0050). `diff_revisions` compares consecutive plan revisions
 (ADR 0052). The safety margin's arithmetic (`planned_promo_cost`, `stock_units`,
 `margin_shortfall`, `planned_margin`) keeps plans away from their limits (ADR 0080).
-`read_stated_numbers` reads the rupees and percentages a brief states, for the
+`plan_totals` adds up a plan's lines and the budget left, so the Explainer's LLM never has to
+(ADR 0090). `read_stated_numbers` reads the rupees and percentages a brief states, for the
 Context agent's fallback reading (ADR 0053).
 """
 
@@ -35,6 +36,7 @@ from promopilot.guardrails.safety import (
     units_cv,
 )
 from promopilot.guardrails.stated import StatedKind, StatedNumber, read_stated_numbers
+from promopilot.guardrails.totals import PlanTotals, plan_totals
 from promopilot.guardrails.validation import (
     ClearanceFacts,
     LineFacts,
@@ -51,6 +53,7 @@ __all__ = [
     "LineFacts",
     "PlanFacts",
     "PlanLimits",
+    "PlanTotals",
     "RiskThresholds",
     "SkuFacts",
     "StatedKind",
@@ -69,6 +72,7 @@ __all__ = [
     "margin_shortfall",
     "margin_z",
     "plan_limits",
+    "plan_totals",
     "planned_margin",
     "planned_promo_cost",
     "promo_cost_std",

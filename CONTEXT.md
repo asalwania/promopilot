@@ -338,7 +338,7 @@ The check that every number in an explanation appears in tool outputs, allowing 
 _Avoid_: fact-checking, hallucination check
 
 **Explanation**:
-What the explainer writes for a plan revision: a summary of the plan and a rationale for each plan line, whose every number passes numeric grounding. Money is shown in lakh or crore from ₹1 lakh up (ADR 0050).
+What the explainer writes for a plan revision: a summary of the plan and a rationale for each plan line, whose every number passes numeric grounding. Money is shown in lakh or crore from ₹1 lakh up (ADR 0050). It is shown the plan's totals and the budget left, never working them out itself (ADR 0090).
 _Avoid_: description, commentary
 
 **Rationale**:
