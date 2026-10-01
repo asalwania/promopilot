@@ -37,3 +37,6 @@ backend/evals/reports/
 Thumbs.db
 .idea/
 .vscode/
+
+# a refused `make record-cassettes` leaves the Explainer requests and answers it asked here
+backend/cassettes/failed/

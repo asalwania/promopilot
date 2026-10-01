@@ -3,7 +3,9 @@ plan line, every number grounded in tool outputs.
 
 The LLM writes them from a JSON view of the tool outputs in which every amount is already
 shown as it may be cited (money in lakh or crore, percentages, whole units), so it never has to
-calculate. `check_numeric_grounding` (ADR 0028) checks each part against that same view. An
+calculate: even the totals and the budget left are there, in `plan_totals`, because an LLM
+left to add up the lines or subtract a cost from the budget cites a figure no tool output
+shows (ADR 0090). `check_numeric_grounding` (ADR 0028) checks each part against that same view. An
 answer that fails, or is blank or misses a plan line, is regenerated once with the problems
 named; a second failure, or any `LLMError`, falls back to the deterministic template, which
 only uses the revision's own numbers and always passes grounding.
@@ -55,6 +57,7 @@ from promopilot.guardrails import (
     format_percentile,
     format_rupees,
     format_units,
+    plan_totals,
 )
 from promopilot.llm import LLMError, LLMProvider, Message
 
@@ -232,8 +235,9 @@ def _feedback(problems: Sequence[str]) -> str:
     listed = "\n".join(f"- {problem}" for problem in problems)
     return (
         f"Your answer failed PromoPilot's checks:\n{listed}\n"
-        "Write the whole answer again. Copy every number exactly as the plan data shows it, "
-        "write one rationale for every plan line, and, when the plan data has "
+        "Write the whole answer again. Copy every number exactly as the plan data shows it "
+        "(totals and amounts left are in plan_totals; never add up or subtract figures "
+        "yourself), write one rationale for every plan line, and, when the plan data has "
         "changes_from_previous, say what changed and why."
     )
 
@@ -267,6 +271,7 @@ def plan_data(
         "solver_status": None if revision.solver_status is None else revision.solver_status.value,
         "objective": None if revision.objective is None else format_rupees(revision.objective),
         "plan_line_count": len(revision.lines),
+        "plan_totals": _totals_data(revision, request),
         "safety_margin": _safety_data(revision),
         "lines": [
             _line_data(
@@ -712,6 +717,27 @@ def _safety_sentences(revision: PlanRevision) -> list[str]:
         f"{format_percentile(margin.budget_quantile)} is "
         f"{format_rupees(margin.planned_promo_cost)} against the marketing budget."
     ]
+
+
+def _totals_data(revision: PlanRevision, request: PlanningRequest) -> dict[str, object]:
+    """The totals and the budget left an LLM would otherwise work out itself, computed by
+    `plan_totals` and shown as they may be cited (ADR 0090)."""
+    totals = plan_totals(revision, request.marketing_budget)
+    planned = totals.budget_left_at_planned_promo_cost
+    return {
+        "expected_units": format_units(totals.expected_units),
+        "promo_cost": format_rupees(totals.promo_cost),
+        "expected_incremental_profit": format_rupees(totals.expected_incremental_profit),
+        "marketing_budget_left_at_expected_promo_cost": format_rupees(
+            totals.budget_left_at_expected_promo_cost
+        ),
+        **(
+            {}
+            if planned is None
+            else {"marketing_budget_left_at_planned_promo_cost": format_rupees(planned)}
+        ),
+        "clearance_shortfall_units": format_units(totals.clearance_shortfall_units),
+    }
 
 
 def _safety_data(revision: PlanRevision) -> dict[str, object] | None:

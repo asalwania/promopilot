@@ -500,6 +500,7 @@ async def record_cassettes(
     planning: RecordedPlanning,
     *,
     only: Collection[str] | None = None,
+    failed_dir: Path | None = None,
 ) -> CassetteManifest:
     """Play every script (or those named in `only`) through the full agent graph on `live`,
     recording each LLM request as a cassette, and write the manifest.
@@ -514,6 +515,10 @@ async def record_cassettes(
     that includes every request the named sessions recorded before (ADR 0070): a session that
     gains a step asks the live model only what it did not ask before, and its earlier rounds
     replay byte for byte. To ask a request afresh, delete its cassette first.
+
+    A refused run leaves the cassettes alone but, with `failed_dir`, copies there every
+    Explainer request it asked live and the answer it got, to see what the Explainer was shown
+    and wrote when it fell back (ADR 0090).
     """
     chosen = [script for script in scripts if only is None or script.name in only]
     unknown = sorted(set(only or ()).difference(script.name for script in scripts))
@@ -551,11 +556,19 @@ async def record_cassettes(
             cassette = cassette_dir.joinpath(f"{digest}.json")
             if cassette.is_file():
                 shutil.copy2(cassette, Path(scratch).joinpath(cassette.name))
+        seeded = {path.name for path in cassette_paths(Path(scratch))}
         recorder = RecordingProvider(live, Path(scratch))
         played = [await _play(script, recorder, data, planning) for script in chosen]
         problems = [problem for result in played for problem in result.problems]
         problems.extend(ungrounded_answers(cassette_paths(Path(scratch))))
         if problems:
+            if failed_dir is not None:
+                dumped = _dump_explainer_calls(Path(scratch), seeded, failed_dir)
+                if dumped:
+                    problems.append(
+                        f"the Explainer's {len(dumped)} live requests and answers are in "
+                        f"{failed_dir}"
+                    )
             raise RecordingError("\n".join(["no cassette changed:", *problems]))
         sessions = kept | {result.session.script.name: result.session for result in played}
         manifest = CassetteManifest(
@@ -564,6 +577,23 @@ async def record_cassettes(
         )
         _replace(Path(scratch), cassette_dir, manifest)
     return manifest
+
+
+def _dump_explainer_calls(recorded: Path, seeded: Collection[str], failed_dir: Path) -> list[Path]:
+    """Copy the Explainer cassettes this run recorded (not those it started with) to
+    `failed_dir`; the copies."""
+    explained = [
+        cassette
+        for cassette in cassette_paths(recorded)
+        if cassette.name not in seeded
+        and json.loads(cassette.read_text(encoding="utf-8"))["schema_name"]
+        == ExplainerAnswer.__name__
+    ]
+    if explained:
+        failed_dir.mkdir(parents=True, exist_ok=True)
+    return [
+        Path(shutil.copy2(cassette, failed_dir.joinpath(cassette.name))) for cassette in explained
+    ]
 
 
 def _replace(recorded: Path, cassette_dir: Path, manifest: CassetteManifest) -> None:
