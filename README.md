@@ -145,6 +145,7 @@ flowchart LR
 | `make test` | Backend and frontend unit and API tests (no Docker, no LLM), with the 85% core coverage gate |
 | `make test-integration` | Backend tests against a throwaway Postgres |
 | `make test-e2e` | Playwright journeys against a running stack |
+| `make screenshots` | With the demo running, capture the deck screenshots (1920x1080, recorded briefs only, no key) into `frontend/screenshots/`; CI uploads them as the `deck-screenshots` artifact |
 | `make lint` / `make format` / `make typecheck` | ruff, ESLint and Prettier; mypy strict and tsc strict |
 | `make eval` | Play the 33 eval scenarios and write the report (`ONLY=`, `SMOKE=1`, `RUNS=`, `SEED=`) |
 | `make eval-smoke` | What CI runs: replay the five smoke scenarios with no key |
