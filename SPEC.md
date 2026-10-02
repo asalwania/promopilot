@@ -135,7 +135,7 @@ Develop an **agentic planner** capable of **extracting, or inferring with a high
 
 - **F3:** we implement **all 9** features (2 above the threshold as buffer), plus supporting features: observability (agent trace + structured logs), trainability (one-click retrain), fault tolerance (retries, fallback LLM, replay mode), human oversight (approval gate).
 - **D2:** inputs are structured tables plus a free-text planning brief. Reliability is **measured, not asserted**, against hidden ground truth in a synthetic dataset (§12).
-- **Not claiming D3.** Multimodal inputs (flyer images, PDFs) are out of scope and listed under Future Roadmap. If D2 targets are not met at the end, the justification doc must downgrade the claim to D1 honestly.
+- **Not claiming D3.** Multimodal inputs (flyer images, PDFs) are out of scope and listed under Future Roadmap. If D2 targets are not met at the end, the justification doc must downgrade the claim to D1 honestly. The rule for "not met" is ADR 0089 D3: D2 holds when most targeted §12.2 metrics pass and constraint satisfaction, clarification, infeasibility handling and grounding each pass or miss only narrowly with a stated cause.
 
 ---
 
@@ -836,7 +836,7 @@ Build in this order. Each epic becomes one spec (`/to-spec`) and a set of tracer
 | F-04 Cannibalisation | `models/relations` | substitute detection tests | cannibalisation callout | substitute P/R |
 | F-05 Relationships | `models/relations` | complement tests | bundle suggestion + halo | complement P/R |
 | F-06 Inventory | optimiser constraints | stock constraint tests | stock-out risk column, clearance met | constraint satisfaction |
-| F-07 Geography | per-region solve | region tests | region tabs side by side | regional holiday scenarios |
+| F-07 Geography | one joint solve over region-level plan lines (ADR 0004) | region tests | region tabs side by side | regional holiday scenarios |
 | F-08 Competitor | competitor gaps + KVI rule | competitor tests | competitor panel | competitor-war scenarios |
 | F-09 Simulation | `simulator/` | determinism + invariant tests | P10–P90 chart | — |
 | D2 reliability | `evals/` | eval runner tests | `/evals` dashboard | all §12.2 metrics |
