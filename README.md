@@ -230,6 +230,7 @@ Demo video: link coming soon.
 | [docs/guide/api-usage.md](docs/guide/api-usage.md) | Endpoint behaviour, errors, limits, timeouts, rate limits, logging |
 | [docs/guide/evals.md](docs/guide/evals.md) | Scenarios, metrics, the report and the CI smoke eval |
 | [docs/api.md](docs/api.md) · [docs/tools.md](docs/tools.md) | Generated API reference and tool contracts |
+| [docs/deck.md](docs/deck.md) · [docs/video-script.md](docs/video-script.md) · [docs/submission-checklist.md](docs/submission-checklist.md) | The pitch deck content, the demo video script and the submission checklist |
 | [docs/adr/README.md](docs/adr/README.md) | Every architecture decision record |
 | [CONTEXT.md](CONTEXT.md) · [SPEC.md](SPEC.md) | The domain glossary and the original specification |
 
