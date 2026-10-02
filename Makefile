@@ -100,6 +100,10 @@ test-integration: ## Backend integration tests (testcontainers; needs Docker)
 test-e2e: ## Playwright against a running stack (make dev or make up)
 	$(FRONTEND) pnpm test:e2e
 
+.PHONY: screenshots
+screenshots: ## Capture the deck screenshots (1920x1080) into frontend/screenshots/ against a running make demo (no key)
+	$(FRONTEND) E2E_BASE_URL=$${E2E_BASE_URL:-http://localhost:$(WEB_PORT)} pnpm screenshots
+
 .PHONY: api-types api-docs
 api-types: ## Export OpenAPI, regenerate frontend API types and the API docs (docs/api.md)
 	$(BACKEND) uv run python -m promopilot.api.openapi > ../docs/openapi.json
