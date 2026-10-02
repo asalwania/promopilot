@@ -46,7 +46,8 @@ async function shoot(page: Page, name: string, target?: Locator) {
   if (target) {
     await target.evaluate((element) => {
       element.scrollIntoView({ block: "start", inline: "start" });
-      window.scrollBy(0, -24);
+      // Clear the sticky 64px site nav as well as a small margin.
+      window.scrollBy(0, -88);
       // A wide table scrolls its own box sideways: show it from its first column.
       for (let up = element.parentElement; up; up = up.parentElement) {
         up.scrollLeft = 0;

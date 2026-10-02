@@ -1,5 +1,6 @@
 "use client";
 
+import { ArrowRight } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useRef, useState, type FormEvent } from "react";
 
@@ -94,7 +95,7 @@ export function BriefComposer({ llm }: { llm?: LLMStatus }) {
     >
       <div className="flex min-w-0 flex-col gap-6">
         <ExampleBriefs examples={EXAMPLE_BRIEFS} onPick={pickExample} />
-        <div className="flex flex-col gap-3">
+        <div className="bg-card shadow-soft flex flex-col gap-3 rounded-2xl border p-6">
           <label htmlFor="brief" className="text-sm font-medium">
             Brief
           </label>
@@ -106,7 +107,7 @@ export function BriefComposer({ llm }: { llm?: LLMStatus }) {
             maxLength={BRIEF_MAX_CHARS}
             rows={5}
             placeholder="e.g. Plan a Diwali push for Snacks in North and West over the next four weeks with a budget of 2 lakh."
-            className="border-input bg-background focus-visible:border-ring focus-visible:ring-ring/50 rounded-lg border px-3 py-2 text-sm outline-none focus-visible:ring-3"
+            className="border-input focus-visible:border-ring focus-visible:ring-ring/30 rounded-xl border bg-[#fdfcf9] px-4 py-3 text-base leading-relaxed outline-none focus-visible:ring-4"
           />
           {addsConstraints && (
             <div className="flex flex-col gap-1">
@@ -116,7 +117,7 @@ export function BriefComposer({ llm }: { llm?: LLMStatus }) {
               <p
                 aria-labelledby="composed-label"
                 role="note"
-                className="bg-muted rounded-lg px-3 py-2 text-sm whitespace-pre-wrap"
+                className="bg-muted rounded-xl px-4 py-3 text-sm whitespace-pre-wrap"
               >
                 {composed}
               </p>
@@ -135,10 +136,12 @@ export function BriefComposer({ llm }: { llm?: LLMStatus }) {
               {tooLong && " (shorten the brief or remove constraints)"}
             </span>
             <Button
+              size="lg"
               type="submit"
               disabled={submitting || brief.trim() === "" || tooLong}
             >
               Plan it
+              <ArrowRight aria-hidden data-icon="inline-end" />
             </Button>
           </div>
           {error && (
@@ -149,7 +152,7 @@ export function BriefComposer({ llm }: { llm?: LLMStatus }) {
           )}
         </div>
       </div>
-      <aside className="bg-card ring-foreground/10 rounded-xl p-4 ring-1">
+      <aside className="bg-card shadow-soft h-fit rounded-2xl border p-5">
         <ConstraintForm
           values={constraints}
           errors={constraintErrors}

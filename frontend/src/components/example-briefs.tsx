@@ -15,8 +15,8 @@ type Props = {
 // The home page's one-click trials: each card fills the brief, and the manager plans it.
 export function ExampleBriefs({ examples, onPick }: Props) {
   return (
-    <section aria-labelledby="examples-heading" className="flex flex-col gap-2">
-      <h2 id="examples-heading" className="text-sm font-medium">
+    <section aria-labelledby="examples-heading" className="flex flex-col gap-3">
+      <h2 id="examples-heading" className="text-xl font-medium tracking-tight">
         Try an example
       </h2>
       <ul
@@ -25,11 +25,14 @@ export function ExampleBriefs({ examples, onPick }: Props) {
       >
         {examples.map((example) => (
           <li key={example.session} className="flex">
-            <Card size="sm" className="w-full">
+            <Card
+              size="sm"
+              className="hover:border-input w-full transition-colors"
+            >
               <CardHeader>
                 <h3
                   id={`example-${example.session}-title`}
-                  className="text-sm font-medium"
+                  className="text-[0.95rem] font-semibold"
                 >
                   {example.title}
                 </h3>
