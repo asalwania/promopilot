@@ -7,6 +7,7 @@
 - **D1. A code citation is a file and a function or class**, written as `` `optimizer/solver.py` `solve` ``, with paths under `backend/src/promopilot/`. Frontend files and tests are cited by their path from the repository root.
   - A line number is true on one commit only. The files cited here (`solver.py`, `options.py`, `relations.py`, `graph.py`) change in most tickets, so a line number would be wrong after the next merge, and nothing would say so.
   - A function name survives a move inside a file, and a rename breaks a test (D2) instead of the claim.
+  - The owner confirmed this on 2026-10-02: the code-location column cites file and function name instead of `path:line`, because function names survive edits while line numbers go stale.
 - **D2. `backend/tests/tools/test_nine_blocker_matrix.py` reads `docs/nine-blocker.md` and checks every citation.** It runs with the unit tests, so CI fails on drift.
   - Every `` `tests/…py::test_name` `` names a file that exists and defines that function.
   - Every `` `file.py` `` followed by `` `symbol` `` names a file that exists and defines that function or class.

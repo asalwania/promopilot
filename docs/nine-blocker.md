@@ -8,8 +8,6 @@ PromoPilot claims **F3 × D2** on the hackathon's 3×3 grid (SPEC §1.1, §2.1):
 
 The claim rule, the evidence format and the source of every number are recorded in [ADR 0089](adr/0089-nine-blocker-claim-and-evidence-rules.md); how the evidence is cited, and checked, is [ADR 0091](adr/0091-the-matrix-cites-files-and-symbols-and-a-test-resolves-them.md). Vocabulary follows [CONTEXT.md](../CONTEXT.md); how the system is built is in the architecture document. <!-- LATE: link the architecture document (docs/architecture.md) once #75 (PR #183) merges -->
 
-<!-- LATE: the only numbers still open are consistency (the `make eval RUNS=5 SMOKE=1` live run, not measured yet) and what depends on it: the "n of 13" count and the verdict. Search this file for "LATE:". Everything else is copied from `backend/evals/published/latest.md`, run 2026-10-01T17:07:27Z. -->
-
 ## Headline numbers
 
 All numbers below, except latency, come from one report: `backend/evals/published/latest.json`, generated 2026-10-01T17:07:27Z (run `20261001T170727Z`) with the `replay` provider on the seed-42 world, 33 scenarios, 1 run each, published in commit `96b53e9` (#189) after the Explainer fix of #187 (#185). The `replay` provider answers from the committed cassettes, which were recorded live (#186, #189), so its plans and Explainer answers are the live model's. Its session time is replay-only and is not used as latency: latency is cited from the earlier live run (see [Where we fall short](#where-we-fall-short)). Consistency comes from a supplementary live run (see [Consistency](#consistency)).
@@ -21,9 +19,9 @@ All numbers below, except latency, come from one report: `backend/evals/publishe
 | Infeasible requests declared, with a relaxation | 100.0% (2 of 2) | 100% |
 | Vague or conflicting briefs that ask or flag | 100.0% (3 of 3) | 100% |
 | Explanations passing numeric grounding | 100.0% (39 of 39) | ≥ 98% |
-| §12.2 targeted metrics met | 11 of 13 pass; regret misses; consistency not yet measured <!-- LATE: n of 13 after the RUNS=5 consistency run --> | most, per ADR 0089 D3 |
+| §12.2 targeted metrics met | 12 of 13 pass; regret misses | most, per ADR 0089 D3 |
 
-**Verdict:** D2 holds, on the strength of ADR 0089 D3: eleven of the 13 targeted metrics pass, constraint satisfaction, clarification behaviour, infeasibility handling and grounding all pass outright, and the one miss, regret at 12.3% against 10%, is listed in [Where we fall short](#where-we-fall-short) with its cause. <!-- LATE: re-apply ADR 0089 D3 once the RUNS=5 consistency result is in; "D2 holds" stands unless fewer than seven metrics pass -->
+**Verdict:** D2 holds, on the strength of ADR 0089 D3: twelve of the 13 targeted metrics pass (consistency among them, from the supplementary live run), constraint satisfaction, clarification behaviour, infeasibility handling and grounding all pass outright, and the one miss, regret at 12.3% against 10%, is listed in [Where we fall short](#where-we-fall-short) with its cause.
 
 ## Justification
 
@@ -250,7 +248,7 @@ SPEC §16, filled in. Code is cited by file and function or class (ADR 0091), no
 | SF-04 Human oversight | the approval interrupt in `agents/graph.py` `build_graph`; approve and reject in `api/sessions.py` (ADR 0046) | `tests/unit/agents/test_graph.py::test_rejecting_records_the_reason_and_waits_at_approval_again`, `frontend/tests/e2e/approve.spec.ts`, `frontend/tests/e2e/reject.spec.ts` | approve after a confirm, reject with a reason, the audit trail |
 | SF-05 Explainability | `guardrails/grounding.py` `check_numeric_grounding`, `agents/explainer.py` `explain_plan` (ADR 0028, ADR 0050) | `tests/unit/agents/test_grounded_explainer.py::test_a_second_ungrounded_answer_falls_back_to_the_template`, `tests/architecture/test_recorded_sessions_are_grounded.py::test_every_number_in_a_recorded_explanation_or_critique_is_in_its_tool_data` | each plan line's rationale; every number's source tooltip |
 
-Eval metrics: grounding 100.0% (39 of 39; target ≥ 98%); consistency not yet measured (target ≥ 0.9) <!-- LATE: mean Jaccard from the RUNS=5 report -->.
+Eval metrics: grounding 100.0% (39 of 39; target ≥ 98%); consistency, mean Jaccard 100.0% (5 of 5 scenarios at the target; target ≥ 0.9), from the supplementary live run (see [Consistency](#consistency)).
 
 ## Agentic capabilities
 
@@ -283,7 +281,7 @@ Copied from `backend/evals/published/latest.md`, generated 2026-10-01T17:07:27Z 
 | Baseline WAPE (region × SKU, store × SKU, store × SKU × segment) | 13.5%, 25.1%, 43.5% | report (aim ≤ 25%) | — |
 | Plan quality (beats the rule-based baseline) | 100.0% (30 of 30) | ≥ 90% | pass |
 | Regret (median, against the best plan) | 12.3% (12 of 29 runs within 10%) | ≤ 10% | **miss** |
-| Consistency (Jaccard across 5 runs) | not measured <!-- LATE: mean Jaccard from the RUNS=5 report --> | ≥ 0.9 | <!-- LATE: pass or miss --> pending |
+| Consistency (Jaccard across 5 runs) | 100.0% (5 of 5), from the live run `20261001T180312Z` (see [Consistency](#consistency)) | ≥ 0.9 | pass |
 | Open issues per final plan (median) | 1 (21 of 33 plans have at least one; 41 in all) | report | — |
 | P50 session time | 68.3 s, slowest 297 s, LLM P50 36 s: from the live run `20260930T145413Z` (2026-09-30, `openai (recording)`), not this report. This report's 18.0 s (slowest 131 s, LLM P50 0 s) is replay-only and excludes LLM time. | report (SPEC §6: under 60 s) | — |
 | P50 session cost | ₹3.52 (446 LLM calls in all, priced from the recorded token counts) | report (SPEC §6: under ₹20) | — |
@@ -306,15 +304,13 @@ A scenario passing its properties does not mean its plan was close to the best p
 
 ### Consistency
 
-Under replay a scenario's runs are identical by construction (ADR 0063), so consistency is measured by a supplementary live run: `make eval RUNS=5 SMOKE=1` (the five smoke scenarios, five runs each), generated <!-- LATE: generated_at of the consistency report --> _pending_ with the <!-- LATE: provider of the consistency report --> _pending_ provider. Mean Jaccard of selected SKUs: <!-- LATE: mean Jaccard from the RUNS=5 report --> _pending_ (target ≥ 0.9).
+Under replay a scenario's runs are identical by construction (ADR 0063), so consistency is measured by a supplementary live run: `make eval RUNS=5 SMOKE=1` (the five smoke scenarios, five runs each), generated 2026-10-01T18:03:12Z (run `20261001T180312Z`) with the `openai` provider, live, and published as `backend/evals/published/consistency.md` (#190). Mean Jaccard of selected SKUs: 100.0%, with all 5 of 5 scenarios at the target (target ≥ 0.9): a pass.
 
 ## Where we fall short
 
 Every miss against a §12.2 target or a SPEC §6 requirement, with its cause (ADR 0089 D3, D8).
 
-- **Regret: median 12.3% against ≤ 10% (a miss).** Twelve of 29 counted runs are within 10%; the best plan of one more run is infeasible and is not counted. Of the 17 runs above 10%, model error is the largest part in 16 and the planner's choices in 1 (`demo-budget-cut-drop-west`, 60.5% of its 69.5%); timeouts are never the largest part. Over all counted runs the median model-error part is 9.1% (₹150,918 in all) against 0.0% for the planner (₹67,913) and for timeouts. The cause is the optimiser's curse: the optimiser selects the options the fitted model overestimates (#170, ADR 0078). The tail is long: `price-war-staples-christmas-2025` shows 109.7% because its best plan earns only ₹1,575. We keep D2 on the strength of the other targets (ADR 0089 D3); the miss is not hidden.
-- **Consistency: not measured on this report.** Replay cannot vary a scenario's runs; the supplementary live run is pending. <!-- LATE: consistency result from the RUNS=5 report; add a miss entry here if it is below 0.9 -->
-- **Baseline forecast WAPE** is 13.5% by region × SKU and 25.1% by store × SKU, at the aim of 25%, and 43.5% by store × SKU × segment, above it. SPEC §12.2 asks to report it with an aim, not to meet a target.
+- **Regret: median 12.3% against ≤ 10% (a miss).** Twelve of 29 counted runs are within 10%; the best plan of one more run is infeasible and is not counted. Of the 17 runs above 10%, model error is the largest part in 16 and the planner's choices in 1 (`demo-budget-cut-drop-west`, 60.5% of its 69.5%); timeouts are never the largest part. Over all counted runs the median model-error part is 9.1% (₹150,918 in all) against 0.0% for the planner (₹67,913) and for timeouts. The cause is the optimiser's curse: the optimiser selects the options the fitted model overestimates (#170, ADR 0078). The tail is long: `price-war-staples-christmas-2025` shows 109.7% because its best plan earns only ₹1,575. We keep D2 on the strength of the other targets (ADR 0089 D3); the miss is not hidden.- **Baseline forecast WAPE** is 13.5% by region × SKU and 25.1% by store × SKU, at the aim of 25%, and 43.5% by store × SKU × segment, above it. SPEC §12.2 asks to report it with an aim, not to meet a target.
 - **Latency: P50 session 68.3 s over the 33 scenarios, slowest 297 s, against SPEC §6's 60 s for a 2 regions × 2 categories plan.** These are the live figures of the earlier published run `20260930T145413Z` (2026-09-30, `openai (recording)` provider). The current report (`replay`, 2026-10-01) shows a P50 of 18.0 s, slowest 131 s and an LLM P50 of 0 s, which is replay-only and excludes LLM time, so it is not the latency. The live median covers scenarios larger than that benchmark and the amendment sessions' several rounds, and the recording replayed the calls a cassette already held, so its LLM share (P50 36 s) is understated for a fully live run. The solver is the cause on the largest scopes (#166, #168 below). #113 cut `generate_options` on the demo brief from about 16.6 s to about 4.2 s on a loaded machine (ADR 0087). Cost per session, ₹3.52 at the median in the current report, is well within the ₹20 target.
 
 ### Known gaps
