@@ -374,7 +374,7 @@ def test_the_errors_section_lists_the_error_codes_and_the_rate_limited_operation
     assert "Its `code` is one of `not_found`, `rate_limited`." in errors
     assert "[`POST /api/sessions`](#post-apisessions)" in errors
     assert "/api/models" not in errors
-    assert "../README.md#errors-limits-and-timeouts" in errors
+    assert "guide/api-usage.md#errors-limits-and-timeouts" in errors
 
 
 def test_main_writes_lf_bytes_ending_in_one_newline(tmp_path: Path) -> None:

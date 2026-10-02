@@ -6,7 +6,7 @@ PromoPilot claims **F3 × D2** on the hackathon's 3×3 grid (SPEC §1.1, §2.1):
 - **D2: structured tables plus a free-text brief as input, with reliability measured, not asserted.** Every final plan revision is scored against the hidden ground truth of a synthetic world that only the eval harness can read (ADR 0003, ADR 0010).
 - **Not D3.** Multimodal input (flyer images, PDFs) is out of scope.
 
-The claim rule, the evidence format and the source of every number are recorded in [ADR 0089](adr/0089-nine-blocker-claim-and-evidence-rules.md); how the evidence is cited, and checked, is [ADR 0091](adr/0091-the-matrix-cites-files-and-symbols-and-a-test-resolves-them.md). Vocabulary follows [CONTEXT.md](../CONTEXT.md); how the system is built is in the architecture document. <!-- LATE: link the architecture document (docs/architecture.md) once #75 (PR #183) merges -->
+The claim rule, the evidence format and the source of every number are recorded in [ADR 0089](adr/0089-nine-blocker-claim-and-evidence-rules.md); how the evidence is cited, and checked, is [ADR 0091](adr/0091-the-matrix-cites-files-and-symbols-and-a-test-resolves-them.md). Vocabulary follows [CONTEXT.md](../CONTEXT.md); how the system is built is in the [architecture document](architecture.md).
 
 ## Headline numbers
 

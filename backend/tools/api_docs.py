@@ -271,7 +271,7 @@ def render_errors(document: dict[str, Any], ops: list[tuple[str, str, str, Any]]
         lines[-1] += " Its `code` is one of " + ", ".join(f"`{c}`" for c in codes) + "."
     lines += [
         "",
-        "The README's [Errors, limits and timeouts](../README.md#errors-limits-and-timeouts) "
+        "The guide's [Errors, limits and timeouts](guide/api-usage.md#errors-limits-and-timeouts) "
         "explains each code, the input limits, the timeouts and the rate limits "
         "([ADR 0071](adr/0071-one-error-schema-input-limits-and-timeouts.md), "
         "[ADR 0079](adr/0079-briefs-are-data-and-per-client-rate-limits.md)).",

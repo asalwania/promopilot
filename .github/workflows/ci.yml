@@ -141,6 +141,13 @@ jobs:
             echo "::error file=docs/api.md::docs/api.md is not committed: run make api-types and commit it"
             exit 1
           fi
+      # ...and docs/tools.md from the tool registry (ADR 0088).
+      - name: Fail if the tool docs are stale
+        run: |
+          if ! git diff --exit-code -- docs/tools.md; then
+            echo "::error file=docs/tools.md::docs/tools.md is out of date with the tool registry: run make tool-docs and commit docs/tools.md"
+            exit 1
+          fi
 
   demo:
     name: make demo from a clean checkout (no key, Playwright)

@@ -8,7 +8,7 @@ Version 0.1.0, OpenAPI 3.1.0. With the API running, its interactive docs are at 
 
 Every error response's body is [ErrorResponse](#errorresponse): a sentence to show (`detail`), a `code`, the request's `reference_id` and, for a 422, every problem (`errors`). Its `code` is one of `bad_request`, `not_found`, `conflict`, `payload_too_large`, `validation_failed`, `rate_limited`, `internal_error`, `api_unreachable`, `unavailable`, `timeout`.
 
-The README's [Errors, limits and timeouts](../README.md#errors-limits-and-timeouts) explains each code, the input limits, the timeouts and the rate limits ([ADR 0071](adr/0071-one-error-schema-input-limits-and-timeouts.md), [ADR 0079](adr/0079-briefs-are-data-and-per-client-rate-limits.md)).
+The guide's [Errors, limits and timeouts](guide/api-usage.md#errors-limits-and-timeouts) explains each code, the input limits, the timeouts and the rate limits ([ADR 0071](adr/0071-one-error-schema-input-limits-and-timeouts.md), [ADR 0079](adr/0079-briefs-are-data-and-per-client-rate-limits.md)).
 
 These operations are rate-limited per client and answer `429` with a `Retry-After` header when a client is over its limit:
 
