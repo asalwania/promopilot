@@ -130,7 +130,7 @@ export function SessionView({ sessionId }: { sessionId: string }) {
   // Left: the live trace (SPEC §11), sticky so it stays in view; main: the session.
   return (
     <div className="grid w-full grid-cols-[minmax(320px,380px)_minmax(0,1fr)] items-start gap-6">
-      <div className="sticky top-4 flex max-h-[calc(100vh-2rem)] flex-col">
+      <div className="sticky top-20 flex max-h-[calc(100vh-6rem)] flex-col">
         <LiveTrace sessionId={sessionId} />
       </div>
       <div className="flex min-w-0 flex-col gap-4">{main}</div>

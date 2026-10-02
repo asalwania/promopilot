@@ -1,5 +1,6 @@
 "use client";
 
+import { TrendingUp } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -15,28 +16,42 @@ const LINKS = [
 export function SiteNav() {
   const pathname = usePathname();
   return (
-    <header className="border-b">
+    <header className="bg-background/85 sticky top-0 z-40 border-b backdrop-blur-md">
       <nav
         aria-label="Main"
-        className="mx-auto flex w-full max-w-6xl items-center gap-6 px-8 py-3 text-sm"
+        className="mx-auto flex h-16 w-full max-w-screen-2xl items-center gap-8 px-8 text-sm"
       >
-        <span className="font-semibold">PromoPilot</span>
-        {LINKS.map(({ href, label }) => {
-          const current = pathname === href;
-          return (
-            <Link
-              key={href}
-              href={href}
-              aria-current={current ? "page" : undefined}
-              className={cn(
-                "hover:underline",
-                current ? "font-medium" : "text-muted-foreground",
-              )}
-            >
-              {label}
-            </Link>
-          );
-        })}
+        <span className="flex items-center gap-2.5">
+          <span
+            aria-hidden
+            className="bg-primary text-primary-foreground shadow-primary flex size-8 items-center justify-center rounded-[9px]"
+          >
+            <TrendingUp className="size-4" strokeWidth={2.4} />
+          </span>
+          <span className="font-heading text-xl font-semibold tracking-tight">
+            PromoPilot
+          </span>
+        </span>
+        <div className="flex items-center gap-1">
+          {LINKS.map(({ href, label }) => {
+            const current = pathname === href;
+            return (
+              <Link
+                key={href}
+                href={href}
+                aria-current={current ? "page" : undefined}
+                className={cn(
+                  "rounded-full px-3.5 py-1.5 transition-colors",
+                  current
+                    ? "bg-secondary text-foreground font-medium"
+                    : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                )}
+              >
+                {label}
+              </Link>
+            );
+          })}
+        </div>
       </nav>
     </header>
   );
