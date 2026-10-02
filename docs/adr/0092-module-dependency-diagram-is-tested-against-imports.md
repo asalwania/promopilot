@@ -21,6 +21,6 @@
 
 ## Also decided: the README repeats five headline numbers
 
-ADR 0088 (D4, D5) said the README would link to `docs/nine-blocker.md` for the eval numbers instead of copying them. A judge reads the README first, so it now holds one five-row table (baseline, constraints, grounding, regret, consistency), each value a `<!-- LATE: -->` slot. `docs/nine-blocker.md` stays the source: the README's values are copied from the same published report, with its timestamp, and #81's submission check compares the two. The architecture document still quotes no eval number.
+ADR 0088 (D4, D5) said the README would link to `docs/nine-blocker.md` for the eval numbers instead of copying them. A judge reads the README first, so it now holds one five-row table (baseline, constraints, grounding, regret, consistency), each value copied from a published report with its timestamp (the consistency row from the live five-run report). `docs/nine-blocker.md` stays the source: the README's values are copied from the same published report, with its timestamp, and #81's submission check compares the two. The architecture document still quotes no eval number.
 
 The README also lists the open follow-up issues as known gaps, so a reader meets them before they find them.

@@ -46,8 +46,8 @@ We chose the following with the owner on #75 (D1–D12, every recommended option
 - **D8. The ADR index moves to `docs/adr/README.md`.** GitHub shows it when the folder is opened. The README and the architecture document link to it.
 - **D9. The README gets a Credits section.** It names the main open-source projects PromoPilot builds on and their licences, the agent skills used to build it, and that it was built with Claude Code.
 - **D10, D11. Late facts sit in marked slots.**
-  - Each fact that lands after this ticket (the video link, a screenshot, the headline results, timings) appears once, marked with an HTML comment `<!-- LATE: ... -->`.
-  - Searching for `LATE:` lists everything left to update before submission (#81).
+  - Each fact that landed after this ticket (the video link, a screenshot, the headline results, timings) appeared once, marked with an HTML comment starting `LATE:`.
+  - Searching for `LATE:` listed everything left to update before submission (#81). The results were filled in from the published reports before merge, no screenshot was added, and only the demo video link is still marked.
 - **D12. The README move is the ticket's last commit.**
   - The PRs in flight for #159, #141 and #142 all edit README.md, so the architecture document, the tool docs and their tests landed first.
   - The README restructure and the move to `docs/guide/` are one mechanical commit made after those PRs merged, so no one had to port their README edits into the new layout.

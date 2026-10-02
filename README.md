@@ -6,7 +6,7 @@ Built for the ET AI Hackathon, Agentic Edition (Problem 3, Retail: Autonomous Pr
 
 **Links:** [Demo video](#demo-video) · [Architecture](docs/architecture.md) · [Nine-blocker claim and evidence](docs/nine-blocker.md) · [API reference](docs/api.md) · [Tool contracts](docs/tools.md) · [Decisions](docs/adr/README.md) · [Glossary](CONTEXT.md)
 
-<!-- LATE: hero screenshot from #78 (docs/screenshots/), e.g. the session page with a plan -->
+**Headline results.** On the published 33-scenario eval (report `20261001T170727Z`, a replay of LLM calls recorded live with OpenAI), every final plan passes every hard constraint (30 of 30), beats the rule-based baseline (30 of 30) and grounds every explanation number (39 of 39), and the live five-run consistency check picks the same SKUs every time (5 of 5). **One target is missed: regret.** The median plan is 12.3% worse than the best plan on the true parameters, against a target of ≤ 10%, mostly from model error (16 of 29 plans). See [the eval report](backend/evals/published/latest.md), [the consistency report](backend/evals/published/consistency.md) and [the nine-blocker evidence](docs/nine-blocker.md).
 
 ## What it does
 
@@ -65,7 +65,7 @@ Open http://localhost:3000 when it prints `PromoPilot is ready`. `make demo` doe
 - trains and registers the models;
 - starts the API and the web app.
 
-<!-- LATE: first-start time after #113 -->The first start takes about 5 minutes on a CI-class machine, and 5–10 minutes on a laptop's first Docker build. Later starts reuse the data and models and take well under a minute ([ADR 0073](docs/adr/0073-make-demo-from-a-fresh-clone.md)).
+The first start takes about 5 minutes on a CI-class machine, and 5–10 minutes on a laptop's first Docker build. Later starts reuse the data and models and take well under a minute ([ADR 0073](docs/adr/0073-make-demo-from-a-fresh-clone.md)).
 
 On Windows, run `make` from **Git Bash**. Without make, for example in PowerShell, start the same stack with `docker compose --profile demo up --build`.
 
@@ -180,7 +180,7 @@ The scenarios, metrics and targets are explained in [docs/guide/evals.md](docs/g
 
 ## Results
 
-From the published report `backend/evals/published/latest.md`, generated **2026-10-01T17:07:27Z** on the seed-42 world: 33 scenarios, one run each, with the LLM calls replayed from the recordings made live (provider `replay`). The values are copied as the report states them. Targets are SPEC §12.2's.
+From the published report [`backend/evals/published/latest.md`](backend/evals/published/latest.md), generated **2026-10-01T17:07:27Z** (`20261001T170727Z`) on the seed-42 world: 33 scenarios, one run each, with the 446 LLM calls replayed from cassettes recorded live with OpenAI (provider `replay`). Consistency comes from the live five-run report [`backend/evals/published/consistency.md`](backend/evals/published/consistency.md), generated **2026-10-01T18:03:12Z** (`20261001T180312Z`). The values are copied as the reports state them. Targets are SPEC §12.2's.
 
 | Metric | Result | Target | |
 |---|---|---|---|
@@ -188,17 +188,17 @@ From the published report `backend/evals/published/latest.md`, generated **2026-
 | Final plans passing every hard constraint | 100.0% (30 of 30) | 100% | pass |
 | Grounding: explanation numbers traced to a tool output | 100.0% (39 of 39) | ≥ 98% | pass |
 | Regret, median against the best plan | 12.3% (12 of 29) | ≤ 10% | **miss** |
-| Consistency: the same SKUs chosen across runs | <!-- LATE: Consistency from the live RUNS=5 run; fill with its value, run timestamp and pass or miss. Must equal docs/nine-blocker.md. -->_pending_ | ≥ 90% | |
+| Consistency: the same SKUs chosen across runs | 100.0% (5 of 5), live `RUNS=5` run `20261001T180312Z` | ≥ 90% | pass |
 
-- **Regret misses its target.** The median plan is 12.3% worse than the best plan found on the true parameters, against a target of 10%. Model error is the largest cause ([#170](https://github.com/asalwania/promopilot/issues/170)).
+- **Regret misses its target.** The median plan is 12.3% worse than the best plan found on the true parameters, against a target of 10%. Model error is the largest cause, in 16 of the 29 plans scored ([#170](https://github.com/asalwania/promopilot/issues/170)). This is the one target the project misses.
 - **Also in the report.**
   - Oracle breach rate 13.3% (4 of 30; target ≤ 15%).
   - Extraction accuracy 100.0% (152 of 152; target ≥ 95%).
-  - Clarification 3 of 3 and infeasibility handling 2 of 2 (both target 100%).
+  - Clarification 100.0% (3 of 3) and infeasibility handling 100.0% (2 of 2), both target 100%.
   - Elasticity recovery 8.1% median absolute error (target ≤ 20%).
   - Substitute precision 86.7% and recall 100.0%; complement precision 100.0% and recall 97.5%.
 - **The demand baseline** is reported against an aim of 25% WAPE: 43.5% at store × SKU × segment, 25.1% at store × SKU and 13.5% at region × SKU. The plan works at region level.
-- **Latency and cost.** The last live run (`20260930T145413Z`) had a P50 session time of 68.3 s and a P50 cost of ₹3.54. A replayed run holds no LLM time, so the latest report's session time is not a latency figure.
+- **Latency and cost.** The report gives a P50 session time of 18.0 s and a P50 session cost of ₹3.52 (446 LLM calls, priced as recorded). The run replays its LLM calls, so the session time holds no LLM wait and is not a live latency figure.
 
 How each is measured, and the verdict on the claim, are in [docs/nine-blocker.md](docs/nine-blocker.md).
 
@@ -213,11 +213,10 @@ These are open issues, listed so no one has to find them. Each is a gap in speed
 - **Clearance asks by SKU id ([#174](https://github.com/asalwania/promopilot/issues/174)).** A free-text clearance ask cannot name SKU ids, and when a brief makes several asks the first wins.
 - **The Critic's tolerance ([#181](https://github.com/asalwania/promopilot/issues/181)).** The Critic keeps a risk-reducing attempt only within 5% of the best objective, so a per-SKU depth cap is often discarded and its finding stays open. The tolerance is to be tuned from the full eval.
 
-<!-- LATE: all six gaps were open on 2026-10-01. Recheck each against its issue at submission; drop one that was closed and add any new one that still affects a result. -->
-
 ## Demo video
 
-<!-- LATE: the demo video URL from #80. Replace this line with the link. -->The demo video link is added at submission.
+<!-- LATE: video URL (user, #80) -->
+Demo video: link coming soon.
 
 ## Documentation
 
