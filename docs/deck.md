@@ -15,9 +15,8 @@ HOW TO TURN THIS INTO THE PDF DECK
       (GitHub, Actions, the run, Artifacts) and unzip it into `frontend/screenshots/`, or
    b. run it yourself: `make demo`, then `make screenshots` (Git Bash on Windows). Both give
       the same 1920x1080 PNGs, named as this file refers to them.
-2. Fill in every OWNER marker (team, video link, QR code). Resolve every LATE marker (numbers
-   that move when #187 lands or a RUNS=5 consistency run is done) and delete the marker. Markers
-   are HTML comments in the slides below. Before you export,
+2. Fill in every OWNER marker (team, video link, QR code), and resolve and delete any LATE
+   marker. Markers are HTML comments in the slides below. Before you export,
    grep -nE "OWN[E]R:|LA[T]E:" docs/deck.md   must print nothing.
 3. Export. This file is Marp Markdown (the `---` lines are slide breaks), so:
      npx @marp-team/marp-cli@latest docs/deck.md --pdf --allow-local-files -o PromoPilot-deck.pdf
@@ -30,7 +29,9 @@ HOW TO TURN THIS INTO THE PDF DECK
 
 NUMBERS. Every figure below is from `backend/evals/published/latest.md`: generated
 2026-10-01T17:07:27Z, provider `replay` (it replays the recorded live LLM answers), seed-42 world,
-33 scenarios x 1 run. The one exception is session time: see slide 10.
+33 scenarios x 1 run. Two exceptions: session time (see slide 10), and Consistency, which a
+single run cannot measure: it is from `backend/evals/published/consistency.md`, the live
+`make eval RUNS=5` run (provider `openai`, generated 2026-10-01T18:03:12Z, 5 scenarios x 5 runs).
 CLAIM RULE (ADR 0089, docs/adr/0089-nine-blocker-claim-and-evidence-rules.md, lands with
 PR #182): D2 holds when most of the 13 targeted metrics pass and constraint satisfaction,
 clarification, infeasibility handling and grounding each pass or miss only narrowly with a
@@ -101,13 +102,10 @@ Every final plan is scored against the hidden ground truth of a synthetic world 
 
 **Where we stand against the D2 targets (33 scenarios, seed-42 world):**
 
-- **11 of the 13 targeted metrics pass**, including constraint satisfaction 100%, extraction 100%, clarification 100%, infeasibility handling 100%, grounding 100% (39 of 39), elasticity recovery, substitute and complement detection, and plan quality 100%.
+- **12 of the 13 targeted metrics pass**, including constraint satisfaction 100%, extraction 100%, clarification 100%, infeasibility handling 100%, grounding 100% (39 of 39), elasticity recovery, substitute and complement detection, plan quality 100%, and consistency 100% (5 of 5, from a live five-run eval).
 - **1 target misses:** Regret 12.3% (target 10%).
-- **1 is not measured yet:** Consistency (n/a).
 
 **Why D2 stands.** Our rule (ADR 0089): D2 is kept when most targets pass and the four critical ones (constraint satisfaction, clarification, infeasibility handling, grounding) each pass, or miss only narrowly with a stated cause. All four pass outright. D2 is kept on the strength of the other targets, and the one miss, Regret, is reported with its cause (next slide). If the targets had mostly failed, we would have claimed D1.
-
-<!-- LATE: Consistency is n/a until the live `make eval RUNS=5` run (ADR 0089 D4); then say its number and whether it passes (target 90%), and update "1 is not measured yet" and the 11-of-13 count (12 of 13 if it passes; if it fails it becomes a second miss and the count stays 11). -->
 
 ---
 
@@ -230,15 +228,14 @@ The recorded **Diwali demo** brief, end to end, on `make demo` with no API key:
 | Complement precision / recall | 100% / 97.5% | ≥ 80% / ≥ 70% | pass |
 | Plan quality (beats rule-based baseline) | 100.0% (30 of 30) | ≥ 90% | pass |
 | **Regret (median vs best plan)** | **12.3% (12 of 29 within 10%)** | ≤ 10% | **miss** |
-| Consistency (Jaccard over 5 runs) | n/a | ≥ 90% | not measured |
+| Consistency (Jaccard over 5 runs) | 100.0% (5 of 5)* | ≥ 90% | pass |
 
 - **Grounding:** all 39 explanations passed the numeric check; none fell back to the template.
 - **Regret miss, with its cause:** of the 17 runs above 10%, **16 are model error** (the demand model over-values the options the optimiser picks), 1 is the planner's choices, 0 are timeouts. By cause the median is: model error 9.1%, planner 0.0%, timeouts 0.0%. One more run was not counted because its best plan was infeasible.
+- **\*Consistency** needs repeated runs, so it comes from a separate live run: `make eval RUNS=5` with `openai`, 5 scenarios × 5 runs, generated 2026-10-01T18:03:12Z (`backend/evals/published/consistency.md`). Each of the 5 scenarios selected the same SKUs in every run.
 - **Baseline forecast (reported, aim ≤ 25% WAPE):** 13.5% at region × SKU, 25.1% at store × SKU, 43.5% at store × SKU × segment.
 
 ![w:560](../frontend/screenshots/21-evals-dashboard.png) ![w:560](../frontend/screenshots/22-evals-scenarios.png)
-
-<!-- LATE: Consistency n/a gets a number from the live `make eval RUNS=5` run; fill the row with its value and its own timestamp (ADR 0089 D4). -->
 
 ---
 
@@ -285,7 +282,7 @@ Over the 30 scored plans, against the rule-based baseline ("20% off the top 10 s
 - **Real POS data.** Swap the synthetic world for a retailer's sales, inventory and price feeds; the models, optimiser and eval harness are built to take it.
 - **A/B learning loop.** Feed realised promo results back into the elasticity and relation models; this is the direct answer to our regret miss, whose cause is model error (16 of 17 runs above target).
 - **Multimodal inputs (D3).** Read competitor flyers, PDFs and images into the same request; today out of scope, which is why we claim D2.
-- **Consistency at scale.** Repeat each scenario five times with a live LLM and report plan stability across runs.
+- **Consistency at scale.** Today 5 scenarios are repeated five times with a live LLM (100% stable); next, all 33.
 - **Deploy.** A hosted instance, so a reviewer needs no Docker.
 
 **Links**

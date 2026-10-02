@@ -88,10 +88,9 @@ Type the two amendments **exactly** as written: the recordings are keyed on thei
 
 **Screen:** `/evals`: metric cards, then the scenario table.
 
-> We scored 33 scenarios against a hidden ground truth. Thirty of thirty plans beat the rule-based baseline; every final plan passes every hard constraint. Elasticity recovery is eight percent error, against a target of twenty. Every explanation passes the numeric grounding check, thirty-nine of thirty-nine. And we show our miss: median regret is 12.3 percent against a target of 10, caused by model error, which a learning loop on real data would address.
+> We scored 33 scenarios against a hidden ground truth. Thirty of thirty plans beat the rule-based baseline; every final plan passes every hard constraint. Elasticity recovery is eight percent error, against a target of twenty. Every explanation passes the numeric grounding check, thirty-nine of thirty-nine, and in five live repeat runs each scenario picked the same products every time. And we show our miss: median regret is 12.3 percent against a target of 10, caused by model error, which a learning loop on real data would address.
 
-<!-- LATE: Consistency is n/a until the live `make eval RUNS=5` run; if it has run by recording time, add one clause with its number, or leave it out. Do not say it passed before it has. -->
-<!-- The 30 of 30, 8.1%, 39 of 39 and 12.3% figures are from the 2026-10-01 latest.md. -->
+<!-- The 30 of 30, 8.1%, 39 of 39 and 12.3% figures are from the 2026-10-01 latest.md; the consistency clause (100%, 5 of 5) is from backend/evals/published/consistency.md, the live RUNS=5 run generated 2026-10-01T18:03:12Z. -->
 
 ### 3:45–4:00 Closing summary
 
