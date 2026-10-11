@@ -8,6 +8,8 @@ The video is made in three passes:
 2. **Record the voice-over separately** (Part B). Part B holds only the words to say: 24 short paragraphs, one per screen, in plain English.
 3. **Edit and merge** (Part C). Put the voice on the timeline first, then lay the clips on it with the editing map at the end of Part A: paragraph N of the voice goes with screen step N of the map. Cut the planning waits.
 
+Or record screen and voice together in one take: **Part D** merges the same paragraphs with their clicks, step by step, and needs almost no editing.
+
 Everything on screen is a **recorded example brief** of the home page, played on `make demo` with no API key: the planner, optimiser and simulator run live, and only the LLM's answers are replayed from cassettes (ADR 0054, ADR 0073). Use only the clicks below; a brief or amendment that is not recorded shows "Not in the demo recordings".
 
 Every eval number in the voice-over is on the Evals page and in `backend/evals/published/latest.md` (generated 2026-10-01, 33 scenarios, seed-42 world, `replay` provider): 33 scenarios, 12 of 13 targets met, plan quality 30 of 30, constraint satisfaction 30 of 30, median regret 12.3% against a target of ≤ 10% (said as a miss, not hidden). Consistency (5 of 5 in `consistency.md`, a live run) is **not** spoken: the Evals page shows it as "Not scored" under replay, and the voice must never contradict the screen; it stays in `nine-blocker.md` and the deck. The only other numbers are the Diwali brief's own (₹8 lakh, 18%, ₹6 lakh), read off the screen, and "a thousand times", which the Simulation card shows as 1000 runs.
@@ -263,5 +265,105 @@ Timeline par pehle voice daalo. Phir har paragraph jahan shuru hota hai, wahan u
 11. **Export:** mp4, H.264, 1080p, 30 fps, video ~1.2 Mbps + audio 128 kbps: 3.5 min ≈ 35 MB (limit 50 MB, SPEC §19). Bada ho to 720p.
 12. **Upload:** YouTube unlisted → private window mein play check → link README ke LATE marker aur deck slides 1, 8, 12 mein → `make deck` → mp4 form mein upload.
 13. **Baad mein:** `make demo-down` (stack band, data rehta hai).
+
+## Part D: ek take mein (screen + voice saath, editing lagbhag zero)
+
+Agar screen aur awaaz ek saath record karni hai, to Part A/B/C ki jagah yeh list follow karo. Wahi 24 paragraphs hain (para 11, Not selected, chhoda hai taaki 4:00 se neeche rahein), bas har ek ke saath us waqt ka click likha hai. Critic loop, clarification form, Evals aur GitHub pehle se alag tabs mein khule rakho: recording mein sirf **Ctrl + 2/3/4/5** dabana hai, isliye take lagbhag 3:45 ka banta hai.
+
+### D0. Pehle se tayyar (10 minute)
+
+1. Stack chal raha ho (**Demo mode** badge). Chrome ka zoom wahi rakho jisme poori plan table dikhti hai (**› Details** aur **⚖ Mechanisms** samet).
+2. **Paanch tabs**, isi order mein (Ctrl + T se naya tab):
+   - Tab 1: http://localhost:3000 (home, top).
+   - Tab 2: http://localhost:3000 → **Quick Diwali push** → Try it → Plan it → "Awaiting approval" tak wait → left **Agent trace** card mein scroll karke **Critic** ka **loop_back** card beech mein rakho. Aise hi chhod do.
+   - Tab 3: http://localhost:3000 → **No budget: the agent asks** → Try it → Plan it → "Awaiting clarification" aur form dikhe. Chhod do.
+   - Tab 4: http://localhost:3000/evals (top).
+   - Tab 5: https://github.com/asalwania/promopilot.
+   - Ctrl + 1 se Tab 1 par wapas.
+3. Mic on: **Win + G** → Settings (gear) → Capturing → audio record **on**, apna mic chuno. Test: Win + Alt + R → "testing one two three" → Win + Alt + R → Videos folder ki file play karo, awaaz aani chahiye.
+4. **Win + A** → Do not disturb. Phone silent. Yeh list phone par (Script Reader ka "One take" tab) ya print.
+5. Yeh text copy karo (select → Ctrl + C), recording mein step 13 par Ctrl + V: `Budget cut to ₹6 lakh`. Bilkul yahi text chahiye (₹ ke saath), warna replay match nahi hoga aur trace mein fallback dikhega.
+6. Bookmarks bar chhupao: **Ctrl + Shift + B**. Recording se theek pehle **F11** (fullscreen: taskbar aur tabs chhup jaate hain; Ctrl + 2 waise hi chalta hai). Baad mein F11 se bahar.
+7. Ek baar **bina record kiye** poora D1 bolte hue chalao, timer ke saath. 3:55 se kam hona chahiye. Zyada ho to scroll par mat ruko, bas bolte raho.
+8. **Time budget** (pehla take 7:34 nikla, limit 4:00): step 3–12 (live demo) **2:10** par khatam; step 13–15 (amend + approve) **0:50** mein, revision ke baad poori table dobara scroll **mat** karo, sirf What changed box; step 16–23 **1:00**. Scroll karte hue bolo, chup hokar scroll mat karo.
+
+Galti ho jaaye: Win + Alt + R (stop), Tab 1 par home, poora take dobara. Tabs 2–5 waise hi rehte hain.
+
+### D1. Take (lagbhag 3:45)
+
+Har step mein **Karo** (screen par) aur **Bolo** (yahi shabd). Bolte-bolte karo; pehle bolna khatam hone ka wait mat karo.
+
+**Introduction**
+
+1. Karo: Tab 1 home page top, mouse kone mein. **F11**. **Win + Alt + R**. 2 second chup, phir bolo.
+   Bolo: "Hi, my name is ______. This is PromoPilot, our entry for Problem three. Give it a brief. It gives back a plan you can approve."
+
+**Problem**
+
+2. Karo: bolte hue dheere neeche scroll, jab tak 4 cards aur **Brief** box dikhen. Mouse **Diwali demo** card par.
+   Bolo: "Today, promotions are planned in spreadsheets. One discount can take sales from a sister product, empty the stock, and break the budget. PromoPilot turns a short brief into a full plan, with reasons."
+
+**Live demo**
+
+3. Karo: **Diwali demo** ke **Try it** click (brief bhar jaata hai). Bolo; "Plan it." bolte hi orange **Plan it →** click.
+   Bolo: "The brief: eight lakh rupees, Snacks and Beverages, North and West, margin above eighteen percent, clear the extra namkeen stock, target families. Plan it."
+4. Karo: kuch mat chhuo. Mouse left **Agent trace** par. Dheere bolo; planning 8–10 s mein ho jaati hai. Bolne ke baad bhi "Planning…" ho to chup rehkar wait. **Awaiting approval** aur **Review plan revision 1** card aane par aage.
+   Bolo: "On the left, the agent trace runs live. The Context agent reads the brief. The Planner picks its own tools."
+5. Karo: scroll neeche **Assumptions** card (neeche **Flagged** row dikhe).
+   Bolo: "Every assumption is listed, with its source and confidence. One field is flagged for a human."
+6. Karo: scroll **Plan revision 1** table; poori table dikhe.
+   Bolo: "The plan, line by line: product, mechanism, discount, duration, target segment, uplift, profit range, and stock-out risk."
+7. Karo: **West (11)** click. "Compare regions" bolte hi **Compare regions** click. Aakhir mein **North (11)** click.
+   Bolo: "North and West get their own lines. Compare regions shows them side by side."
+8. Karo: **SKU0017** row (Notes mein Cannibalisation + Halo) → **› Details** click. Naam lete waqt mouse: "why" par **Why this line**, "yellow box" par peela box, "green box" par hara box.
+   Bolo: "Open a line: why it was chosen, and the uplift by segment. Yellow box, cannibalisation. This product takes sales from a sister product. Green box, halo. It lifts a related product."
+9. Karo: usi row mein **⚖ Mechanisms** click. "marked" par mouse **Chosen** badge par. Bolne ke baad **Esc**.
+   Bolo: "Each line also compares the other mechanisms. The chosen one is marked."
+10. Karo: scroll **Constraint checklist** (5 × Pass).
+    Bolo: "Every constraint is checked: budget, margin, stock, clearance, policy. All pass."
+11. Karo: scroll **Not selected** se guzar kar **Competitor prices** (Undercut badges + Planner's response).
+    Bolo: "Competitor prices: where a rival is cheaper, and how the planner responds."
+12. Karo: scroll **Simulation** (tiles + chart).
+    Bolo: "The simulation runs the plan a thousand times. Every line gets a profit range before launch."
+13. Karo: **Home** key → **Review plan revision 1** card → **Amend the brief** box click → **Ctrl + V** (`Budget cut to ₹6 lakh`) → **Amend and re-plan** click. Wait (8–10 s) mein doosri line. **Review plan revision 2** aane par thoda scroll, bas **What changed from plan revision 1** box tak ("No plan line changed") → teesri line. Table dobara mat dikhao.
+    Bolo: "Now cut the budget to six lakh." … "The agent plans again." … "No line changed. The plan already fits."
+14. Karo: **Home** → **Review plan revision 2** → Amend box → type `Drop West` (9 letters) → **Amend and re-plan**. **Review plan revision 3** aane par thoda scroll, bas **What changed from plan revision 2** box tak (table **Removed (11)**). Phir seedha step 15.
+    Bolo: "Then, drop West." … "Revision three shows exactly which lines were removed."
+15. Karo: **Home** → **Review plan revision 3**. Pehli line → **Approve plan revision 3** click → "Confirm." bolte hi **Confirm approval** click → **End** key (Audit trail) → aakhri line.
+    Bolo: "Nothing is final until a person approves it." … "Confirm." … "And the audit trail records every step."
+
+**AI capabilities**
+
+16. Karo: **Home** key. Mouse left **Agent trace** ke tool calls (get_scope_data, run_optimizer…) par.
+    Bolo: "Four things make this an agent. One, tool use: the Planner decides what to call."
+17. Karo: scroll neeche **Plan revision 3** table. Kisi **Uplift** number par mouse rakho, **hilao mat**; 1–2 s mein tooltip "Source: …" aayega. Tooltip ke saath bolo.
+    Bolo: "Two, grounding: the language model never computes a number. Every number shows its source."
+18. Karo: **Ctrl + 2** (Tab 2: Critic loop_back).
+    Bolo: "Three, self-correction: the Critic finds heavy cannibalisation and sends the plan back. Attempt two passes."
+19. Karo: **Ctrl + 3** (Tab 3: clarification form).
+    Bolo: "Four, clarification: no budget in the brief, so the agent stops and asks."
+
+**Key features + eval dashboard**
+
+20. Karo: **Ctrl + 1** (Tab 1, plan table).
+    Bolo: "All nine features: product selection, mechanism, discount strategy, cannibalisation, product relationships, inventory, geography, competitor awareness, and simulation."
+21. Karo: **Ctrl + 4** (Evals top: **12 of 13 targets met**).
+    Bolo: "Reliability is measured, not claimed. Thirty-three test scenarios, with answers the agent never sees. Twelve of thirteen targets met."
+
+**Business impact**
+
+22. Karo: scroll neeche **PLAN QUALITY** cards (Plan quality 100% Pass, Regret 12.3% Fail), phir **Regret distribution** chart.
+    Bolo: "Every plan passes every constraint. Thirty of thirty beat the baseline. One honest miss: median regret is twelve point three percent. The target is ten."
+
+**Closing**
+
+23. Karo: **Ctrl + 5** (GitHub page). Bolo, phir 2 second chup. **Win + Alt + R** (stop). **F11** se bahar.
+    Bolo: "PromoPilot: agents decide, tools compute, humans approve. One command runs it: make demo, no API key. The code is on GitHub. Thank you."
+
+### D2. Baad mein (10 minute)
+
+1. File Videos folder mein. Length 4:00 se kam honi chahiye. Zyada ho to chup wale gap kaat do (ya batao).
+2. 50 MB se neeche compress (ffmpeg: `ffmpeg -i in.mp4 -ss 1 -c:v libx264 -preset slow -b:v 1200k -maxrate 1500k -bufsize 3000k -c:a aac -b:a 128k out.mp4`). Shuru ka 1 s trim bhi isi mein (`-ss 1`).
+3. YouTube unlisted upload → private window mein check → link README ke LATE marker aur deck slides 1, 8, 12 mein → `make deck`.
 
 Screenshots for the deck and for B-roll come from the same stack: `make screenshots` writes 1920×1080 PNGs to `frontend/screenshots/`, and the CI `demo` job uploads them as the `deck-screenshots` artifact. `docs/deck.md` says how to build the PDF.
