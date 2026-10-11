@@ -104,6 +104,11 @@ test-e2e: ## Playwright against a running stack (make dev or make up)
 screenshots: ## Capture the deck screenshots (1920x1080) into frontend/screenshots/ against a running make demo (no key)
 	$(FRONTEND) E2E_BASE_URL=$${E2E_BASE_URL:-http://localhost:$(WEB_PORT)} pnpm screenshots
 
+.PHONY: deck
+deck: ## Build the pitch deck PDF (PromoPilot-deck.pdf): cut the slide crops from frontend/screenshots/, then export docs/deck.md with Marp
+	uv run --no-project --with pillow python docs/deck/crops.py
+	npx -y @marp-team/marp-cli@latest docs/deck.md --pdf --html --allow-local-files --no-stdin --theme-set docs/deck/theme.css -o PromoPilot-deck.pdf
+
 .PHONY: api-types api-docs tool-docs
 api-types: ## Export OpenAPI, regenerate frontend API types, the API docs (docs/api.md) and the tool docs (docs/tools.md)
 	$(BACKEND) uv run python -m promopilot.api.openapi > ../docs/openapi.json

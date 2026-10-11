@@ -26,7 +26,7 @@ Checked on 2026-10-02 against `main` at `403a416`.
   - Neither document has a `LATE:` marker left.
 - [ ] **All 9 features visible in the video.** Owner: **the user** (#80). [video-script.md](video-script.md) shows all nine (F-01 to F-09) between 0:40 and 3:25, using only recorded briefs, so it plays with no key.
 - [ ] **Video 2–4 min, mp4 under 50 MB, YouTube unlisted link works.** Owner: **the user** (#80). The script runs about 3:50. After uploading, check the link in a private window, then put it in the README's "Demo video" section (replacing its `LATE:` marker) and in the deck's three `OWNER:` video markers.
-- [ ] **Deck PDF under 50 MB, 12 slides.** Owner: **the user** (#79). [deck.md](deck.md) has the 12 slides of SPEC §17, with the published numbers. Its header comment gives the three steps: get the screenshots (the `deck-screenshots` CI artifact, or `make screenshots`), fill the `OWNER:` markers, and export with Marp.
+- [ ] **Deck PDF under 50 MB, 12 slides.** Owner: **the user** (#79). [deck.md](deck.md) is the deck: the 12 slides of SPEC §17 with the published numbers, on the warm UI theme ([deck/theme.css](deck/theme.css)). `make deck` cuts the slide crops from the screenshots (the `deck-screenshots` CI artifact, or `make screenshots`) and exports the PDF. Left: fill the `OWNER:` video markers, rebuild, upload.
 - [ ] **Problem statement dropdown set to "Retail – Autonomous Promotion Planner".** Owner: **the user**, on the Unstop form.
 - [ ] **Confirmation screenshot saved.** Owner: **the user**, after submitting.
 
@@ -34,7 +34,7 @@ Checked on 2026-10-02 against `main` at `403a416`.
 
 | Field | Requirement | Status |
 |---|---|---|
-| Pitch deck | PDF, ≤ 50 MB, 8–12 slides covering team, problem, solution, architecture, AI models, demo, impact, scalability, roadmap | Content ready in [deck.md](deck.md), and its 12 slides cover every required topic. **User**: build the PDF (#79). |
+| Pitch deck | PDF, ≤ 50 MB, 8–12 slides covering team, problem, solution, architecture, AI models, demo, impact, scalability, roadmap | Deck ready in [deck.md](deck.md); its 12 slides cover every required topic and `make deck` builds the PDF (#79). **User**: add the video link, rebuild, upload. |
 | Demo video | 2–4 min mp4 plus an unlisted YouTube or Drive link; intro, problem, live demo, AI capabilities, key features, impact, close | Script ready in [video-script.md](video-script.md), with its sections in the required order. **User**: record, edit and upload it (#80). |
 | GitHub repo | Public; source, README, installation, dependencies, architecture, API docs, environment setup | Done; see the §19 items above. |
 | Problem statement | "Retail – Autonomous Promotion Planner" | **User**: select it on the form. |

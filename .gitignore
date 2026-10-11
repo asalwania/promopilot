@@ -42,3 +42,6 @@ Thumbs.db
 
 # a refused `make record-cassettes` leaves the Explainer requests and answers it asked here
 backend/cassettes/failed/
+
+# the pitch deck PDF `make deck` builds
+/PromoPilot-deck.pdf

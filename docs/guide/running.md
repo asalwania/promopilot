@@ -45,6 +45,7 @@ The `/evals` page shows the recorded full eval run baked into the api image (33 
 | `make demo` | Build, prepare (or reuse) the data and models, start the app, print the URL |
 | `make demo-down` | Stop the demo, keeping its data, models and sessions for a fast restart |
 | `make screenshots` | With the demo running, capture the deck's screenshots (1920x1080, recorded briefs only, no key) into `frontend/screenshots/`; CI uploads them as the `deck-screenshots` artifact (#78) |
+| `make deck` | Build the pitch deck PDF (`PromoPilot-deck.pdf`) from `docs/deck.md`: cut the slide crops from those screenshots with `docs/deck/crops.py`, then export with Marp; needs Node (npx) and a local Chrome or Edge (#79) |
 | `make demo-reset` | Stop the demo and delete its data, models and sessions. Run it after pulling a change to the data generator |
 
 **Without make** (for example in Windows PowerShell), the same stack starts with:
