@@ -26,6 +26,7 @@ import {
   formatTokens,
 } from "@/lib/format";
 import type { TraceConnection } from "@/lib/trace-stream";
+import { cn } from "@/lib/utils";
 
 type Payload<K extends TracePayload["kind"]> = Extract<
   TracePayload,
@@ -141,7 +142,10 @@ export function TraceTimeline({
             </p>
           )
         ) : (
-          <ol aria-label="Trace timeline" className="flex flex-col gap-3">
+          <ol
+            aria-label="Trace timeline"
+            className="before:bg-primary/25 relative flex flex-col gap-4 before:absolute before:top-2 before:bottom-2 before:left-[5px] before:w-px"
+          >
             {runs.map((run) => (
               <NodeRunEntry key={run.key} run={run} />
             ))}
@@ -198,8 +202,19 @@ function NodeRunEntry({ run }: { run: NodeRun }) {
       : nodeLabel(run.node);
   const { finished } = run;
   return (
-    <li data-run="" className="flex flex-col gap-1.5">
-      <h3 className="flex items-center gap-2 text-sm font-medium">
+    <li data-run="" className="relative flex flex-col gap-1.5 pl-6">
+      <span
+        aria-hidden
+        className={cn(
+          "ring-card absolute top-[5px] left-0 size-[11px] rounded-full ring-4",
+          finished === null
+            ? "bg-primary animate-pulse"
+            : finished.outcome === "failed"
+              ? "bg-destructive"
+              : "bg-primary",
+        )}
+      />
+      <h3 className="flex items-center gap-2 text-sm font-semibold">
         <span>{label}</span>
         <OutcomeBadge finished={finished} />
         {finished && (
@@ -238,7 +253,7 @@ function OutcomeBadge({
   if (finished === null) return <Badge variant="secondary">Running</Badge>;
   switch (finished.outcome) {
     case "completed":
-      return <Badge variant="outline">Done</Badge>;
+      return <Badge className="bg-success-muted text-success">Done</Badge>;
     case "interrupted":
       return <Badge variant="secondary">Paused</Badge>;
     case "failed":
@@ -306,10 +321,10 @@ function ToolCall({ call }: { call: Payload<"tool_called"> }) {
         <summary className="text-muted-foreground cursor-pointer">
           Arguments and result
         </summary>
-        <pre className="bg-muted mt-1 overflow-x-auto rounded p-2 text-[11px]">
+        <pre className="bg-muted mt-1 overflow-x-auto rounded-lg p-2.5 text-[11px]">
           {JSON.stringify(call.arguments, null, 2)}
         </pre>
-        <pre className="bg-muted mt-1 overflow-x-auto rounded p-2 text-[11px]">
+        <pre className="bg-muted mt-1 overflow-x-auto rounded-lg p-2.5 text-[11px]">
           {JSON.stringify(call.result_summary, null, 2)}
         </pre>
       </details>

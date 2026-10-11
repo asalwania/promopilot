@@ -45,7 +45,7 @@ export function EvalMetricCards({ metrics }: { metrics: EvalMetric[] }) {
           aria-label={group.title}
           className="flex flex-col gap-3"
         >
-          <h2 className="text-muted-foreground text-sm font-medium tracking-wide uppercase">
+          <h2 className="text-muted-foreground font-sans text-xs font-semibold tracking-[0.1em] uppercase">
             {group.title}
           </h2>
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">

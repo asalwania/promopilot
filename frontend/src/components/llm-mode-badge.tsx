@@ -6,7 +6,15 @@ export function LLMModeBadge({ llm }: { llm: LLMStatus }) {
   const replay = llm.mode === "replay";
   return (
     <p className="flex items-center gap-2 text-sm">
-      <Badge variant={replay ? "secondary" : "outline"}>
+      <Badge variant={replay ? "secondary" : "outline"} className="gap-1.5">
+        <span
+          aria-hidden
+          className={
+            replay
+              ? "bg-warning size-1.5 rounded-full"
+              : "bg-success size-1.5 rounded-full"
+          }
+        />
         {replay ? "Demo mode" : "Live LLM"}
       </Badge>
       <span className="text-muted-foreground">

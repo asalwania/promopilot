@@ -93,3 +93,4 @@ Every decision PromoPilot made that SPEC.md did not settle, oldest first. Each r
 - [ADR 0090: The Explainer is shown the totals and the budget left it would otherwise work out itself, so it never cites a figure no tool output shows; a refused recording dumps the Explainer's requests and answers](0090-the-explainer-is-shown-the-totals-it-would-derive.md)
 - [ADR 0091: The evidence matrix cites files and symbols, not line numbers, and a test resolves every citation](0091-the-matrix-cites-files-and-symbols-and-a-test-resolves-them.md)
 - [ADR 0092: The architecture document's module diagram shows the transitive reduction of the real imports, and a test checks it](0092-module-dependency-diagram-is-tested-against-imports.md)
+- [ADR 0093: The web app uses one warm premium light theme, set in design tokens, with serif headings](0093-warm-premium-visual-theme.md)

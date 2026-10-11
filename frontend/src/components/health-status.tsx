@@ -34,7 +34,14 @@ export function HealthStatus({ result }: { result: HealthResult }) {
             <div key={name} className="contents">
               <dt className="text-muted-foreground">{name}</dt>
               <dd>
-                <Badge variant={value === "error" ? "destructive" : "outline"}>
+                <Badge
+                  variant={value === "error" ? "destructive" : "outline"}
+                  className={
+                    value === "ok"
+                      ? "bg-success-muted text-success border-transparent"
+                      : undefined
+                  }
+                >
                   {value}
                 </Badge>
               </dd>
