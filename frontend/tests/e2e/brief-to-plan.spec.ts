@@ -51,10 +51,18 @@ test("a typed brief becomes a plan table with no API key", async ({ page }) => {
   await expect(
     page.getByRole("table", { name: /^Uplift by segment for / }),
   ).toBeVisible();
-  await north
+  // At 1920×1080, the deck's and the demo video's size, the plan table fits its card:
+  // every line's actions are in view with no sideways scroll (#195).
+  await page.setViewportSize({ width: 1920, height: 1080 });
+  await north.evaluate((table) => table.scrollIntoView({ block: "start" }));
+  const mechanisms = north
     .getByRole("button", { name: /^Compare mechanisms for / })
-    .first()
-    .click();
+    .first();
+  await expect(mechanisms).toBeInViewport();
+  expect(await north.evaluate((table) => table.parentElement?.scrollLeft)).toBe(
+    0,
+  );
+  await mechanisms.click();
   const drawer = page.getByRole("dialog", { name: /^Mechanisms for / });
   await expect(
     drawer.getByRole("table", { name: "Mechanism comparison" }),
