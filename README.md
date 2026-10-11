@@ -146,6 +146,7 @@ flowchart LR
 | `make test-integration` | Backend tests against a throwaway Postgres |
 | `make test-e2e` | Playwright journeys against a running stack |
 | `make screenshots` | With the demo running, capture the deck screenshots (1920x1080, recorded briefs only, no key) into `frontend/screenshots/`; CI uploads them as the `deck-screenshots` artifact |
+| `make deck` | Build the pitch deck PDF (`PromoPilot-deck.pdf`) from [docs/deck.md](docs/deck.md): cut the slide crops from those screenshots, then export with Marp (needs Node and a local Chrome or Edge) |
 | `make lint` / `make format` / `make typecheck` | ruff, ESLint and Prettier; mypy strict and tsc strict |
 | `make eval` | Play the 33 eval scenarios and write the report (`ONLY=`, `SMOKE=1`, `RUNS=`, `SEED=`) |
 | `make eval-smoke` | What CI runs: replay the five smoke scenarios with no key |

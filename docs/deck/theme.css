@@ -1,0 +1,190 @@
+/* @theme promopilot */
+/* The deck's Marp theme: the warm UI palette (ADR 0093), Source Serif 4 headings, Geist body. */
+@import url('https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,500;0,8..60,600;1,8..60,400&family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap');
+@import 'default';
+
+:root {
+  --ivory: #faf9f5;
+  --ink: #141413;
+  --ink-soft: #3d3a34;
+  --clay: #c96442;
+  --clay-dark: #8f4329;
+  --clay-soft: #f6e6de;
+  --sand: #f0ede4;
+  --muted-bg: #f5f2ea;
+  --muted: #6b675e;
+  --line: #e8e4d9;
+  --green: #2f6b47;
+  --green-soft: #e4f0e8;
+  --red: #b3362b;
+  --red-soft: #f7e4e1;
+  --serif: 'Source Serif 4', Georgia, 'Times New Roman', serif;
+  --sans: 'Geist', 'Segoe UI', system-ui, -apple-system, sans-serif;
+  --mono: 'Geist Mono', Consolas, 'Courier New', monospace;
+}
+
+section {
+  font-family: var(--sans);
+  font-size: 17px;
+  line-height: 1.42;
+  color: var(--ink);
+  background: var(--ivory);
+  padding: 42px 56px 54px;
+  justify-content: flex-start;
+  align-content: start;
+  letter-spacing: 0;
+}
+section h1, section h2 {
+  font-family: var(--serif);
+  font-weight: 500;
+  color: var(--ink);
+  letter-spacing: -0.012em;
+}
+section h1 { font-size: 33px; line-height: 1.16; margin: 0 0 16px; }
+section h2 { font-size: 22px; line-height: 1.2; margin: 0 0 8px; }
+section h3 { font-family: var(--sans); font-size: 15px; font-weight: 600; margin: 0 0 4px; letter-spacing: 0; color: var(--ink); }
+section p, section ul, section ol { margin: 0 0 8px; }
+section ul { padding-left: 20px; }
+section li { margin: 2px 0; }
+section strong, section b { font-weight: 600; }
+section code {
+  font-family: var(--mono);
+  font-size: 0.86em;
+  background: var(--sand);
+  color: var(--ink);
+  padding: 1px 6px;
+  border-radius: 5px;
+}
+section a { color: var(--clay); text-decoration: none; }
+section img { background: transparent; }
+
+section footer {
+  left: 56px; right: auto; bottom: 22px; margin: 0;
+  font-family: var(--sans); font-size: 11px; letter-spacing: 0.02em; color: #8a857a;
+}
+section::after {
+  right: 56px; bottom: 20px; padding: 0;
+  font-family: var(--sans); font-size: 12px; color: #8a857a;
+}
+
+/* Text helpers */
+.eyebrow { font-size: 11px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: var(--clay); margin: 0 0 8px; }
+.eyebrow.muted { color: var(--muted); }
+.lede { font-size: 20px; color: var(--ink-soft); line-height: 1.4; }
+.foot { font-size: 12px; color: var(--muted); line-height: 1.45; }
+.cap { font-size: 12px; color: var(--muted); line-height: 1.4; margin-top: 7px; }
+.tagline { font-family: var(--serif); font-size: 22px; margin: 10px 0 0; }
+.quote {
+  font-family: var(--serif); font-size: 17.5px; font-style: italic; color: var(--ink-soft);
+  border-left: 3px solid var(--clay); padding: 2px 0 2px 14px; margin: 0 0 14px; line-height: 1.4;
+}
+
+/* Layout */
+.cols { display: grid; gap: 22px; }
+.card {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 13px 15px;
+  box-shadow: 0 1px 2px rgba(20, 20, 19, 0.04), 0 12px 32px -14px rgba(20, 20, 19, 0.10);
+}
+.card p { font-size: 13.5px; color: var(--ink-soft); margin: 0; line-height: 1.4; }
+.card.soft { background: var(--muted-bg); box-shadow: none; }
+.card.accent { border-left: 4px solid var(--clay); }
+.card.big h3 { font-size: 17px; }
+.card.big p { font-size: 15px; }
+.shot {
+  display: block;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: 0 1px 2px rgba(20, 20, 19, 0.05), 0 16px 40px -18px rgba(20, 20, 19, 0.22);
+}
+
+/* KPI tiles */
+.kpi .n { font-family: var(--serif); font-size: 38px; line-height: 1; font-weight: 500; color: var(--ink); margin: 4px 0 8px; letter-spacing: -0.01em; }
+.kpi .l { font-size: 12.5px; color: var(--muted); line-height: 1.35; }
+.kpi .l.top { font-weight: 600; color: var(--ink-soft); text-transform: uppercase; letter-spacing: 0.06em; font-size: 10.5px; }
+
+/* Pills */
+.pill {
+  display: inline-block; font-size: 11px; font-weight: 600; letter-spacing: 0.02em;
+  padding: 2px 9px; border-radius: 999px; line-height: 1.5; vertical-align: middle; white-space: nowrap;
+}
+.pill.pass { background: var(--green-soft); color: var(--green); }
+.pill.miss { background: var(--red-soft); color: var(--red); }
+.pill.clay { background: var(--clay-soft); color: var(--clay-dark); }
+.pill.neutral { background: var(--sand); color: var(--ink-soft); }
+
+/* Numbered steps */
+.steps { counter-reset: step; list-style: none; padding: 0; margin: 0; }
+.steps li { position: relative; padding-left: 34px; margin: 0 0 9px; font-size: 14.5px; line-height: 1.38; }
+.steps li { list-style: none; }
+.steps li::marker { content: none; }
+.steps li::before {
+  counter-increment: step; content: counter(step);
+  position: absolute; left: 0; top: 0;
+  width: 23px; height: 23px; border-radius: 50%;
+  background: var(--clay); color: #fff;
+  font-size: 11.5px; font-weight: 600; line-height: 23px; text-align: center;
+}
+
+/* Feature grid */
+.feat { display: grid; grid-template-columns: repeat(3, 1fr); gap: 11px; }
+.feat .card { padding: 10px 12px; }
+.feat .id { font-family: var(--mono); font-size: 11px; color: var(--clay); font-weight: 500; letter-spacing: 0.04em; }
+.feat h3 { font-size: 14.5px; margin: 1px 0 3px; }
+.feat p { font-size: 12px; line-height: 1.35; }
+.feat .demo { font-size: 11.5px; color: var(--ink); margin-top: 6px; padding-top: 5px; border-top: 1px dashed var(--line); line-height: 1.35; }
+
+/* Tables */
+section table { font-size: 13.5px; border-collapse: collapse; width: 100%; margin: 0; }
+section table th {
+  text-align: left; font-weight: 600; color: var(--muted);
+  font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase;
+  background: var(--muted-bg); border: 0; border-bottom: 1px solid var(--line); padding: 7px 10px;
+}
+section table td { border: 0; border-bottom: 1px solid #ece8de; padding: 6px 10px; vertical-align: top; background: transparent; }
+section table tr:nth-child(even) td, section table tr:nth-child(even) th { background: transparent; }
+section table tr:nth-child(even) th { background: var(--muted-bg); }
+.tight table { font-size: 12.5px; }
+.tight table td, .tight table th { padding: 4px 9px; }
+.tight table td:nth-child(2) { font-family: var(--mono); font-size: 11.5px; white-space: nowrap; }
+
+/* Architecture drawn in HTML */
+.arch { font-size: 12px; }
+.arch .band { display: flex; align-items: stretch; gap: 8px; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--line); background: #fff; position: relative; }
+.arch .band.agents { background: var(--clay-soft); border-color: #ecc6b5; }
+.arch .band.tools { background: var(--muted-bg); }
+.arch .band.plain { background: transparent; border: 0; padding: 0 12px; }
+.arch .band-label { position: absolute; top: -9px; left: 14px; font-size: 10px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: var(--clay-dark); background: var(--ivory); padding: 0 6px; }
+.arch .band.tools .band-label { color: var(--muted); }
+.arch .node { flex: 1 1 0; background: #fff; border: 1px solid var(--line); border-radius: 8px; padding: 7px 9px; text-align: center; font-weight: 600; line-height: 1.25; display: flex; flex-direction: column; justify-content: center; }
+.arch .node small { display: block; font-weight: 400; font-size: 10.5px; color: var(--muted); margin-top: 2px; line-height: 1.25; }
+.arch .node.a { border-color: #e4a68d; background: #fff; }
+.arch .node.h { background: var(--clay); border-color: var(--clay); color: #fff; }
+.arch .node.h small { color: #fbe9e2; }
+.arch .node.ghost { background: transparent; border-style: dashed; font-weight: 500; color: var(--ink-soft); }
+.arch .node.eval { border-style: dashed; border-color: var(--muted); }
+.arch .arrow { flex: 0 0 auto; align-self: center; color: var(--muted); font-size: 16px; line-height: 1; padding: 0 1px; text-align: center; }
+.arch .arrow small { display: block; font-size: 9.5px; color: var(--muted); margin-top: 1px; white-space: nowrap; }
+.arch .link { text-align: center; font-size: 11px; color: var(--muted); padding: 4px 0; letter-spacing: 0.02em; }
+
+/* Roadmap */
+.timeline { display: grid; grid-template-columns: repeat(5, 1fr); gap: 14px; }
+.timeline .card h3 { font-family: var(--serif); font-size: 17px; font-weight: 500; }
+
+/* Vertically centred slides (the close) */
+section.center { align-content: center; justify-content: center; }
+
+/* Dark slides (title and close) */
+section.dark { background: var(--ink); color: #ebe7dd; }
+section.dark h1, section.dark h2, section.dark h3 { color: var(--ivory); }
+section.dark .eyebrow { color: #e8a98f; }
+section.dark .lede { color: #cfc9bb; }
+section.dark .card { background: #1d1c1a; border-color: #2f2d29; box-shadow: none; }
+section.dark .card p { color: #cfc9bb; }
+section.dark .shot { border-color: #2f2d29; box-shadow: 0 20px 50px -20px rgba(0, 0, 0, 0.6); }
+section.dark code { background: #2a2825; color: var(--ivory); }
+section.dark .pill.neutral { background: #2a2825; color: #ebe7dd; }
+section.dark .foot, section.dark .cap { color: #8a857a; }
+section.dark footer, section.dark::after { color: #6b675e; }
