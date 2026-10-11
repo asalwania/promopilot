@@ -5,32 +5,34 @@ Target running time **3:30** (window 3:15–3:40). The submission form allows 2�
 The video is made in three passes:
 
 1. **Record the screen, no audio** (Part A). Four short clips, step by step, written for someone opening the app for the first time.
-2. **Record the voice-over separately** (Part B). Short English sentences at about 140 words a minute; every paragraph carries its video time and its word count.
-3. **Edit and merge** (Part C). Put the voice on the timeline first, then lay the clips on it using the editing map at the end of Part A. Cut the planning waits.
+2. **Record the voice-over separately** (Part B). Part B holds only the words to say: 24 short paragraphs, one per screen, in plain English.
+3. **Edit and merge** (Part C). Put the voice on the timeline first, then lay the clips on it with the editing map at the end of Part A: paragraph N of the voice goes with screen step N of the map. Cut the planning waits.
 
 Everything on screen is a **recorded example brief** of the home page, played on `make demo` with no API key: the planner, optimiser and simulator run live, and only the LLM's answers are replayed from cassettes (ADR 0054, ADR 0073). Use only the clicks below; a brief or amendment that is not recorded shows "Not in the demo recordings".
 
-Every eval number in the voice-over is from `backend/evals/published/latest.md` (generated 2026-10-01, 33 scenarios, seed-42 world, `replay` provider) and `consistency.md` (live run, 5 scenarios × 5 runs). Say them as written; the regret miss is said, not hidden. The only other numbers are the Diwali brief's own (₹8 lakh, 18%, 60%, ₹6 lakh), read off the screen, and "a thousand runs", which the Simulation card shows.
+Every eval number in the voice-over is on the Evals page and in `backend/evals/published/latest.md` (generated 2026-10-01, 33 scenarios, seed-42 world, `replay` provider): 33 scenarios, 12 of 13 targets met, plan quality 30 of 30, constraint satisfaction 30 of 30, median regret 12.3% against a target of ≤ 10% (said as a miss, not hidden). Consistency (5 of 5 in `consistency.md`, a live run) is **not** spoken: the Evals page shows it as "Not scored" under replay, and the voice must never contradict the screen; it stays in `nine-blocker.md` and the deck. The only other numbers are the Diwali brief's own (₹8 lakh, 18%, ₹6 lakh), read off the screen, and "a thousand times", which the Simulation card shows as 1000 runs.
 
 UI labels below are the ones in `frontend/src` after #193 (warm theme) and #196 (the plan table fits its card at 1920×1080).
 
 ## Timeline at a glance
 
-| Video time | Section | Screen | Voice | Words |
-|---|---|---|---|---|
-| 0:00–0:10 | Introduction | T1, A1 | V1 | 21 |
-| 0:10–0:31 | Problem | A1, A2 | V2 | 46 |
-| 0:31–2:27 | Live demo (the Diwali demo session) | A3–A21 | V3–V11 | 267 |
-| 2:27–2:48 | AI capabilities | A5, B3, C2, A8 | V12 | 47 |
-| 2:48–3:01 | Key features recap + eval dashboard | quick cuts, D1 | V13 | 27 |
-| 3:01–3:21 | Business impact | D1–D3 | V14 | 47 |
-| 3:21–3:34 | Closing with the GitHub link | T2 | V15 | 26 |
+Times assume 130 words a minute with a short breath after each paragraph. The voice recording is the master: when it is slower or faster, the clips move with it (Part C, step 8).
 
-Total: 481 words, 3:26 of speech plus a one-second breath between sections; the closing card holds to 3:34.
+| Target time | Section | Screen | Voice paragraphs | Words |
+|---|---|---|---|---|
+| 0:00–0:12 | Introduction | T1, A1 | 1 | 25 |
+| 0:12–0:28 | Problem | A1, A2 | 2 | 33 |
+| 0:28–2:20 | Live demo (the Diwali demo session) | A3–A21 | 3–16 | 227 |
+| 2:20–2:48 | AI capabilities | A5, B3, C2, A8 | 17–20 | 57 |
+| 2:48–3:05 | Key features recap + eval dashboard | quick cuts, D1 | 21–22 | 36 |
+| 3:05–3:18 | Business impact | D2, D3 | 23 | 25 |
+| 3:18–3:29 | Closing with the GitHub link | T2 | 24 | 23 |
+
+Total: 426 words. At 130 words a minute that is 3:29 of voice; the closing card holds two more seconds, so the video ends at about 3:31. At 140 it is 3:15, at 120 it is 3:45 (then use the cuts in Part C, step 8).
 
 ## Part A: screen recording guide (Hinglish, pehli baar app chalane wale ke liye)
 
-Is part mein video ke timestamps nahi hain, jaan-boojh kar: recording karte waqt sirf steps follow karo. Kaunsa step video mein kab aata hai, wo aakhri mein **Editing map** table mein hai.
+Is part mein video ke timestamps nahi hain, jaan-boojh kar: recording karte waqt sirf steps follow karo. Kaunsa step video mein kab aata hai aur kis voice paragraph ke saath, wo aakhri mein **A7 Editing map** table mein hai.
 
 ### A0. Pehle app ka naksha samajh lo (2 minute)
 
@@ -62,7 +64,7 @@ Is part mein video ke timestamps nahi hain, jaan-boojh kar: recording karte waqt
 
 **Wait ka matlab:** jab status card mein "Planning…" ghoom raha ho, agent kaam kar raha hai. 1–2 minute lagte hain. Us dauraan **kuch mat chhuo, scroll mat karo**. Recording chalne do; ye wait editing mein cut hoga.
 
-**"Ruko N s" ka matlab:** mouse hilaye bina N second hold. Editing mein isi hold se timing banegi.
+**"Ruko N s" ka matlab:** mouse hilaye bina N second hold. Har hold us screen ke voice paragraph se 2–3 s lamba rakha hai; editing mein extra kat jaata hai, kam pad jaaye to nahi badh sakta. Isliye **kam mat ruko, zyada ruk sakte ho.**
 
 **Agar galti ho jaaye:** recording stop karo, **New brief** dabao, aur wo clip shuru se dobara record karo. Sessions har baar bilkul same replay hote hain, kitni bhi baar.
 
@@ -86,47 +88,47 @@ Is part mein video ke timestamps nahi hain, jaan-boojh kar: recording karte waqt
 
 Shuru: home page, page ka sabse upar, mouse kone mein. **Win + Alt + R** (recording start).
 
-**A1 · Home page, top.** Kuch mat karo. **Ruko 12 s.**
+**A1 · Home page, top.** Kuch mat karo. **Ruko 15 s.**
 
-**A2 · Thoda neeche scroll.** Mouse wheel 2–3 click neeche, jab tak **Brief** box poora dikhe (4 cards bhi dikhte rahen). Mouse **Diwali demo** card par le jaao. **Ruko 6 s.**
+**A2 · Thoda neeche scroll.** Mouse wheel 2–3 click neeche, jab tak **Brief** box poora dikhe (4 cards bhi dikhte rahen). Mouse **Diwali demo** card par le jaao. **Ruko 12 s.**
 
-**A3 · "Try it" click.** **Diwali demo** card ke **Try it** button par click. *Dikhega:* Brief box mein lamba text bhar gaya: "Plan Diwali promotions for Snacks and Beverages across North and West. Budget ₹8 lakh. …". **Ruko 4 s.**
+**A3 · "Try it" click.** **Diwali demo** card ke **Try it** button par click. *Dikhega:* Brief box mein lamba text bhar gaya: "Plan Diwali promotions for Snacks and Beverages across North and West. Budget ₹8 lakh. …". **Ruko 6 s.**
 
 **A4 · "Plan it →" click.** Brief box ke neeche right wala orange button. *Dikhega:* naya page, heading **Planning session**; status card mein **Planning…**; left mein **Agent trace** bharne lagta hai.
 
 **A5 · Wait.** Kuch mat chhuo, scroll mat karo, mouse mat hilao. 1–2 minute. *Dikhega:* Agent trace mein Context agent, phir Planner ke neeche `get_scope_data`, `get_inventory_status`, `generate_candidates`, `run_optimizer`, `get_competitor_gaps`, phir Critic, Explainer, Approval. Jab status card **Awaiting approval** ho jaaye aur uske neeche **Review plan revision 1** card aa jaaye, tab aage badho.
 
-**A6 · Assumptions.** Mouse wheel se neeche scroll karo. Pehle **Review plan revision 1**, phir **LLM usage**, phir **Assumptions** card aayega. Scroll aise rok do ki **Assumptions** heading screen ke upar ke hisse mein ho. *Dikhega:* "1 needs a look", table, sabse neeche **Target segment** row par laal-sa **Flagged** badge. **Ruko 9 s.**
+**A6 · Assumptions.** Mouse wheel se neeche scroll karo. Pehle **Review plan revision 1**, phir **LLM usage**, phir **Assumptions** card aayega. Scroll aise rok do ki **Assumptions** heading screen ke upar ke hisse mein ho. *Dikhega:* "1 needs a look", table, sabse neeche **Target segment** row par laal-sa **Flagged** badge. **Ruko 12 s.**
 
-**A7 · Plan revision 1.** Aur neeche scroll: **Plan revision 1** card. Tabs **North (11) · West (11) · Compare regions** aur neeche table. Tabs screen ke upar rakho, table poori dikhe (right end mein **› Details** aur **⚖ Mechanisms**). **Ruko 6 s.**
+**A7 · Plan revision 1.** Aur neeche scroll: **Plan revision 1** card. Tabs **North (11) · West (11) · Compare regions** aur neeche table. Tabs screen ke upar rakho, table poori dikhe (right end mein **› Details** aur **⚖ Mechanisms**). **Ruko 10 s.**
 
-**A8 · Hover (tooltip).** Pehli row (SKU0002) mein **Uplift** column ka number (+265.2%) hai. Us par mouse le jaao aur **hilao mat**. 1–2 s baad chhota tooltip aata hai: "Source: …". **Ruko 3 s** (tooltip ke saath).
+**A8 · Hover (tooltip).** Pehli row (SKU0002) mein **Uplift** column ka number (+265.2%) hai. Us par mouse le jaao aur **hilao mat**. 1–2 s baad chhota tooltip aata hai: "Source: …". **Ruko 8 s** (tooltip ke saath). Phir mouse table se bahar le jaao.
 
-**A9 · Tabs.** **West (11)** tab click → **ruko 3 s**. **Compare regions** click (table "Regions side by side") → **ruko 4 s**. Wapas **North (11)** click.
+**A9 · Tabs.** **West (11)** tab click → **ruko 4 s**. **Compare regions** click (table "Regions side by side") → **ruko 5 s**. Wapas **North (11)** click.
 
-**A10 · Details.** Teesri row **SKU0017** dhundo: uske **Notes** mein do badges hain, **Cannibalisation** aur **Halo**. Us row ke sabse right mein **› Details** par click. *Dikhega:* row ke neeche ek section khulta hai: left mein **Why this line** aur **Uplift by segment** table; right mein ek peela box **Cannibalisation** aur uske neeche hara box **Halo**. **Ruko 15 s.**
+**A10 · Details.** Teesri row **SKU0017** dhundo: uske **Notes** mein do badges hain, **Cannibalisation** aur **Halo**. Us row ke sabse right mein **› Details** par click. *Dikhega:* row ke neeche ek section khulta hai: left mein **Why this line** aur **Uplift by segment** table; right mein ek peela box **Cannibalisation** aur uske neeche hara box **Halo**. **Ruko 18 s.**
 
-**A11 · Mechanisms.** Usi SKU0017 row mein, **› Details** ke right mein **⚖ Mechanisms** par click. *Dikhega:* right se ek panel khulta hai, heading **Mechanisms for SKU0017 in North**, ek table jisme ek row par **Chosen** badge. **Ruko 7 s.** Phir keyboard par **Esc** dabao: panel band.
+**A11 · Mechanisms.** Usi SKU0017 row mein, **› Details** ke right mein **⚖ Mechanisms** par click. *Dikhega:* right se ek panel khulta hai, heading **Mechanisms for SKU0017 in North**, ek table jisme ek row par **Chosen** badge. **Ruko 8 s.** Phir keyboard par **Esc** dabao: panel band.
 
-**A12 · Constraint checklist.** Neeche scroll: **Constraint checklist** card ("Every constraint passes", 5 rows sab **Pass**). **Ruko 5 s.**
+**A12 · Constraint checklist.** Neeche scroll: **Constraint checklist** card ("Every constraint passes", 5 rows **Budget · Minimum margin · Stock · Clearance · Policy**, sab **Pass**). **Ruko 7 s.**
 
-**A13 · Not selected.** Thoda aur neeche: **Not selected** card. **Ruko 4 s.**
+**A13 · Not selected.** Thoda aur neeche: **Not selected** card. **Ruko 6 s.**
 
-**A14 · Competitor prices.** Aur neeche: **Competitor prices** card: table (kuch rows par laal **Undercut** badge) aur uske neeche **Planner's response** bullets. Table aur bullets dono dikhen. **Ruko 6 s.**
+**A14 · Competitor prices.** Aur neeche: **Competitor prices** card: table (kuch rows par laal **Undercut** badge) aur uske neeche **Planner's response** bullets. Table aur bullets dono dikhen. **Ruko 7 s.**
 
-**A15 · Simulation.** Aur neeche: **Simulation** card: 8 chhote tiles (Gross profit, Units, …) aur neeche chart **Simulated gross profit by plan line**. Tiles aur chart dono dikhen. **Ruko 6 s.** Isme kuch click mat karo (**Re-simulate** mat dabao).
+**A15 · Simulation.** Aur neeche: **Simulation** card: 8 chhote tiles (Gross profit, Units, …) aur neeche chart **Simulated gross profit by plan line**. Tiles aur chart dono dikhen. **Ruko 9 s.** Isme kuch click mat karo (**Re-simulate** mat dabao).
 
 **A16 · Amend 1.** Ab upar wapas jaao (keyboard **Home** key, ya wheel upar) jab tak **Review plan revision 1** card dikhe (status card ke theek neeche). Usme **Amend the brief** box par click karo aur type karo, bilkul yeh: `Budget cut to ₹6 lakh`. Phir **Amend and re-plan** click. *Dikhega:* status **Planning…**; Review card gayab; left trace mein "Approval · attempt 2", "Context agent · attempt 2", "Planner · attempt 2" aate hain. **Wait 1–2 min, kuch mat chhuo**, jab tak **Review plan revision 2** card aa jaaye.
 
-**A17 · Revision 2 ka diff.** Neeche scroll **Plan revision 2** card tak. Card ke upar hi ek box hai **What changed from plan revision 1**: "After your amendment “Budget cut to ₹6 lakh”", "Marketing budget: ₹8 lakh → ₹6 lakh", chhoti Before/After table, aur line **No plan line changed.** Ye box poora dikhe. **Ruko 6 s.**
+**A17 · Revision 2 ka diff.** Neeche scroll **Plan revision 2** card tak. Card ke upar hi ek box hai **What changed from plan revision 1**: "After your amendment “Budget cut to ₹6 lakh”", "Marketing budget: ₹8 lakh → ₹6 lakh", chhoti Before/After table, aur line **No plan line changed.** Ye box poora dikhe. **Ruko 7 s.**
 
 **A18 · Amend 2.** Upar wapas **Review plan revision 2** card. **Amend the brief** box mein type: `Drop West`. **Amend and re-plan** click. **Wait 1–2 min**, jab tak **Review plan revision 3** aa jaaye.
 
-**A19 · Revision 3 ka diff.** Neeche scroll **Plan revision 3** card tak. Box **What changed from plan revision 2**: "Regions: North, West → North", table **Removed (11)**. Tabs ab sirf **North (11) · Compare regions**. **Ruko 6 s.**
+**A19 · Revision 3 ka diff.** Neeche scroll **Plan revision 3** card tak. Box **What changed from plan revision 2**: "Regions: North, West → North", table **Removed (11)**. Tabs ab sirf **North (11) · Compare regions**. **Ruko 7 s.**
 
 **A20 · Approve.** Upar wapas **Review plan revision 3** card. **Approve plan revision 3** click. *Dikhega:* text "Approving makes plan revision 3 final…" aur naya button **Confirm approval**. **Ruko 2 s.** **Confirm approval** click. *Dikhega:* status card **Approved** aur **Final** badge; left trace ka badge bhi **Final**.
 
-**A21 · Audit trail.** Page ke bilkul neeche scroll (keyboard **End**): **Audit trail** card, 3 lines (Amended plan revision 1 "Budget cut to ₹6 lakh" · Amended plan revision 2 "Drop West" · Approved plan revision 3). **Ruko 5 s.** **Win + Alt + R** (recording stop).
+**A21 · Audit trail.** Page ke bilkul neeche scroll (keyboard **End**): **Audit trail** card, 3 lines (Amended plan revision 1 "Budget cut to ₹6 lakh" · Amended plan revision 2 "Drop West" · Approved plan revision 3). **Ruko 6 s.** **Win + Alt + R** (recording stop).
 
 ### A3. Clip B: Quick Diwali push, sirf Critic ka loop (~3 minute real time)
 
@@ -148,121 +150,96 @@ Ye isliye alag hai kyunki Diwali demo mein Critic pehli baar hi pass ho jaata ha
 
 **D1 · Evals, top.** Nav mein **Evals** click. **Win + Alt + R** (start). Page ka top: heading **Evals**, line "Generated 1 Oct 2026 … provider replay · seed-42 world · 33 scenarios × 1 run", phir **12 of 13 targets met**, phir cards (CONSTRAINTS, AGENT BEHAVIOUR). **Ruko 12 s.**
 
-**D2 · Plan quality.** Dheere scroll neeche **PLAN QUALITY** section tak: **Plan quality (beats the rule-based baseline) 100% Pass**, **Regret (median, against the best plan) 12.3% Fail**, **Consistency n/a Not scored**. **Ruko 7 s.**
+**D2 · Plan quality.** Dheere scroll neeche **PLAN QUALITY** section tak: **Plan quality (beats the rule-based baseline) 100% Pass**, **Regret (median, against the best plan) 12.3% Fail**, **Consistency n/a Not scored**. **Ruko 8 s.**
 
-**D3 · Chart aur table.** Aur neeche **Regret distribution** chart (bars, ek line Median 12.3%, dotted Target ≤ 10%). **Ruko 3 s.** Aur neeche **Scenarios** table. **Ruko 3 s.** **Win + Alt + R** (stop).
+**D3 · Chart aur table.** Aur neeche **Regret distribution** chart (bars, ek line Median 12.3%, dotted Target ≤ 10%). **Ruko 4 s.** Aur neeche **Scenarios** table. **Ruko 4 s.** **Win + Alt + R** (stop).
 
 ### A6. Title cards (record nahi karne; editor mein text slide banao)
 
-**T1 · Intro card (0:00–0:05):** "PromoPilot · Autonomous Promotion Planner · [your name] · ET AI Hackathon, Problem 3".
+**T1 · Intro card (0:00–0:05):** "PromoPilot · Autonomous Promotion Planner · [your name] · ET AI Hackathon, Problem 3 · F3 × D2".
 
-**T2 · Closing card (3:21–3:34):** "github.com/asalwania/promopilot · make demo · no API key". Agar QR code hai to saath mein. Voice khatam hone ke baad 2 s hold.
+**T2 · Closing card (3:18–3:31):** "github.com/asalwania/promopilot · make demo · no API key". Agar QR code hai to saath mein. Voice khatam hone ke baad 2 s hold.
 
-### A7. Editing map (kaunsa step video mein kab, kis voice para ke saath)
+### A7. Editing map (voice paragraph N = screen step; ek paragraph, ek screen)
 
-| Video time | Screen (step) | Voice para | Note |
+Timeline par pehle voice daalo. Phir har paragraph jahan shuru hota hai, wahan uska clip rakho. Target time 130 words/minute par hai; asli time voice se lo.
+
+| Voice para | Target time | Screen (step) | Note |
 |---|---|---|---|
-| 0:00–0:05 | T1 | V1 | |
-| 0:05–0:10 | A1 | V1 | |
-| 0:10–0:31 | A1 → A2 | V2 | |
-| 0:31–0:42 | A3, A4 | V3 | |
-| 0:42–0:53 | A5 | V4 | wait ko 8–16× fast karo, 11 s banao |
-| 0:53–1:03 | A6 | V5 | |
-| 1:03–1:19 | A7, A9 | V6 | |
-| 1:19–1:37 | A10 | V7 | |
-| 1:37–1:45 | A11 | V8 | |
-| 1:45–1:54 | A12, A13 | V9 | |
-| 1:54–2:06 | A14, A15 | V10 | |
-| 2:06–2:27 | A16 → A21 | V11 | dono waits cut |
-| 2:27–2:31 | A5 (trace close-up, dobara) | V12 "Tool use" | |
-| 2:31–2:38 | B3 | V12 "Self-correction" | |
-| 2:38–2:43 | C2 | V12 "Clarification" | |
-| 2:43–2:48 | A8 (tooltip) | V12 "Grounding" | |
-| 2:48–2:56 | quick cuts: A7, A10, A11, A12, A14, A15 (~1.3 s each) | V13 | time nahi hai to sirf A7 |
-| 2:56–3:01 | D1 | V13 "Here is the eval dashboard" | |
-| 3:01–3:08 | D1 | V14 | |
-| 3:08–3:21 | D2, D3 | V14 | |
-| 3:21–3:34 | T2 | V15 | 2 s hold at the end |
+| 1 | 0:00–0:12 | T1 (0:00–0:05), phir A1 | |
+| 2 | 0:12–0:28 | A1 → A2 | |
+| 3 | 0:28–0:39 | A3, A4 | |
+| 4 | 0:39–0:49 | A5 | wait ko 8–16× fast karo, ~10 s banao |
+| 5 | 0:49–0:57 | A6 | |
+| 6 | 0:57–1:05 | A7 | A8 (tooltip) yahan se kaat lo; wo para 20 mein lagega |
+| 7 | 1:05–1:12 | A9 | |
+| 8 | 1:12–1:27 | A10 | |
+| 9 | 1:27–1:33 | A11 | |
+| 10 | 1:33–1:39 | A12 | |
+| 11 | 1:39–1:43 | A13 | |
+| 12 | 1:43–1:49 | A14 | |
+| 13 | 1:49–1:57 | A15 | |
+| 14 | 1:57–2:06 | A16 → A17 | typing dikhao, wait cut |
+| 15 | 2:06–2:12 | A18 → A19 | wait cut |
+| 16 | 2:12–2:20 | A20 → A21 | |
+| 17 | 2:20–2:27 | A5 (trace close-up, dobara, normal speed) | |
+| 18 | 2:27–2:34 | B3 | |
+| 19 | 2:34–2:41 | C2 | |
+| 20 | 2:41–2:48 | A8 (tooltip) | |
+| 21 | 2:48–2:56 | quick cuts: A7, A10, A11, A12, A14, A15 (~1.3 s each) | time nahi hai to sirf A7 |
+| 22 | 2:56–3:05 | D1 | |
+| 23 | 3:05–3:18 | D2 → D3 | |
+| 24 | 3:18–3:29 | T2 | voice ke baad 2 s hold |
 
-## Part B: voice-over (English)
+## Part B: voice-over (sirf yeh bolna hai)
 
-Read at a steady pace, about 140 words a minute. Pause one second where a new section starts. Each paragraph: video time · screen · word count.
+1. Hi, my name is ______. This is PromoPilot, our entry for Problem three. Give it a brief. It gives back a plan you can approve.
 
-### V1 · Introduction · 0:00–0:10 · T1, A1 · 21 words
+2. Today, promotions are planned in spreadsheets. One discount can take sales from a sister product, empty the stock, and break the budget. PromoPilot turns a short brief into a full plan, with reasons.
 
-> Hi, I'm [your name]. This is PromoPilot, our entry for Problem 3: the autonomous promotion planner. Brief in, approved plan out.
+3. The brief: eight lakh rupees, Snacks and Beverages, North and West, margin above eighteen percent, clear the extra namkeen stock, target families. Plan it.
 
-### V2 · Problem · 0:10–0:31 · A1, A2 · 46 words
+4. On the left, the agent trace runs live. The Context agent reads the brief. The Planner picks its own tools.
 
-> A promotions manager plans in spreadsheets, on gut feel. Every choice pulls on the others: a discount can eat into a sister product, drain stock, and blow the budget. PromoPilot reads a plain-English brief and returns a plan a manager can approve, with the reasoning attached.
+5. Every assumption is listed, with its source and confidence. One field is flagged for a human.
 
-### Live demo · 0:31–2:27 · A3–A21 · 267 words
+6. The plan, line by line: product, mechanism, discount, duration, target segment, uplift, profit range, and stock-out risk.
 
-**V3 · 0:31–0:42 · A3, A4 · 26 words**
+7. North and West get their own lines. Compare regions shows them side by side.
 
-> The brief: eight lakh rupees, Snacks and Beverages, North and West, margin above eighteen percent, clear sixty percent of the namkeen overstock, target families. Plan it.
+8. Open a line: why it was chosen, and the uplift by segment. Yellow box, cannibalisation. This product takes sales from a sister product. Green box, halo. It lifts a related product.
 
-**V4 · 0:42–0:53 · A5 · 26 words**
+9. Each line also compares the other mechanisms. The chosen one is marked.
 
-> On the left, the agent trace streams live. The Context agent reads the brief. The Planner picks its own tools: inventory, candidates, the optimiser, competitor gaps.
+10. Every constraint is checked: budget, margin, stock, clearance, policy. All pass.
 
-**V5 · 0:53–1:03 · A6 · 22 words**
+11. Not selected lists the options left out, and why.
 
-> Everything the agent read or assumed is listed with its source and confidence. One field is flagged for a human to check.
+12. Competitor prices: where a rival is cheaper, and how the planner responds.
 
-**V6 · 1:03–1:19 · A7, A9 · 39 words**
+13. The simulation runs the plan a thousand times. Every line gets a profit range before launch.
 
-> The plan is per region, line by line: which products, the mechanism, discount depth, duration, target segment, uplift, a profit range and the stock-out risk. North and West get their own lines. Compare regions puts them side by side.
+14. Now cut the budget to six lakh. The agent plans again: no line changed, the plan already fits.
 
-**V7 · 1:19–1:37 · A10 · 40 words**
+15. Then drop West. Revision three shows exactly which lines were removed.
 
-> Open a line: why it was chosen, and the uplift by segment. On the right, cannibalisation: this product pulls units from its sister product, and profit is net of that. Below it, the halo: a lift on a related product.
+16. Nothing is final until a person approves it. Confirm, and the audit trail records every step.
 
-**V8 · 1:37–1:45 · A11 · 19 words**
+17. Four things make this an agent. One, tool use: the Planner decides what to call.
 
-> Each line's mechanisms are compared: percent off, fixed price, buy one get one, bundle. The chosen one is marked.
+18. Two, self-correction: the Critic finds heavy cannibalisation and sends the plan back. Attempt two passes.
 
-**V9 · 1:45–1:54 · A12, A13 · 21 words**
+19. Three, clarification: no budget in the brief, so the agent stops and asks.
 
-> Every hard constraint is checked: budget, margin, stock, clearance, policy. All pass. And Not selected says why each rejected option lost.
+20. Four, grounding: the language model never computes a number. Every number shows its source.
 
-**V10 · 1:54–2:06 · A14, A15 · 29 words**
+21. All nine features: product selection, mechanism, discount strategy, cannibalisation, product relationships, inventory, geography, competitor awareness, and simulation.
 
-> Competitor prices: the key items where a rival undercuts us, and the planner's response. Then the simulation: a thousand runs give a profit range for every line before launch.
+22. Reliability is measured, not claimed. Thirty-three test scenarios, with answers the agent never sees. Twelve of thirteen targets met.
 
-**V11 · 2:06–2:27 · A16–A21 · 45 words**
+23. Every plan passes every constraint. Thirty of thirty beat the baseline. One honest miss: median regret is twelve point three percent. The target is ten.
 
-> Now cut the budget to six lakh. The agent re-plans and reports no line changed: the plan already fits. Then, drop West. Revision three shows exactly which lines left. Nothing is final until a person approves it. Confirm, and the audit trail records every decision.
-
-### V12 · AI capabilities · 2:27–2:48 · A5, B3, C2, A8 · 47 words
-
-> Four things make this agentic. Tool use: the Planner decides what to call. Self-correction: here the Critic finds heavy cannibalisation and sends the plan back; attempt two passes. Clarification: with no budget in the brief, it stops and asks. Grounding: the language model never computes a number.
-
-Screen order: "Tool use" on the trace from A5 (2:27–2:31); "Self-correction" on B3 (2:31–2:38); "Clarification" on C2 (2:38–2:43); "Grounding" on the tooltip from A8 (2:43–2:48).
-
-### V13 · Key features · 2:48–3:01 · quick cuts, D1 · 27 words
-
-> All nine features: product selection, mechanism, discount strategy, cannibalisation, product relationships, inventory, geography, competitor awareness and simulation. Reliability is not a claim. Here is the eval dashboard.
-
-Cut to the Evals page (D1) on "Here is the eval dashboard".
-
-### V14 · Business impact · 3:01–3:21 · D1–D3 · 47 words
-
-> Thirty-three scenarios against a hidden ground truth. Thirty of thirty plans beat the rule-based baseline. Every plan passes every hard constraint. In five live repeat runs, each scenario picked the same products every time. One honest miss: median regret is 12.3 percent against a target of 10.
-
-<!-- Sources: 33 scenarios, plan quality 100% (30 of 30), constraint satisfaction 100% (30 of 30) and regret 12.3% vs ≤ 10% (fail) are from latest.md (2026-10-01T17:07:27Z); "five live repeat runs … same products every time" is consistency 100% (5 of 5), 5 runs each, from consistency.md (2026-10-01T18:03:12Z). -->
-
-### V15 · Closing · 3:21–3:34 · T2 · 26 words
-
-> PromoPilot: agents decide, tools compute, humans approve. One command runs it: make demo, no API key. Code and evidence: github dot com slash asalwania slash promopilot.
-
-### If the voice runs long
-
-Check the voice track before editing. If it is over 3:30, drop these in order, and nothing else changes:
-
-1. V5: "One field is flagged for a human to check." (9 words, about 4 s)
-2. V14: "In five live repeat runs, each scenario picked the same products every time." (13 words, about 6 s)
-3. V2: "on gut feel" and "with the reasoning attached" (7 words, about 3 s)
+24. PromoPilot: agents decide, tools compute, humans approve. One command runs it: make demo, no API key. The code is on GitHub. Thank you.
 
 ## Part C: start to finish (simple steps)
 
@@ -273,9 +250,16 @@ Check the voice track before editing. If it is over 3:30, drop these in order, a
 5. **Record Clip B** (A3): Quick Diwali push, Critic loop.
 6. **Record Clip C** (A4): No budget form.
 7. **Record Clip D** (A5): Evals page.
-8. **Voice record karo** (Part B): V1 se V15, section ke beech 1 s pause. Galti ho to wahi para dobara. Length check: 3:30 se zyada ho to "If the voice runs long" ke cuts.
-9. **Edit** (A7 editing map): timeline par pehle voice, phir clips map ke time par; T1 aur T2 text slides; planning waits cut ya 8–16× fast.
-10. **Check:** total 3:15–3:40; 4:00 cross na ho; 9 features screen par (A7, A10, A11, A12, A14, A15) aur V13 mein naam.
+8. **Voice record karo** (Part B):
+   - Part B ke 24 paragraphs, 1 se 24, isi order mein. Sirf wahi shabd; paragraph ke number mat bolo. Para 1 mein blank par apna naam.
+   - Har paragraph ke baad **ek chhoti saans** (aadha second chup). Isi se editing mein cut point milte hain.
+   - Dheere aur saaf bolo; tez bolne ki zaroorat nahi. Galti ho to wahi paragraph dobara bolo, baad mein kaat lenge.
+   - Mushkil words: cannibalisation = *ka-ni-ba-lai-ZAY-shun*; mechanism = *MEK-a-ni-zum*; constraint = *kun-STRAYNT*; clearance = *KLEER-ens*; scenarios = *si-NAA-ri-oze*; regret = *ri-GRET*; baseline = *BAYS-line*.
+   - Pehle ek baar timer ke saath practice karo. Voice **3:30 se kam** ho to best.
+   - **Voice 3:40 se lambi ho** to is order mein hatao, aur kuch nahi badalta: (a) para 11 poora (A13 skip), (b) para 5 ki doosri line "One field is flagged for a human.", (c) para 22 ki pehli line "Reliability is measured, not claimed.", (d) para 9 poora (A11 skip; Mechanisms column phir bhi para 6 ki table mein hai aur para 21 mein naam hai). Charon milke ~15 s.
+   - **Voice 3:05 se chhoti ho** to koi dikkat nahi: editing mein para 4 (A5) aur para 8 (A10) ke clips 2–3 s lambe rakho, title cards 1 s zyada.
+9. **Edit** (A7 editing map): timeline par pehle voice; phir har paragraph ke shuru par uska clip; T1 aur T2 text slides; planning waits cut ya 8–16× fast.
+10. **Check:** total 3:15–3:40; 4:00 cross na ho; 9 features screen par (A7, A10, A11, A12, A14, A15, yaani para 6–13) aur para 21 mein naam; voice kabhi screen se ulta na bole.
 11. **Export:** mp4, H.264, 1080p, 30 fps, video ~1.2 Mbps + audio 128 kbps: 3.5 min ≈ 35 MB (limit 50 MB, SPEC §19). Bada ho to 720p.
 12. **Upload:** YouTube unlisted → private window mein play check → link README ke LATE marker aur deck slides 1, 8, 12 mein → `make deck` → mp4 form mein upload.
 13. **Baad mein:** `make demo-down` (stack band, data rehta hai).
