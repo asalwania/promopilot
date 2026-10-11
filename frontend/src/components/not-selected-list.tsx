@@ -72,29 +72,31 @@ export function NotSelectedList({ options }: { options: NotSelectedOption[] }) {
       </CardHeader>
       <CardContent>
         {options.length > 0 ? (
-          <table aria-label="Not selected options" className="w-full text-sm">
-            <thead>
-              <tr className="border-b">
-                {COLUMNS.map((heading) => (
-                  <th
-                    key={heading}
-                    scope="col"
-                    className="text-muted-foreground px-2 py-2 text-left font-medium"
-                  >
-                    {heading}
-                  </th>
+          <div className="overflow-x-auto">
+            <table aria-label="Not selected options" className="w-full text-sm">
+              <thead>
+                <tr className="border-b">
+                  {COLUMNS.map((heading) => (
+                    <th
+                      key={heading}
+                      scope="col"
+                      className="text-muted-foreground px-2 py-2 text-left font-medium"
+                    >
+                      {heading}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {options.map((entry) => (
+                  <OptionRow
+                    key={`${entry.option.sku_id}-${entry.option.region}`}
+                    entry={entry}
+                  />
                 ))}
-              </tr>
-            </thead>
-            <tbody>
-              {options.map((entry) => (
-                <OptionRow
-                  key={`${entry.option.sku_id}-${entry.option.region}`}
-                  entry={entry}
-                />
-              ))}
-            </tbody>
-          </table>
+              </tbody>
+            </table>
+          </div>
         ) : (
           <p className="text-muted-foreground text-sm">
             No worthwhile option was left out.

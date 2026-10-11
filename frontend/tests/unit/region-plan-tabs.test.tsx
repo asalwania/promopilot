@@ -121,4 +121,14 @@ describe("RegionPlanTabs", () => {
       ["SKU0011", "—", "% off 20% · 4 wk · All customers-₹1.23 lakh"],
     ]);
   });
+
+  it("lets the comparison scroll sideways when it is wider than its card", () => {
+    renderTabs();
+
+    fireEvent.click(screen.getByRole("tab", { name: "Compare regions" }));
+
+    expect(
+      screen.getByRole("table", { name: "Regions side by side" }).parentElement,
+    ).toHaveClass("overflow-x-auto");
+  });
 });

@@ -19,7 +19,7 @@ export function SiteNav() {
     <header className="bg-background/85 sticky top-0 z-40 border-b backdrop-blur-md">
       <nav
         aria-label="Main"
-        className="mx-auto flex h-16 w-full max-w-screen-2xl items-center gap-8 px-8 text-sm"
+        className="mx-auto flex h-16 w-full max-w-[1800px] items-center gap-8 px-8 text-sm"
       >
         <span className="flex items-center gap-2.5">
           <span

@@ -15,6 +15,14 @@ function rows(): HTMLElement[] {
 }
 
 describe("NotSelectedList", () => {
+  it("scrolls sideways when it is wider than its card, instead of being clipped", () => {
+    render(<NotSelectedList options={notSelected} />);
+
+    expect(
+      screen.getByRole("table", { name: "Not selected options" }).parentElement,
+    ).toHaveClass("overflow-x-auto");
+  });
+
   it("lists the best options left out, best first, with why each was left out", () => {
     render(<NotSelectedList options={notSelected} />);
 

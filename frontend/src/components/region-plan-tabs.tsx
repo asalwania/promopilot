@@ -137,52 +137,57 @@ function RegionComparison({
         row.planned.line.sku_id === sku && row.planned.line.region === region,
     )?.planned;
   return (
-    <table aria-label="Regions side by side" className="w-full text-sm">
-      <thead>
-        <tr className="border-b">
-          {["SKU", ...regions].map((column) => (
-            <th
-              key={column}
-              scope="col"
-              className="text-muted-foreground px-2 py-2 text-left font-medium"
-            >
-              {column}
-            </th>
-          ))}
-        </tr>
-      </thead>
-      <tbody>
-        {skus.map((sku) => (
-          <tr key={sku} className="border-b align-top">
-            <td className="px-2 py-2 font-mono">{sku}</td>
-            {regions.map((region) => {
-              const planned = lineOf(sku, region);
-              if (!planned) {
+    <div className="overflow-x-auto">
+      <table aria-label="Regions side by side" className="w-full text-sm">
+        <thead>
+          <tr className="border-b">
+            {["SKU", ...regions].map((column) => (
+              <th
+                key={column}
+                scope="col"
+                className="text-muted-foreground px-2 py-2 text-left font-medium"
+              >
+                {column}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {skus.map((sku) => (
+            <tr key={sku} className="border-b align-top">
+              <td className="px-2 py-2 font-mono">{sku}</td>
+              {regions.map((region) => {
+                const planned = lineOf(sku, region);
+                if (!planned) {
+                  return (
+                    <td
+                      key={region}
+                      className="text-muted-foreground px-2 py-2"
+                    >
+                      —
+                    </td>
+                  );
+                }
+                const { line } = planned;
                 return (
-                  <td key={region} className="text-muted-foreground px-2 py-2">
-                    —
+                  <td key={region} className="px-2 py-2">
+                    <div>
+                      {formatMechanism(line.mechanism)} {line.depth_pct}% ·{" "}
+                      {line.duration_weeks} wk · {line.target_segment}
+                    </div>
+                    <div className="text-muted-foreground">
+                      <Money
+                        value={planned.expected_incremental_profit}
+                        source={SOURCES.lineEstimate}
+                      />
+                    </div>
                   </td>
                 );
-              }
-              const { line } = planned;
-              return (
-                <td key={region} className="px-2 py-2">
-                  <div>
-                    {formatMechanism(line.mechanism)} {line.depth_pct}% ·{" "}
-                    {line.duration_weeks} wk · {line.target_segment}
-                  </div>
-                  <div className="text-muted-foreground">
-                    <Money
-                      value={planned.expected_incremental_profit}
-                      source={SOURCES.lineEstimate}
-                    />
-                  </div>
-                </td>
-              );
-            })}
-          </tr>
-        ))}
-      </tbody>
-    </table>
+              })}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }

@@ -6,9 +6,10 @@ export default async function SessionPage({
   params,
 }: PageProps<"/sessions/[id]">) {
   const { id } = await params;
-  // Wide enough for the trace timeline beside the session at ≥ 1280px (ADR 0057).
+  // Wide enough for the trace timeline beside the session at ≥ 1280px (ADR 0057), and
+  // at 1920px for the plan table's thirteen columns to fit their card (#195).
   return (
-    <main className="mx-auto flex w-full max-w-screen-2xl flex-1 flex-col gap-8 px-8 pt-10 pb-16">
+    <main className="mx-auto flex w-full max-w-[1800px] flex-1 flex-col gap-8 px-8 pt-10 pb-16">
       <div className="flex items-center justify-between gap-4">
         <h1 className="text-4xl font-medium tracking-tight">
           Planning session

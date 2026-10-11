@@ -168,6 +168,14 @@ describe("PlanTable", () => {
     );
   });
 
+  // The card clips its content, so a table wider than the card must scroll
+  // sideways in a box of its own, or its last columns are unreachable (#195).
+  it("scrolls sideways when it is wider than its card, instead of being clipped", () => {
+    const table = renderTable([northRow]);
+
+    expect(table.parentElement).toHaveClass("overflow-x-auto");
+  });
+
   it("says when a line kept no segment breakdown", () => {
     renderTable([{ planned: legacyPlanLine }]);
     fireEvent.click(

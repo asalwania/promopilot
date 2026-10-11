@@ -81,49 +81,53 @@ export function PlanTable({
       return next;
     });
 
+  // The card clips its content: wider than it, the table scrolls sideways in
+  // its own box rather than losing its last columns (#195).
   return (
-    <table aria-label={`Plan lines in ${region}`} className="w-full text-sm">
-      <thead>
-        <tr className="border-b">
-          {COLUMNS.map((column) => (
-            <th
-              key={column}
-              scope="col"
-              className={cn(
-                "text-muted-foreground px-2 py-2 font-medium",
-                NUMERIC.has(column) ? "text-right" : "text-left",
-              )}
-            >
-              {column}
-            </th>
-          ))}
-        </tr>
-      </thead>
-      <tbody>
-        {rows.map((row) => {
-          const { line } = row.planned;
-          const key = `${line.sku_id}-${line.region}`;
-          const expanded = open.has(key);
-          return (
-            <Fragment key={key}>
-              <PlanLineRow
-                row={row}
-                runs={runs}
-                expanded={expanded}
-                onToggle={() => toggle(key)}
-              />
-              {expanded && (
-                <tr className="bg-muted/30 border-b">
-                  <td colSpan={COLUMNS.length} className="px-4 py-3">
-                    <PlanLineDetails row={row} />
-                  </td>
-                </tr>
-              )}
-            </Fragment>
-          );
-        })}
-      </tbody>
-    </table>
+    <div className="overflow-x-auto">
+      <table aria-label={`Plan lines in ${region}`} className="w-full text-sm">
+        <thead>
+          <tr className="border-b">
+            {COLUMNS.map((column) => (
+              <th
+                key={column}
+                scope="col"
+                className={cn(
+                  "text-muted-foreground px-2 py-2 font-medium",
+                  NUMERIC.has(column) ? "text-right" : "text-left",
+                )}
+              >
+                {column}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => {
+            const { line } = row.planned;
+            const key = `${line.sku_id}-${line.region}`;
+            const expanded = open.has(key);
+            return (
+              <Fragment key={key}>
+                <PlanLineRow
+                  row={row}
+                  runs={runs}
+                  expanded={expanded}
+                  onToggle={() => toggle(key)}
+                />
+                {expanded && (
+                  <tr className="bg-muted/30 border-b">
+                    <td colSpan={COLUMNS.length} className="px-4 py-3">
+                      <PlanLineDetails row={row} />
+                    </td>
+                  </tr>
+                )}
+              </Fragment>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
   );
 }
 
