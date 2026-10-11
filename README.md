@@ -217,8 +217,7 @@ These are open issues, listed so no one has to find them. Each is a gap in speed
 
 ## Demo video
 
-<!-- LATE: video URL (user, #80) -->
-Demo video: link coming soon.
+Demo video (5:52, unlisted): https://youtu.be/-gvMkKs5C4A
 
 ## Documentation
 

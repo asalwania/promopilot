@@ -21,7 +21,7 @@ HOW TO BUILD THE PDF
          --theme-set docs/deck/theme.css -o PromoPilot-deck.pdf
    Needs Node 24 (for npx) and a local Chrome or Edge. The theme loads Geist and Source Serif 4
    from Google Fonts, so build online; offline it falls back to Segoe UI and Georgia.
-3. Fill every OWNER marker (the video link on slides 1, 8 and 12). Markers are HTML comments next
+3. The video link is filled on slides 1, 8 and 12 (https://youtu.be/-gvMkKs5C4A). Any other OWNER markers are HTML comments next
    to the text they replace. Before you upload,
    grep -nE "OWN[E]R:|LA[T]E:" docs/deck.md   must print nothing.
 4. Check: 12 pages, under 50 MB, every number matches `backend/evals/published/latest.md` and
@@ -56,7 +56,7 @@ and grounding each pass or miss only narrowly with a stated cause. Every miss is
 <img src="deck/qr-github.png" width="86" style="border-radius: 8px;">
 <div style="font-size: 13.5px; color: #cfc9bb; line-height: 1.6;">
 <code>github.com/asalwania/promopilot</code><br>
-Demo video: link coming soon <!-- OWNER: replace "link coming soon" with the YouTube unlisted link --><br>
+Demo video: <a href="https://youtu.be/-gvMkKs5C4A">youtu.be/-gvMkKs5C4A</a><br>
 Run it: <code>make demo</code> · Docker only, no API key
 </div>
 </div>
@@ -228,7 +228,7 @@ Run it: <code>make demo</code> · Docker only, no API key
 <li><b>Amend</b> "Drop West": revision 3. Eleven West lines removed, objective ₹59,584 to ₹30,092.</li>
 <li><b>Approve</b>: the final plan with its audit trail. The whole session took 27 LLM calls and ₹9.82.</li>
 </ol>
-<p class="foot" style="margin-top: 12px;">Video (3:30–4:00): link coming soon <!-- OWNER: replace "link coming soon" with the YouTube unlisted link --><br>Run it yourself: <code>make demo</code>, then open <code>http://localhost:3000</code></p>
+<p class="foot" style="margin-top: 12px;">Video (5:52): <a href="https://youtu.be/-gvMkKs5C4A">youtu.be/-gvMkKs5C4A</a><br>Run it yourself: <code>make demo</code>, then open <code>http://localhost:3000</code></p>
 </div>
 <div>
 <img class="shot" src="../frontend/screenshots/deck/assumptions-inferred.png" style="width: 100%; margin-bottom: 10px;">
@@ -342,7 +342,7 @@ Run it: <code>make demo</code> · Docker only, no API key
 <img src="deck/qr-github.png" width="104" style="border-radius: 8px;">
 <div style="font-size: 15px; line-height: 1.7; color: #cfc9bb;">
 <b style="color: #faf9f5;">GitHub</b> <code>github.com/asalwania/promopilot</code> · public, with README, architecture, API docs and the eval reports<br>
-<b style="color: #faf9f5;">Demo video</b> link coming soon <!-- OWNER: replace "link coming soon" with the YouTube unlisted link --><br>
+<b style="color: #faf9f5;">Demo video</b> <a href="https://youtu.be/-gvMkKs5C4A" style="color: #faf9f5;">youtu.be/-gvMkKs5C4A</a><br>
 <b style="color: #faf9f5;">Run it</b> <code>make demo</code> (Docker only, no API key) · <b style="color: #faf9f5;">Claim and evidence</b> <code>docs/nine-blocker.md</code> · <b style="color: #faf9f5;">Architecture</b> <code>docs/architecture.md</code>
 </div>
 </div>
