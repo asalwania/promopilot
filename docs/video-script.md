@@ -282,8 +282,10 @@ Agar screen aur awaaz ek saath record karni hai, to Part A/B/C ki jagah yeh list
    - Ctrl + 1 se Tab 1 par wapas.
 3. Mic on: **Win + G** → Settings (gear) → Capturing → audio record **on**, apna mic chuno. Test: Win + Alt + R → "testing one two three" → Win + Alt + R → Videos folder ki file play karo, awaaz aani chahiye.
 4. **Win + A** → Do not disturb. Phone silent. Yeh list phone par (Script Reader ka "One take" tab) ya print.
-5. Bookmarks bar chhupao: **Ctrl + Shift + B**. Recording se theek pehle **F11** (fullscreen: taskbar aur tabs chhup jaate hain; Ctrl + 2 waise hi chalta hai). Baad mein F11 se bahar.
-6. Ek baar **bina record kiye** poora D1 bolte hue chalao, timer ke saath. 3:55 se kam hona chahiye. Zyada ho to scroll par mat ruko, bas bolte raho.
+5. Yeh text copy karo (select → Ctrl + C), recording mein step 13 par Ctrl + V: `Budget cut to ₹6 lakh`. Bilkul yahi text chahiye (₹ ke saath), warna replay match nahi hoga aur trace mein fallback dikhega.
+6. Bookmarks bar chhupao: **Ctrl + Shift + B**. Recording se theek pehle **F11** (fullscreen: taskbar aur tabs chhup jaate hain; Ctrl + 2 waise hi chalta hai). Baad mein F11 se bahar.
+7. Ek baar **bina record kiye** poora D1 bolte hue chalao, timer ke saath. 3:55 se kam hona chahiye. Zyada ho to scroll par mat ruko, bas bolte raho.
+8. **Time budget** (pehla take 7:34 nikla, limit 4:00): step 3–12 (live demo) **2:10** par khatam; step 13–15 (amend + approve) **0:50** mein, revision ke baad poori table dobara scroll **mat** karo, sirf What changed box; step 16–23 **1:00**. Scroll karte hue bolo, chup hokar scroll mat karo.
 
 Galti ho jaaye: Win + Alt + R (stop), Tab 1 par home, poora take dobara. Tabs 2–5 waise hi rehte hain.
 
@@ -323,9 +325,9 @@ Har step mein **Karo** (screen par) aur **Bolo** (yahi shabd). Bolte-bolte karo;
     Bolo: "Competitor prices: where a rival is cheaper, and how the planner responds."
 12. Karo: scroll **Simulation** (tiles + chart).
     Bolo: "The simulation runs the plan a thousand times. Every line gets a profit range before launch."
-13. Karo: **Home** key → **Review plan revision 1** card → **Amend the brief** box click → bolte hue type: `Budget cut to ₹6 lakh` → **Amend and re-plan** click. Wait (8–10 s) mein doosri line. **Review plan revision 2** aane par scroll **Plan revision 2** card ke box **What changed from plan revision 1** ("No plan line changed") → teesri line.
+13. Karo: **Home** key → **Review plan revision 1** card → **Amend the brief** box click → **Ctrl + V** (`Budget cut to ₹6 lakh`) → **Amend and re-plan** click. Wait (8–10 s) mein doosri line. **Review plan revision 2** aane par thoda scroll, bas **What changed from plan revision 1** box tak ("No plan line changed") → teesri line. Table dobara mat dikhao.
     Bolo: "Now cut the budget to six lakh." … "The agent plans again." … "No line changed. The plan already fits."
-14. Karo: **Home** → **Review plan revision 2** → Amend box → type `Drop West` → **Amend and re-plan**. **Review plan revision 3** aane par scroll **What changed from plan revision 2** (table **Removed (11)**).
+14. Karo: **Home** → **Review plan revision 2** → Amend box → type `Drop West` (9 letters) → **Amend and re-plan**. **Review plan revision 3** aane par thoda scroll, bas **What changed from plan revision 2** box tak (table **Removed (11)**). Phir seedha step 15.
     Bolo: "Then, drop West." … "Revision three shows exactly which lines were removed."
 15. Karo: **Home** → **Review plan revision 3**. Pehli line → **Approve plan revision 3** click → "Confirm." bolte hi **Confirm approval** click → **End** key (Audit trail) → aakhri line.
     Bolo: "Nothing is final until a person approves it." … "Confirm." … "And the audit trail records every step."
