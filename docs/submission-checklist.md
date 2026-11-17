@@ -25,8 +25,8 @@ Checked on 2026-10-02 against `main` at `403a416`.
   - [nine-blocker.md](nine-blocker.md): its numbers come from [published/latest.md](../backend/evals/published/latest.md) (report `20261001T170727Z`) and [published/consistency.md](../backend/evals/published/consistency.md) (report `20261001T180312Z`). Every cited file, symbol and pytest id is resolved by `backend/tests/tools/test_nine_blocker_matrix.py` ([ADR 0091](adr/0091-the-matrix-cites-files-and-symbols-and-a-test-resolves-them.md)).
   - Neither document has a `LATE:` marker left.
 - [ ] **All 9 features visible in the video.** Owner: **the user** (#80). [video-script.md](video-script.md) shows all nine (F-01 to F-09) on screen between 0:28 and 2:20 and names them in the recap at 2:48, using only recorded briefs, so it plays with no key.
-- [ ] **Video 2–4 min, mp4 under 50 MB, YouTube unlisted link works.** Owner: **the user** (#80). The script runs about 3:30 (426 spoken words at 130 words a minute). After uploading, check the link in a private window, then put it in the README's "Demo video" section (replacing its `LATE:` marker) and in the deck's three `OWNER:` video markers.
-- [ ] **Deck PDF under 50 MB, 12 slides.** Owner: **the user** (#79). [deck.md](deck.md) is the deck: the 12 slides of SPEC §17 with the published numbers, on the warm UI theme ([deck/theme.css](deck/theme.css)). `make deck` cuts the slide crops from the screenshots (the `deck-screenshots` CI artifact, or `make screenshots`) and exports the PDF. Left: fill the `OWNER:` video markers, rebuild, upload.
+- [ ] **Video 2–4 min, mp4 under 50 MB, YouTube unlisted link works.** Owner: **the user** (#80). Uploaded: https://youtu.be/-gvMkKs5C4A (unlisted, link checked), in the README's "Demo video" section and on deck slides 1, 8 and 12. The mp4 for the form is `C:UsersGuest1VideosPromoPilot-demo.mp4` (24 MB). **Open point:** the recorded take runs 5:52, over the brief's 4-minute limit; the user chose to submit it as recorded.
+- [ ] **Deck PDF under 50 MB, 12 slides.** Owner: **the user** (#79). [deck.md](deck.md) is the deck: the 12 slides of SPEC §17 with the published numbers, on the warm UI theme ([deck/theme.css](deck/theme.css)). `make deck` cuts the slide crops from the screenshots (the `deck-screenshots` CI artifact, or `make screenshots`) and exports the PDF. The video markers are filled and the PDF rebuilt (`PromoPilot-deck.pdf`, 12 pages, 1.9 MB). Left: upload.
 - [ ] **Problem statement dropdown set to "Retail – Autonomous Promotion Planner".** Owner: **the user**, on the Unstop form.
 - [ ] **Confirmation screenshot saved.** Owner: **the user**, after submitting.
 
@@ -34,8 +34,8 @@ Checked on 2026-10-02 against `main` at `403a416`.
 
 | Field | Requirement | Status |
 |---|---|---|
-| Pitch deck | PDF, ≤ 50 MB, 8–12 slides covering team, problem, solution, architecture, AI models, demo, impact, scalability, roadmap | Deck ready in [deck.md](deck.md); its 12 slides cover every required topic and `make deck` builds the PDF (#79). **User**: add the video link, rebuild, upload. |
-| Demo video | 2–4 min mp4 plus an unlisted YouTube or Drive link; intro, problem, live demo, AI capabilities, key features, impact, close | Script ready in [video-script.md](video-script.md), with its sections in the required order. **User**: record, edit and upload it (#80). |
+| Pitch deck | PDF, ≤ 50 MB, 8–12 slides covering team, problem, solution, architecture, AI models, demo, impact, scalability, roadmap | Deck ready in [deck.md](deck.md); its 12 slides cover every required topic and `make deck` builds the PDF (#79). Video link in, PDF rebuilt. **User**: upload. |
+| Demo video | 2–4 min mp4 plus an unlisted YouTube or Drive link; intro, problem, live demo, AI capabilities, key features, impact, close | Script ready in [video-script.md](video-script.md), with its sections in the required order. Recorded in one take and uploaded: https://youtu.be/-gvMkKs5C4A (5:52). **User**: attach the mp4 and the link to the form. |
 | GitHub repo | Public; source, README, installation, dependencies, architecture, API docs, environment setup | Done; see the §19 items above. |
 | Problem statement | "Retail – Autonomous Promotion Planner" | **User**: select it on the form. |
 
